@@ -46,11 +46,6 @@ function nodeKeyFor(event: RawEvent): string | null {
   if (t === 'WebFetch') {
     try { return `web:${new URL(input?.url || '').hostname}` } catch { return 'web:unknown' }
   }
-  if (event.hook_event_name === 'Stop') return 'session:stop'
-  if (event.hook_event_name === 'Notification') {
-    const msg = (event.tool_input as Record<string, string> | null)?.message || ''
-    return `notification:${msg.slice(0, 20)}`
-  }
   return `tool:${t}`
 }
 
@@ -108,7 +103,9 @@ export function createStore() {
           continue
         }
         const idx = sMap.get(key)!
-        node.age = buffer.length - 1 - idx // 0 = most recent
+        // Preserve age >= 80 for stopping clusters to let them fade out
+        const newAge = buffer.length - 1 - idx
+        node.age = cluster.stopping && node.age >= 80 ? node.age : newAge
         node.lastEventIndex = idx
       }
       // remove edges whose nodes are gone
@@ -162,6 +159,7 @@ export function createStore() {
       const color = TOOL_COLORS[event.tool_name || event.hook_event_name] ?? DEFAULT_COLOR
       if (!cluster.nodes.has(key)) {
         const isFile = nodeTypeFor(event) === 'file'
+        const initialAge = event.hook_event_name === 'Stop' ? 80 : 0
         cluster.nodes.set(key, {
           key,
           label: labelFor(event),
@@ -172,7 +170,7 @@ export function createStore() {
           y: cluster.centerY + (Math.random() - 0.5) * 100,
           vx: 0,
           vy: 0,
-          age: 0,
+          age: initialAge,
           lastEventIndex: buffer.length - 1,
         })
       }

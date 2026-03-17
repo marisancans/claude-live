@@ -56,4 +56,14 @@ describe('store', () => {
     const cluster = store.getSessions().get('sess-1')!
     expect(cluster.stopping).toBe(true)
   })
+
+  it('sets node ages to 80 on Stop event', () => {
+    const store = createStore()
+    store.addEvent(makeEvent({ id: '1', tool_input: { file_path: '/foo.ts' } }))
+    store.addEvent(makeEvent({ hook_event_name: 'Stop', tool_name: null, tool_input: null }))
+    const cluster = store.getSessions().get('sess-1')!
+    for (const node of cluster.nodes.values()) {
+      expect(node.age).toBeGreaterThanOrEqual(80)
+    }
+  })
 })
