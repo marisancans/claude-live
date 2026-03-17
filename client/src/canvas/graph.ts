@@ -1,19 +1,20 @@
 import type { Cluster } from '../types'
+import { redistributeRing } from '../store'
 
 const ORBIT_RADII = [70, 120, 175]
+const MARK_PX_SPACING = 5   // pixels between stamp centers (uniform across all rings)
+const MARK_MAX = 12         // half trail length
 
 const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
-const MARK_SPACING = 0.10 // radians between marks (speed-independent)
-const MARK_MAX = 28
 
 // Place all clusters instantly on a circle with guaranteed spacing — no physics
 export function layoutClusters(clusters: Map<string, Cluster>) {
   const arr = [...clusters.values()]
   if (arr.length === 0) return
   const N = arr.length
-  const SPACING = 520
+  const SPACING = 380
   const r = N === 1 ? 0 : SPACING / (2 * Math.sin(Math.PI / N))
   const cx = CANVAS_W / 2, cy = CANVAS_H / 2
   arr.forEach((cluster, i) => {
@@ -32,19 +33,19 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       node.x = cluster.centerX + Math.cos(node.orbitAngle) * node.orbitRadius
       node.y = cluster.centerY + Math.sin(node.orbitAngle) * node.orbitRadius
 
-      // Stamp a mark every MARK_SPACING radians regardless of speed
-      const lastMark = node.marks.length > 0 ? node.marks[node.marks.length - 1] : null
-      if (!lastMark || Math.abs(node.orbitAngle - lastMark.a) >= MARK_SPACING) {
-        node.marks.push({ a: node.orbitAngle, life: 1.0 })
-        if (node.marks.length > MARK_MAX) node.marks.shift()
+      // Stamp trail marks at uniform pixel intervals (skip agent satellites)
+      if (node.orbitRing >= 0) {
+        const spacing = MARK_PX_SPACING / node.orbitRadius // radians for constant px gap
+        const last = node.marks.length > 0 ? node.marks[node.marks.length - 1] : null
+        if (last === null || Math.abs(node.orbitAngle - last) >= spacing) {
+          node.marks.push(node.orbitAngle)
+          if (node.marks.length > MARK_MAX) node.marks.shift()
+        }
       }
-      // Decay marks
-      for (const m of node.marks) m.life = Math.max(0, m.life - 0.004)
-      node.marks = node.marks.filter(m => m.life > 0)
 
       // Decay timers
       node.impactTime = Math.max(0, node.impactTime - 0.022)
-      node.actionFade = Math.max(0, node.actionFade - 0.008)
+      node.actionFade = Math.max(0, node.actionFade - 0.003)
       node.entry = Math.min(1, node.entry + 0.05)
 
       // Ephemerals only decay when evicted from buffer (store sets life < 0.15)
@@ -53,11 +54,17 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       }
     }
 
-    // Remove dead ephemerals
+    // Remove dead ephemerals and redistribute remaining nodes on affected rings
+    const removedRings = new Set<number>()
     for (const [key, node] of cluster.nodes) {
       if (node.nodeType !== 'file' && node.life <= 0) {
+        if (node.orbitRing >= 0) {
+          removedRings.add(node.orbitRing)
+          cluster.ringCounts[node.orbitRing] = Math.max(0, cluster.ringCounts[node.orbitRing] - 1)
+        }
         cluster.nodes.delete(key)
       }
     }
+    for (const ring of removedRings) redistributeRing(cluster, ring)
   }
 }

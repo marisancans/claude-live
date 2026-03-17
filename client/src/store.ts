@@ -6,6 +6,13 @@ function shortHash(s: string): string {
   return (h >>> 0).toString(16).slice(0, 8)
 }
 
+// Small deterministic radial offset per node so trails on the same ring don't overlap
+function radialJitter(key: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193)
+  return ((h >>> 0) % 15) - 7  // -7 to +7 px
+}
+
 const BUFFER_SIZE = 100
 const MAX_CLUSTERS = 6
 
@@ -34,10 +41,26 @@ function hexToInt(hex: string): number {
 }
 
 const ORBIT_RADII = [70, 120, 175]
-const ORBIT_SPEEDS = [0.003, 0.002, 0.0012]
+const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006]
 
 const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
+
+export function redistributeRing(cluster: Cluster, ring: number) {
+  const nodes = [...cluster.nodes.values()]
+    .filter(n => n.orbitRing === ring)
+    .sort((a, b) => a.orbitAngle - b.orbitAngle)
+  const n = nodes.length
+  if (n === 0) return
+  const base = nodes[0].orbitAngle
+  nodes.forEach((node, i) => {
+    const newAngle = base + (i / n) * Math.PI * 2
+    if (Math.abs(newAngle - node.orbitAngle) > 0.05) {
+      node.marks = []  // clear stale trail stamps when angle jumps
+    }
+    node.orbitAngle = newAngle
+  })
+}
 
 export function nodeKeyFor(event: RawEvent): string | null {
   const t = event.tool_name
@@ -57,12 +80,21 @@ export function nodeKeyFor(event: RawEvent): string | null {
   }
   if (t === 'Bash') {
     const cmd = input?.command || ''
-    return `bash:${shortHash(cmd)}`
+    return `bash:${cmd}`
   }
   if (t === 'WebFetch') {
     try { return `web:${new URL(input?.url || '').hostname}` } catch { return 'web:unknown' }
   }
   return `tool:${t}`
+}
+
+// Shorten MCP tool names: mcp__plugin_foo__bar__action → action
+function shortToolName(name: string): string {
+  if (name.startsWith('mcp_')) {
+    const parts = name.split('__')
+    return parts[parts.length - 1].replace(/_/g, ' ')
+  }
+  return name
 }
 
 function labelFor(event: RawEvent): string {
@@ -79,6 +111,7 @@ function labelFor(event: RawEvent): string {
     const msg = (event.tool_input as Record<string, string> | null)?.message || 'notification'
     return msg.slice(0, 24)
   }
+  if (t && t.startsWith('mcp_')) return shortToolName(t).slice(0, 20)
   return t || event.hook_event_name || '?'
 }
 
@@ -196,7 +229,7 @@ export function createStore() {
         pos = clusterPosition(idx, [...sessions.values()])
       }
 
-      sessions.set(event.session_id, {
+      const c = {
         sessionId: event.session_id,
         label,
         centerX: pos.x,
@@ -206,14 +239,32 @@ export function createStore() {
         stopping: false,
         lastFileKey: null,
         parentSessionId,
-        ringCounts: [0, 0, 0],
+        ringCounts: [0, 0, 0] as [number, number, number],
         layoutAngle,
         isChild,
         childIndex,
-      })
+      }
+      // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
+      const rj = radialJitter(event.session_id)
+      ;(c as any).ringSpeeds = [
+        ORBIT_SPEEDS[0] * (1 + (rj + 3) / 7 * 0.2),
+        ORBIT_SPEEDS[1] * (1 + (rj - 1) / 7 * 0.2),
+        ORBIT_SPEEDS[2] * (1 + (rj + 5) / 7 * 0.2),
+      ]
+      sessions.set(event.session_id, c)
     }
 
     const cluster = sessions.get(event.session_id)!
+    ;(cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
+
+    // Update cluster label from cwd project name (better than hash)
+    if (event.cwd) {
+      const parts = event.cwd.split('/').filter(Boolean)
+      const project = parts[parts.length - 1]
+      if (project && (cluster.label.length <= 8 || cluster.label.startsWith('#'))) {
+        cluster.label = project
+      }
+    }
 
     if (event.hook_event_name === 'Stop') {
       cluster.stopping = true
@@ -226,6 +277,95 @@ export function createStore() {
     }
     if (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PreToolUse') {
       (cluster as any).awaitingPermission = false
+    }
+
+    // SubagentStart: spawn satellite node orbiting close to core
+    if (event.hook_event_name === 'SubagentStart') {
+      const agentId = event.agent_id || `${event.session_id}-sub`
+      const agentKey = `agent:${agentId}`
+      if (!cluster.nodes.has(agentKey)) {
+        const angle = Math.random() * Math.PI * 2
+        cluster.nodes.set(agentKey, {
+          key: agentKey,
+          label: event.agent_type || 'agent',
+          nodeType: 'agent',
+          baseRadius: 3,
+          color: hexToInt('#c084fc'),
+          colorHex: '#c084fc',
+          x: cluster.centerX + Math.cos(angle) * 32,
+          y: cluster.centerY + Math.sin(angle) * 32,
+          vx: 0, vy: 0,
+          age: 0,
+          lastEventIndex: buffer.length - 1,
+          lastTool: null,
+          lastTimestamp: event.timestamp,
+          eventCount: 1,
+          awaitingPermission: false,
+          orbitRing: -1,
+          orbitAngle: angle,
+          orbitSpeed: 0.007,
+          orbitRadius: 32,
+          life: 1.0,
+          entry: 0,
+          impactType: null,
+          impactTime: 0,
+          actionLabel: null,
+          actionFade: 0,
+          marks: [],
+        })
+      }
+      recomputeAges()
+      return
+    }
+
+    // SubagentStop: fade out agent satellite
+    if (event.hook_event_name === 'SubagentStop') {
+      const agentId = event.agent_id || `${event.session_id}-sub`
+      const agentKey = `agent:${agentId}`
+      const agentNode = cluster.nodes.get(agentKey)
+      if (agentNode) {
+        agentNode.life = 0.08
+        agentNode.impactType = 'fade'
+        agentNode.impactTime = 1.0
+      }
+      recomputeAges()
+      return
+    }
+
+    // SessionEnd: dissolve the cluster
+    if (event.hook_event_name === 'SessionEnd') {
+      cluster.stopping = true
+      for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
+      recomputeAges()
+      return
+    }
+
+    // UserPromptSubmit: pulse core
+    if (event.hook_event_name === 'UserPromptSubmit') {
+      ;(cluster as any).coreAct = 1.0
+      recomputeAges()
+      return
+    }
+
+    // PreCompact: implosion animation (skip during replay)
+    if (event.hook_event_name === 'PreCompact') {
+      if (replayDone) {
+        ;(cluster as any).coreAct = 1.0
+        ;(cluster as any).compacting = 1.0
+      }
+      recomputeAges()
+      return
+    }
+
+    // PostCompact: rebirth burst + reset context counter (skip during replay)
+    if (event.hook_event_name === 'PostCompact') {
+      if (replayDone) {
+        ;(cluster as any).coreAct = 1.0
+        ;(cluster as any).compacted = 1.0
+      }
+      ;(cluster as any).eventCount = Math.floor(((cluster as any).eventCount || 0) * 0.25)
+      recomputeAges()
+      return
     }
 
     const key = nodeKeyFor(event)
@@ -247,25 +387,17 @@ export function createStore() {
         return
       }
 
-      // Assign orbit ring for file nodes
-      let orbitRing = 0, orbitSpeed = ORBIT_SPEEDS[0]
-      let orbitRadius = ORBIT_RADII[2] + 35 + Math.random() * 25
+      // Assign to least-populated ring (both file and ephemeral nodes share rings)
+      const minCount = Math.min(...cluster.ringCounts)
+      const orbitRing = cluster.ringCounts.indexOf(minCount)
+      cluster.ringCounts[orbitRing]++
+      // Use per-ring speed from cluster (all nodes on same ring share the same speed)
+      const ringSpeeds = (cluster as any).ringSpeeds as number[] | undefined
+      const orbitSpeed = ringSpeeds ? ringSpeeds[orbitRing] : ORBIT_SPEEDS[orbitRing]
+      const orbitRadius = ORBIT_RADII[orbitRing]
 
-      if (isFile) {
-        // Assign to least-populated ring
-        const minCount = Math.min(...cluster.ringCounts)
-        orbitRing = cluster.ringCounts.indexOf(minCount)
-        const countOnRing = cluster.ringCounts[orbitRing]
-        cluster.ringCounts[orbitRing]++
-        orbitSpeed = ORBIT_SPEEDS[orbitRing]
-        orbitRadius = ORBIT_RADII[orbitRing]
-      }
-
-      // Space nodes evenly on their ring based on current count
-      const nodesOnSameRing = [...cluster.nodes.values()].filter(n =>
-        isFile ? n.orbitRing === orbitRing : n.orbitRadius === orbitRadius
-      ).length
-      const orbitAngle = (nodesOnSameRing / Math.max(nodesOnSameRing + 1, 6)) * Math.PI * 2 + Math.random() * 0.3
+      // Assign angle as a placeholder — will be redistributed below
+      const orbitAngle = 0
 
       cluster.nodes.set(key, {
         key,
@@ -295,6 +427,22 @@ export function createStore() {
         actionFade: 0,
         marks: [],
       })
+
+      // Redistribute all nodes on this ring evenly, anchored to the lowest current angle
+      redistributeRing(cluster, orbitRing)
+
+      // Mark fail impact on freshly-created nodes from a failure event
+      if (event.hook_event_name === 'PostToolUseFailure') {
+        const newNode = cluster.nodes.get(key)!
+        newNode.impactType = 'fail'
+        newNode.impactTime = 1.0
+        newNode.actionLabel = '✗ error'
+        newNode.actionFade = 0  // projectile triggers display
+      } else if (event.hook_event_name === 'Stop' || event.hook_event_name === 'Notification') {
+        const newNode = cluster.nodes.get(key)!
+        newNode.actionLabel = event.tool_name || event.hook_event_name
+        newNode.actionFade = 1.0  // show immediately (no directional projectile)
+      }
     } else {
       const node = cluster.nodes.get(key)!
       node.lastTool = event.tool_name || event.hook_event_name || null
@@ -306,17 +454,32 @@ export function createStore() {
       if (isFile) {
         node.baseRadius = Math.min(8, node.baseRadius + 0.3)
       }
-      // Trigger impact
-      const tool = event.tool_name || event.hook_event_name || ''
-      if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
-      else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
-      else if (tool === 'Bash') node.impactType = 'spark'
-      else if (tool === 'Notification') node.impactType = 'ping'
-      else if (tool === 'Stop') node.impactType = 'fade'
-      else node.impactType = 'scan'
-      node.impactTime = 1.0
-      node.actionLabel = tool
-      node.actionFade = 1.0
+      if (event.hook_event_name === 'PostToolUseFailure') {
+        node.impactType = 'fail'
+        node.impactTime = 1.0
+        node.actionLabel = '✗ error'
+        node.actionFade = 0  // projectile triggers display
+      } else if (event.hook_event_name === 'PostToolUse') {
+        // Refresh impact visual only; don't reset the action label
+        const tool = event.tool_name || ''
+        if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
+        else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
+        else if (tool === 'Bash') node.impactType = 'spark'
+        else node.impactType = 'scan'
+        node.impactTime = 1.0
+      } else {
+        const tool = event.tool_name || event.hook_event_name || ''
+        if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
+        else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
+        else if (tool === 'Bash') node.impactType = 'spark'
+        else if (tool === 'Notification') node.impactType = 'ping'
+        else if (tool === 'Stop') node.impactType = 'fade'
+        else node.impactType = 'scan'
+        node.impactTime = 1.0
+        node.actionLabel = tool
+        // Stop/Notification: label shows immediately (no directional projectile)
+        node.actionFade = (event.hook_event_name === 'Stop' || event.hook_event_name === 'Notification') ? 1.0 : 0
+      }
     }
 
     // Edge between consecutive file nodes

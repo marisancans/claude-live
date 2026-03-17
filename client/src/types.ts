@@ -3,17 +3,31 @@ export interface RawEvent {
   id: string
   session_id: string
   timestamp: number
-  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'Stop' | 'Notification' | 'PermissionRequest'
+  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Stop' | 'Notification' | 'PermissionRequest' | 'SubagentStart' | 'SubagentStop' | 'SessionEnd' | 'UserPromptSubmit' | 'PreCompact' | 'PostCompact'
   tool_name: string | null
   tool_input: Record<string, unknown> | null
   tool_response: Record<string, unknown> | null
+  agent_id: string | null
+  agent_type: string | null
+  cwd: string | null
+  error: string | null
+  // Extended fields
+  tool_use_id: string | null
+  prompt: string | null
+  model: string | null
+  source: string | null
+  reason: string | null
+  permission_mode: string | null
+  is_interrupt: boolean | null
+  trigger: string | null
+  compact_summary: string | null
 }
 
 // A node in the solar system
 export interface GraphNode {
   key: string
   label: string
-  nodeType: 'file' | 'bash' | 'web' | 'stop' | 'notification' | 'tool'
+  nodeType: 'file' | 'bash' | 'web' | 'stop' | 'notification' | 'tool' | 'agent'
   baseRadius: number
   color: number         // PixiJS-style hex int (kept for HUD compatibility)
   colorHex: string      // CSS hex string e.g. '#60a5fa'
@@ -39,13 +53,13 @@ export interface GraphNode {
   entry: number         // 0 → 1 entry animation progress
 
   // Impact / action label
-  impactType: 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | null
+  impactType: 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | 'fail' | null
   impactTime: number    // 1.0 → 0.0
   actionLabel: string | null
   actionFade: number    // 1.0 → 0.0
 
-  // Orbit trail marks (fixed-position dots left on orbit)
-  marks: Array<{ a: number; life: number }>
+  // Trail stamps (fixed angles left behind as node orbits)
+  marks: number[]       // angle values, newest last
 }
 
 // A projectile flying from cluster center to a target node

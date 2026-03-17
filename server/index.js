@@ -22,7 +22,21 @@ function normalizeEvent(raw, remoteIp) {
     hook_event_name: raw.hook_event_name ?? null,
     tool_name: raw.tool_name ?? null,
     tool_input: raw.tool_input ?? null,
-    tool_response: raw.tool_response ?? null
+    tool_response: raw.tool_response ?? null,
+    agent_id: raw.agent_id ?? null,
+    agent_type: raw.agent_type ?? null,
+    cwd: raw.cwd ?? null,
+    error: raw.error ?? null,
+    // Extended fields
+    tool_use_id: raw.tool_use_id ?? null,
+    prompt: raw.prompt ?? null,
+    model: raw.model ?? null,
+    source: raw.source ?? null,
+    reason: raw.reason ?? null,
+    permission_mode: raw.permission_mode ?? null,
+    is_interrupt: raw.is_interrupt ?? null,
+    trigger: raw.trigger ?? null,
+    compact_summary: raw.compact_summary ?? null,
   }
 }
 

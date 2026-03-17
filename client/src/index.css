@@ -217,15 +217,148 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   50% { opacity: 0.4; transform: scale(0.7); }
 }
 
-/* ── Legend ─────────────────────────────────────────────── */
-.legend {
+/* ── Bottom-left panel (event log + help btn) ───────────── */
+.bottom-left-panel {
   position: fixed;
   bottom: 24px;
   left: 24px;
   z-index: 20;
-  font-family: 'Space Mono', monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   pointer-events: none;
 }
+.bottom-left-panel > * { pointer-events: all; }
+
+/* ── Event log ──────────────────────────────────────────── */
+.event-log {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 250px;
+}
+.event-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  overflow: hidden;
+  animation: log-entry-in 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.event-log-entry::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -60%;
+  width: 60%;
+  background: linear-gradient(90deg, transparent 0%, var(--entry-color, #888) 60%, transparent 100%);
+  opacity: 0.22;
+  animation: log-scan 0.55s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes log-entry-in {
+  0%   { opacity: 0; transform: translateX(-16px); }
+  55%  { opacity: 1; transform: translateX(3px); }
+  78%  { transform: translateX(-1px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes log-scan {
+  0%   { left: -60%; opacity: 0.22; }
+  100% { left: 130%; opacity: 0; }
+}
+.event-log-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: log-dot-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes log-dot-pop {
+  0%   { transform: scale(0) rotate(-90deg); }
+  70%  { transform: scale(1.5) rotate(8deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.event-log-tool {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  min-width: 38px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  animation: log-tool-in 0.3s ease-out;
+}
+@keyframes log-tool-in {
+  0%   { opacity: 0; letter-spacing: 0.28em; }
+  100% { opacity: 1; letter-spacing: 0.04em; }
+}
+.event-log-file {
+  font-family: 'Fira Code', monospace;
+  font-size: 8px;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+.event-log-session {
+  font-family: 'Fira Code', monospace;
+  font-size: 7px;
+  color: #3a3a3a;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* ── Help button ────────────────────────────────────────── */
+.help-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #444;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  padding: 3px 8px;
+  cursor: pointer;
+  width: fit-content;
+  transition: color 0.15s, border-color 0.15s;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.help-btn:hover { color: #999; border-color: rgba(255,255,255,0.25); }
+
+/* ── Help overlay ───────────────────────────────────────── */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.help-panel {
+  background: rgba(8, 8, 14, 0.98);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 200px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8);
+}
+.help-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.help-panel-title {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* ── Legend (reused inside help panel) ─────────────────── */
 .legend-title {
   font-size: 8px;
   color: #444;
@@ -293,24 +426,163 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   color: #fbbf24;
 }
 
-/* Permission notifications panel */
-.perm-notifications {
+/* ── Debug Panel ────────────────────────────────────────── */
+.debug-toggle {
   position: fixed;
   bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 24px;
+  z-index: 40;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.4);
+  border-radius: 5px;
+  color: rgba(251,191,36,0.9);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.debug-toggle:hover {
+  background: rgba(251,191,36,0.22);
+  border-color: rgba(251,191,36,0.7);
+  color: #fbbf24;
+}
+
+.debug-panel {
+  position: fixed;
+  bottom: 56px;
+  right: 24px;
+  width: 260px;
+  background: rgba(6, 6, 12, 0.97);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  z-index: 40;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8);
+  transform: translateY(8px) scale(0.97);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.debug-panel--open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+
+.debug-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.debug-panel-title {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.debug-close {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.debug-close:hover { color: #ccc; }
+
+.debug-section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.debug-section:last-child { border-bottom: none; }
+.debug-section-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+
+.debug-session-row {
+  display: flex;
+  gap: 6px;
+}
+.debug-select {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #aaa;
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  padding: 4px 7px;
+  outline: none;
+  cursor: pointer;
+}
+.debug-new-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #888;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+.debug-new-btn:hover { color: #ccc; background: rgba(255,255,255,0.1); }
+
+.debug-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.debug-tool-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--tool-color, #888);
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  text-align: center;
+}
+.debug-tool-btn:hover {
+  background: color-mix(in srgb, var(--tool-color, #888) 15%, transparent);
+  border-color: color-mix(in srgb, var(--tool-color, #888) 40%, transparent);
+}
+.debug-tool-btn:active { opacity: 0.6; }
+
+/* ── Permission notifications panel */
+.perm-notifications {
+  position: fixed;
+  left: 24px;
+  top: 130px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   z-index: 100;
   pointer-events: none;
+  max-width: 280px;
 }
 .perm-notifications-title {
   font-size: 9px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: #fbbf24;
-  text-align: center;
+  text-align: left;
   margin-bottom: 2px;
   opacity: 0.7;
 }

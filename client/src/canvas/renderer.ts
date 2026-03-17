@@ -53,6 +53,19 @@ function drawImpact(
     const fr = nr + it * 22
     ctx.beginPath(); ctx.arc(node.x, node.y, fr, 0, Math.PI * 2)
     ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - it) * 0.5})`; ctx.lineWidth = 0.6; ctx.stroke()
+  } else if (node.impactType === 'fail') {
+    // Error — red X burst + expanding ring
+    const fr = nr + (1 - it) * 25
+    ctx.beginPath(); ctx.arc(node.x, node.y, fr, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(248,113,113,${it * 0.55})`; ctx.lineWidth = 0.8; ctx.stroke()
+    for (let s = 0; s < 4; s++) {
+      const ang = (s / 4) * Math.PI + Math.PI / 4
+      const inner = nr + 2, outer = nr + 2 + (1 - it) * 18
+      ctx.beginPath()
+      ctx.moveTo(node.x + Math.cos(ang) * inner, node.y + Math.sin(ang) * inner)
+      ctx.lineTo(node.x + Math.cos(ang) * outer, node.y + Math.sin(ang) * outer)
+      ctx.strokeStyle = `rgba(248,113,113,${it * 0.85})`; ctx.lineWidth = 1.4; ctx.stroke()
+    }
   }
 }
 
@@ -74,29 +87,33 @@ export function drawScene(
     const cx = cluster.centerX, cy = cluster.centerY
     const clusterPerm = (cluster as any).awaitingPermission as boolean
 
-    // ── Orbit rings ──
+    // ── Solid orbit rings (thin, subtle) ──
     for (let ri = 0; ri < 3; ri++) {
       ctx.beginPath()
       ctx.arc(cx, cy, ORBIT_RADII[ri], 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255,255,255,0.032)'
-      ctx.lineWidth = 0.5; ctx.stroke()
+      ctx.strokeStyle = 'rgba(255,255,255,0.045)'
+      ctx.lineWidth = 0.6; ctx.stroke()
     }
-    // Outer ephemeral ring
-    ctx.beginPath()
-    ctx.arc(cx, cy, ORBIT_RADII[2] + 55, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(255,255,255,0.015)'
-    ctx.lineWidth = 0.4; ctx.stroke()
 
-    // ── Orbit trail: fixed-position arc stamps, white only ──
-    const DASH_LEN = 0.055
+    // ── Trail stamps: fixed dashes left behind each node, smooth gradient ──
+    const DASH_PX = 3        // pixel length of each dash (uniform across all rings)
     for (const node of cluster.nodes.values()) {
-      const baseAl = node.nodeType === 'file' ? 1 : node.life * Math.min(1, node.entry)
-      for (const m of node.marks) {
-        const aStart = m.a - DASH_LEN / 2
-        const aEnd = m.a + DASH_LEN / 2
+      if (node.orbitRing < 0 || node.marks.length === 0) continue
+      const baseAl = node.nodeType === 'file'
+        ? 0.5
+        : node.life * 0.4 * Math.min(1, node.entry)
+      if (baseAl <= 0.01) continue
+      const dashArc = DASH_PX / node.orbitRadius  // constant px → radians
+      const n = node.marks.length
+      for (let i = 0; i < n; i++) {
+        // i=0 oldest, i=n-1 newest  →  linear fade: ~4% per step
+        const fade = (i + 1) / n
+        const al = baseAl * fade
+        if (al <= 0.01) continue
+        const a = node.marks[i]
         ctx.beginPath()
-        ctx.arc(cx, cy, node.orbitRadius, aStart, aEnd)
-        ctx.strokeStyle = `rgba(255,255,255,${m.life * baseAl * 0.45})`
+        ctx.arc(cx, cy, node.orbitRadius, a - dashArc / 2, a + dashArc / 2)
+        ctx.strokeStyle = `rgba(255,255,255,${al})`
         ctx.lineWidth = 1.2
         ctx.stroke()
       }
@@ -105,9 +122,46 @@ export function drawScene(
     // ── Impact effects ──
     for (const node of cluster.nodes.values()) drawImpact(ctx, node, t)
 
-    // ── Ephemeral nodes (non-file) ──
+    // ── Agent satellite nodes ──
     for (const node of cluster.nodes.values()) {
-      if (node.nodeType === 'file') continue
+      if (node.nodeType !== 'agent') continue
+      const [r, g, b] = hexToRgb(node.colorHex)
+      const al = node.life * Math.min(1, node.entry)
+      if (al <= 0.01) continue
+      const sz = 1.8
+      const spinAngle = t * 2.5
+      const ringR = 7
+
+      // Soft glow
+      const gg = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, ringR * 2.5)
+      gg.addColorStop(0, `rgba(${r},${g},${b},0.25)`)
+      gg.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.beginPath(); ctx.arc(node.x, node.y, ringR * 2.5, 0, Math.PI * 2)
+      ctx.fillStyle = gg; ctx.fill()
+
+      // Spinning dashed ring
+      const SEGS = 6
+      for (let s = 0; s < SEGS; s++) {
+        const a1 = (s / SEGS) * Math.PI * 2 + spinAngle
+        const a2 = ((s + 0.38) / SEGS) * Math.PI * 2 + spinAngle
+        ctx.beginPath(); ctx.arc(node.x, node.y, ringR, a1, a2)
+        ctx.strokeStyle = `rgba(${r},${g},${b},1)`
+        ctx.lineWidth = 1; ctx.stroke()
+      }
+      // Rotating diamond core
+      ctx.save(); ctx.translate(node.x, node.y); ctx.rotate(Math.PI / 4 + t * 1.5)
+      ctx.fillStyle = `rgba(${r},${g},${b},1)`
+      ctx.fillRect(-sz, -sz, sz * 2, sz * 2)
+      ctx.restore()
+      // Type label beneath
+      ctx.textAlign = 'center'; ctx.font = '7px monospace'
+      ctx.fillStyle = `rgba(${r},${g},${b},0.9)`
+      ctx.fillText(node.label, node.x, node.y + ringR + 6)
+    }
+
+    // ── Ephemeral nodes (non-file, non-agent) ──
+    for (const node of cluster.nodes.values()) {
+      if (node.nodeType === 'file' || node.nodeType === 'agent') continue
       const [r, g, b] = hexToRgb(node.colorHex)
       const al = node.life * Math.min(1, node.entry)
       if (al <= 0.01) continue
@@ -230,9 +284,97 @@ export function drawScene(
     }
     ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fillStyle = cg; ctx.fill()
 
+    // ── Compact: gravity well implosion (PreCompact) ──
+    const compacting = (cluster as any).compacting as number || 0
+    if (compacting > 0) {
+      // 5 concentric rings collapse inward sequentially (staggered timing)
+      for (let ri = 0; ri < 5; ri++) {
+        const delay = ri * 0.15
+        const localT = Math.max(0, Math.min(1, (1 - compacting - delay) / (1 - delay)))
+        if (localT >= 1) continue
+        const maxR = ORBIT_RADII[2] * (0.4 + ri * 0.15)
+        const ringDist = maxR * (1 - localT)  // collapses from maxR → 0
+        const ringAl = (1 - localT) * 0.45
+        if (ringAl <= 0.01) continue
+        ctx.beginPath(); ctx.arc(cx, cy, ringDist, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(180,190,210,${ringAl})`
+        ctx.lineWidth = 1.5 + localT * 2; ctx.stroke()
+        // Inward streak particles on each ring
+        const nPart = 8
+        for (let p = 0; p < nPart; p++) {
+          const ang = (p / nPart) * Math.PI * 2
+          const streakLen = 6 + localT * 18
+          const px = cx + Math.cos(ang) * ringDist
+          const py = cy + Math.sin(ang) * ringDist
+          const px2 = cx + Math.cos(ang) * (ringDist + streakLen)
+          const py2 = cy + Math.sin(ang) * (ringDist + streakLen)
+          const sg = ctx.createLinearGradient(px2, py2, px, py)
+          sg.addColorStop(0, 'rgba(180,190,210,0)')
+          sg.addColorStop(1, `rgba(220,225,240,${ringAl * 0.7})`)
+          ctx.beginPath(); ctx.moveTo(px2, py2); ctx.lineTo(px, py)
+          ctx.strokeStyle = sg; ctx.lineWidth = 0.7; ctx.stroke()
+        }
+      }
+      // Core densifies — growing dark gravity well
+      const wellR = (1 - compacting) * coreR * 6 + coreR
+      const well = ctx.createRadialGradient(cx, cy, 0, cx, cy, wellR)
+      well.addColorStop(0, `rgba(10,10,20,${(1 - compacting) * 0.5})`)
+      well.addColorStop(0.4, `rgba(100,110,140,${(1 - compacting) * 0.15})`)
+      well.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.beginPath(); ctx.arc(cx, cy, wellR, 0, Math.PI * 2); ctx.fillStyle = well; ctx.fill()
+      // Bright rim on the core (accretion glow)
+      ctx.beginPath(); ctx.arc(cx, cy, coreR + 2, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(200,210,240,${(1 - compacting) * 0.6})`
+      ctx.lineWidth = 1.5; ctx.stroke()
+    }
+
+    // ── Compact: starburst rebirth (PostCompact) ──
+    const compacted = (cluster as any).compacted as number || 0
+    if (compacted > 0) {
+      const expand = 1 - compacted  // 0→1 as animation progresses
+      // Radial light beams (8 beams, not rings)
+      const BEAMS = 8
+      for (let b = 0; b < BEAMS; b++) {
+        const ang = (b / BEAMS) * Math.PI * 2
+        const beamLen = expand * ORBIT_RADII[2] * 1.2
+        const bx = cx + Math.cos(ang) * beamLen
+        const by = cy + Math.sin(ang) * beamLen
+        const bg = ctx.createLinearGradient(cx, cy, bx, by)
+        bg.addColorStop(0, `rgba(255,240,200,${compacted * 0.6})`)
+        bg.addColorStop(0.5, `rgba(255,220,140,${compacted * 0.25})`)
+        bg.addColorStop(1, 'rgba(255,200,100,0)')
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx, by)
+        ctx.strokeStyle = bg; ctx.lineWidth = 2.5 * compacted; ctx.stroke()
+      }
+      // Single thick shockwave ring
+      const waveR = expand * ORBIT_RADII[2] * 0.9
+      ctx.beginPath(); ctx.arc(cx, cy, waveR, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255,230,180,${compacted * 0.5})`
+      ctx.lineWidth = 3 * compacted; ctx.stroke()
+      // White-gold core flash
+      const fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 5 * compacted)
+      fg.addColorStop(0, `rgba(255,245,220,${compacted * 0.45})`)
+      fg.addColorStop(0.5, `rgba(255,220,160,${compacted * 0.15})`)
+      fg.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.beginPath(); ctx.arc(cx, cy, coreR * 5 * compacted, 0, Math.PI * 2)
+      ctx.fillStyle = fg; ctx.fill()
+    }
+
     // Permission ring on core
     if (clusterPerm) {
       _drawPermRing(ctx, cx, cy, coreR + 8, t)
+    }
+
+    // Core label — appears when inbound animation (Read/Grep/Glob) arrives
+    const coreLabelFade = (cluster as any).coreLabelFade as number || 0
+    if (coreLabelFade > 0) {
+      const coreLabelText = (cluster as any).coreLabelText as string
+      const coreLabelColor = (cluster as any).coreLabelColor as string || '#b0c8f0'
+      const [clr, clg, clb] = hexToRgb(coreLabelColor)
+      const yOff = (1 - coreLabelFade) * 7
+      ctx.font = '700 9px monospace'; ctx.textAlign = 'center'
+      ctx.fillStyle = `rgba(${clr},${clg},${clb},${coreLabelFade * 0.9})`
+      ctx.fillText(coreLabelText, cx, cy - coreR - 8 - yOff)
     }
 
     // Session label
@@ -298,42 +440,77 @@ function _drawProjectile(
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill()
 
   } else if (tool === 'Grep' || tool === 'Glob') {
+    function rng(s: number) { const x = Math.sin(s*127.1+311.7)*43758.5453; return x-Math.floor(x) }
     if (tool === 'Grep') {
-      // Radar fan — 3 beams sweeping in
+      // Shotgun blast: wide cone of pellets with muzzle flash
       const mainAngle = Math.atan2(to.y-from.y, to.x-from.x)
-      const len = Math.hypot(to.x-from.x, to.y-from.y);
-      ([0, -0.18, 0.18] as number[]).forEach((angleOff, i) => {
-        const delay = i * 0.12
-        const lt = Math.max(0, Math.min(1, (progress - delay) / (1 - delay)))
-        if (lt <= 0) return
-        const le = eio(lt)
-        const ang = mainAngle + angleOff * (1 - le)
-        const lhx = from.x + Math.cos(ang) * len * le
-        const lhy = from.y + Math.sin(ang) * len * le
-        const alpha = (1 - i * 0.25) * 0.7
-        const lg = ctx.createLinearGradient(from.x, from.y, lhx, lhy)
-        lg.addColorStop(0, `rgba(${r},${g},${b},${alpha*0.1})`)
-        lg.addColorStop(1, `rgba(${r},${g},${b},${alpha})`)
-        ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(lhx, lhy)
-        ctx.strokeStyle = lg; ctx.lineWidth = i === 0 ? 1.4 : 0.7; ctx.stroke()
-        if (i === 0) {
-          ctx.beginPath(); ctx.arc(lhx, lhy, 2, 0, Math.PI*2)
-          ctx.fillStyle = `rgba(${r},${g},${b},0.9)`; ctx.fill()
-        }
-      })
-      const sweepArc = 0.35 * (1 - progress * 0.5)
-      ctx.beginPath(); ctx.arc(from.x, from.y, 12, mainAngle-sweepArc, mainAngle+sweepArc)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${0.35*(1-progress)})`; ctx.lineWidth = 1; ctx.stroke()
+      const fullDist = Math.hypot(to.x-from.x, to.y-from.y)
+      const PELLETS = 16, SPREAD = 0.65
+
+      // Muzzle flash
+      if (e < 0.18) {
+        const flash = 1 - e / 0.18
+        const gg = ctx.createRadialGradient(from.x, from.y, 0, from.x, from.y, 36)
+        gg.addColorStop(0, `rgba(${r},${g},${b},${flash * 0.9})`)
+        gg.addColorStop(0.5, `rgba(${r},${g},${b},${flash * 0.3})`)
+        gg.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.beginPath(); ctx.arc(from.x, from.y, 36, 0, Math.PI*2)
+        ctx.fillStyle = gg; ctx.fill()
+      }
+
+      for (let i = 0; i < PELLETS; i++) {
+        const spreadFrac = (i / (PELLETS - 1)) * 2 - 1
+        const ang = mainAngle + spreadFrac * SPREAD + (rng(i * 2.3 + 1) - 0.5) * 0.2
+        const speedMult = 0.65 + rng(i * 3.7 + 2) * 0.45
+        const delay = rng(i * 1.3 + 0.5) * 0.06
+        const pe = Math.min(1, Math.max(0, (e - delay) / (1 - delay)) * speedMult)
+        if (pe <= 0) continue
+        const dist = pe * fullDist
+        const px = from.x + Math.cos(ang) * dist
+        const py = from.y + Math.sin(ang) * dist
+        const alpha = (1 - pe * 0.8) * (0.9 - Math.abs(spreadFrac) * 0.25)
+        const sz = (1 - pe * 0.55) * (1.6 + rng(i * 5.1 + 3) * 1.4)
+        // short motion trail
+        const px0 = from.x + Math.cos(ang) * Math.max(0, dist - fullDist * 0.09)
+        const py0 = from.y + Math.sin(ang) * Math.max(0, dist - fullDist * 0.09)
+        const tg2 = ctx.createLinearGradient(px0, py0, px, py)
+        tg2.addColorStop(0, `rgba(${r},${g},${b},0)`)
+        tg2.addColorStop(1, `rgba(${r},${g},${b},${alpha * 0.5})`)
+        ctx.beginPath(); ctx.moveTo(px0, py0); ctx.lineTo(px, py)
+        ctx.strokeStyle = tg2; ctx.lineWidth = sz * 0.5; ctx.stroke()
+        ctx.beginPath(); ctx.arc(px, py, sz, 0, Math.PI*2)
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`; ctx.fill()
+      }
     } else {
-      // Glob dots formation
-      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y)
-      ctx.strokeStyle = `rgba(${r},${g},${b},0.05)`; ctx.lineWidth = 1; ctx.stroke()
-      for (let i = 0; i < 6; i++) {
-        const frac = e - i * 0.1
-        if (frac < 0 || frac > 1) continue
-        const px = from.x + (to.x-from.x)*frac, py = from.y + (to.y-from.y)*frac
-        ctx.beginPath(); ctx.arc(px, py, (1-i/6)*3.5+0.8, 0, Math.PI*2)
-        ctx.fillStyle = `rgba(${r},${g},${b},${(1-i/6)*0.9})`; ctx.fill()
+      // Glob: particles arc outward then reconverge at target (net cast)
+      const dx = to.x-from.x, dy = to.y-from.y
+      const len2 = Math.hypot(dx, dy)
+      const nx2 = -dy/len2, ny2 = dx/len2
+      const N = 12
+      for (let i = 0; i < N; i++) {
+        const scatter = (rng(i * 2.1 + 0.3) - 0.5) * 2 * 70
+        const delay = rng(i * 1.7 + 0.9) * 0.07
+        const pe = Math.min(1, Math.max(0, (e - delay) / (1 - delay)))
+        if (pe <= 0) continue
+        const arc = scatter * Math.sin(pe * Math.PI)
+        const px = from.x + dx * pe + nx2 * arc
+        const py = from.y + dy * pe + ny2 * arc
+        const al = Math.min(1, pe * 4) * (1 - pe * 0.75)
+        const sz = 1.2 + rng(i * 3.3 + 1) * 1.8
+        // faint line back to spine
+        const spineX = from.x + dx * pe, spineY = from.y + dy * pe
+        ctx.beginPath(); ctx.moveTo(spineX, spineY); ctx.lineTo(px, py)
+        ctx.strokeStyle = `rgba(${r},${g},${b},${al * 0.2})`; ctx.lineWidth = 0.5; ctx.stroke()
+        ctx.beginPath(); ctx.arc(px, py, sz, 0, Math.PI*2)
+        ctx.fillStyle = `rgba(${r},${g},${b},${al * 0.9})`; ctx.fill()
+      }
+      // lead bead
+      ctx.beginPath(); ctx.arc(hx, hy, 2.5, 0, Math.PI*2)
+      ctx.fillStyle = `rgba(${r},${g},${b},0.95)`; ctx.fill()
+      if (progress > 0.82) {
+        const fl = (progress - 0.82) / 0.18
+        ctx.beginPath(); ctx.arc(to.x, to.y, fl * 22, 0, Math.PI*2)
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(1-fl)*0.5})`; ctx.lineWidth = 0.8; ctx.stroke()
       }
     }
 
@@ -360,36 +537,32 @@ function _drawProjectile(
     ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill()
 
   } else if (tool === 'Write') {
-    // Compressed packet → shockwave burst on impact
-    const trail = Math.max(0, e - 0.15)
-    const tx0 = from.x+(to.x-from.x)*trail, ty0 = from.y+(to.y-from.y)*trail
-    const tg = ctx.createLinearGradient(tx0, ty0, hx, hy)
-    tg.addColorStop(0, `rgba(${r},${g},${b},0)`)
-    tg.addColorStop(1, `rgba(${r},${g},${b},0.85)`)
-    ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(hx, hy)
-    ctx.strokeStyle = tg; ctx.lineWidth = 2.5; ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(hx, hy)
-    ctx.strokeStyle = `rgba(${r},${g},${b},0.06)`; ctx.lineWidth = 10; ctx.stroke()
-    ctx.beginPath(); ctx.arc(hx, hy, 3.5, 0, Math.PI*2)
-    ctx.fillStyle = `rgba(${r},${g},${b},0.9)`; ctx.fill()
-    ctx.beginPath(); ctx.arc(hx, hy, 1.5, 0, Math.PI*2)
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill()
-    if (progress > 0.7) {
-      const imp = (progress - 0.7) / 0.3
-      for (let i = 0; i < 3; i++) {
-        const rt = Math.max(0, imp - i*0.15)
-        const rr = rt*(22+i*8), ra = (1-rt)*(0.6-i*0.15)
-        if (ra <= 0) continue
-        ctx.beginPath(); ctx.arc(to.x, to.y, rr, 0, Math.PI*2)
-        ctx.strokeStyle = `rgba(${r},${g},${b},${ra})`; ctx.lineWidth = 1.2-i*0.3; ctx.stroke()
-      }
-      for (let i = 0; i < 8; i++) {
-        const angle = (i/8)*Math.PI*2+imp
-        const dist = imp*(12+i%3*5)
-        const px = to.x+Math.cos(angle)*dist, py = to.y+Math.sin(angle)*dist
-        ctx.beginPath(); ctx.arc(px, py, 1.2*(1-imp*0.7), 0, Math.PI*2)
-        ctx.fillStyle = `rgba(${r},${g},${b},${(1-imp)*0.7})`; ctx.fill()
-      }
+    // Data injection: glowing tube with 5 racing packets and explosive detonation on arrival
+    function rnw(s: number) { const x = Math.sin(s*127.1+311.7)*43758.5453; return x-Math.floor(x) }
+    // Outer glow tube
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y)
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.07)`; ctx.lineWidth = 14; ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y)
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.18)`; ctx.lineWidth = 3; ctx.stroke()
+    // 5 packets racing along the tube with offsets
+    for (let i = 0; i < 5; i++) {
+      const phase = ((e * 1.6 - i * 0.2) % 1 + 1) % 1
+      if (phase > 0.98) continue
+      const pe = eio(phase)
+      const px = from.x + (to.x-from.x) * pe
+      const py = from.y + (to.y-from.y) * pe
+      const fadeOut = phase > 0.85 ? (1 - phase) / 0.15 : 1
+      const pulse = 0.7 + 0.3 * Math.sin(t * 22 + i * 1.4)
+      ctx.beginPath(); ctx.arc(px, py, 3.8, 0, Math.PI*2)
+      ctx.fillStyle = `rgba(${r},${g},${b},${fadeOut * 0.75})`; ctx.fill()
+      ctx.beginPath(); ctx.arc(px, py, 1.3, 0, Math.PI*2)
+      ctx.fillStyle = `rgba(255,255,255,${fadeOut * pulse * 0.95})`; ctx.fill()
+    }
+    // Soft arrival pulse
+    if (progress > 0.8) {
+      const fl = (progress - 0.8) / 0.2
+      ctx.beginPath(); ctx.arc(to.x, to.y, fl * 14, 0, Math.PI*2)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${(1-fl) * 0.5})`; ctx.lineWidth = 1; ctx.stroke()
     }
 
   } else if (tool === 'Bash') {

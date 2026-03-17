@@ -3,6 +3,7 @@ import type { RawEvent, GraphNode, Cluster } from './types'
 import { createStore } from './store'
 import { PixiScene } from './canvas/PixiScene'
 import { layoutClusters } from './canvas/graph'
+import { DebugPanel } from './DebugPanel'
 
 const store = createStore()
 
@@ -16,6 +17,13 @@ const TOOL_COLORS: Record<string, string> = {
   WebFetch:     '#f472b6',
   Stop:         '#888888',
   Notification: '#34d399',
+  SubagentStart:'#c084fc',
+  SubagentStop: '#7c3aed',
+  PostToolUseFailure: '#f87171',
+  SessionEnd:   '#ef4444',
+  UserPromptSubmit: '#38bdf8',
+  PreCompact:   '#94a3b8',
+  PostCompact:  '#94a3b8',
 }
 
 const LEGEND_ITEMS = [
@@ -26,7 +34,37 @@ const LEGEND_ITEMS = [
   { color: '#f472b6', badge: '↗', name: 'WebFetch' },
   { color: '#34d399', badge: '!', name: 'Notification' },
   { color: '#888888', badge: '✓', name: 'Stop' },
+  { color: '#c084fc', badge: '⬡', name: 'Subagent' },
 ]
+
+interface LogEntry {
+  id: string
+  tool: string
+  file: string
+  sessionLabel: string
+  project: string
+  colorHex: string
+}
+
+function fileLabel(event: RawEvent): string {
+  const input = event.tool_input as Record<string, string> | null
+  const t = event.tool_name
+  if (['Read', 'Edit', 'Write'].includes(t || '')) {
+    const fp = input?.file_path || ''
+    return fp.split('/').pop() || ''
+  }
+  if (['Grep', 'Glob'].includes(t || '')) {
+    return input?.pattern || input?.file_path?.split('/').pop() || ''
+  }
+  if (t === 'Bash') return (input?.command || '').slice(0, 22)
+  if (t === 'WebFetch') { try { return new URL(input?.url || '').hostname } catch { return '' } }
+  if (event.hook_event_name === 'UserPromptSubmit') return (event.prompt || '').slice(0, 30)
+  if (event.hook_event_name === 'PreCompact') return event.trigger || 'compacting...'
+  if (event.hook_event_name === 'PostCompact') return 'context compacted'
+  return ''
+}
+
+const MAX_LOG = 10
 
 function toolColor(event: RawEvent | null | undefined): string {
   if (!event) return '#888'
@@ -41,12 +79,17 @@ function toolColorFromNode(node: GraphNode | null): string {
 
 function relativeTime(ts: number | null | undefined): string {
   if (!ts) return '—'
-  // timestamps from server are already ms
   const diff = Math.floor((Date.now() - ts) / 1000)
   if (diff < 3) return 'just now'
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   return `${Math.floor(diff / 3600)}h ago`
+}
+
+function projectName(cwd: string | null | undefined): string {
+  if (!cwd) return ''
+  const parts = cwd.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? ''
 }
 
 interface PermNotification {
@@ -66,6 +109,8 @@ export function App() {
   const [mouseX, setMouseX] = useState(0)
   const [mouseY, setMouseY] = useState(0)
   const [permNotifications, setPermNotifications] = useState<Map<string, PermNotification>>(new Map())
+  const [eventLog, setEventLog] = useState<LogEntry[]>([])
+  const [showHelp, setShowHelp] = useState(false)
   const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
@@ -95,6 +140,28 @@ export function App() {
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
+
+        // Live event log (skip PostToolUse to avoid duplicate entries)
+        if (event.hook_event_name !== 'PostToolUse') {
+          const cluster = sessions.get(event.session_id)
+          let tool = event.tool_name || event.hook_event_name || '?'
+          // Shorten MCP names: mcp__plugin_X__Y__action → action
+          if (tool.startsWith('mcp_')) {
+            const parts = tool.split('__')
+            tool = parts[parts.length - 1].replace(/_/g, ' ')
+          }
+          setEventLog(prev => {
+            const entry: LogEntry = {
+              id: event.id,
+              tool,
+              file: fileLabel(event),
+              sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
+              project: projectName(event.cwd),
+              colorHex: TOOL_COLORS[tool] ?? '#888',
+            }
+            return [...prev, entry].slice(-MAX_LOG)
+          })
+        }
 
         // Track permission requests via Notification events
         if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
@@ -171,21 +238,27 @@ export function App() {
         </div>
       )}
 
-      {/* Legend */}
-      <div className="legend">
-        <div className="legend-title">operations</div>
-        <div className="legend-items">
-          {LEGEND_ITEMS.map(item => (
-            <div className="legend-item" key={item.name}>
-              <div className="legend-badge" style={{ background: item.color }}>{item.badge}</div>
-              <span className="legend-name">{item.name}</span>
-            </div>
-          ))}
-          <div className="legend-perm">
-            <div className="legend-perm-ring" />
-            <span className="legend-perm-name">awaiting permission</span>
-          </div>
+      {/* Bottom-left: event log + help button */}
+      <div className="bottom-left-panel">
+        <div className="event-log">
+          {eventLog.map((entry, i) => {
+            const age = eventLog.length - 1 - i
+            const opacity = Math.max(0.12, 1 - age * 0.09)
+            return (
+              <div
+                key={entry.id}
+                className="event-log-entry"
+                style={{ opacity, '--entry-color': entry.colorHex } as React.CSSProperties}
+              >
+                <div className="event-log-dot" style={{ background: entry.colorHex }} />
+                <span className="event-log-tool" style={{ color: entry.colorHex }}>{entry.tool}</span>
+                {entry.file && <span className="event-log-file">{entry.file}</span>}
+                <span className="event-log-session">{entry.sessionLabel}</span>
+              </div>
+            )
+          })}
         </div>
+        <button className="help-btn" onClick={() => setShowHelp(true)}>? operations</button>
       </div>
 
       {/* Tooltip */}
@@ -198,6 +271,32 @@ export function App() {
           <div className="perm-badge"><div className="perm-dot" />waiting for permission</div>
         )}
       </div>
+
+      <DebugPanel sessionIds={[...clusters.keys()]} />
+
+      {/* Help overlay */}
+      {showHelp && (
+        <div className="help-overlay" onClick={() => setShowHelp(false)}>
+          <div className="help-panel" onClick={e => e.stopPropagation()}>
+            <div className="help-panel-header">
+              <span className="help-panel-title">operations</span>
+              <button className="debug-close" onClick={() => setShowHelp(false)}>×</button>
+            </div>
+            <div className="legend-items" style={{ padding: '4px 0' }}>
+              {LEGEND_ITEMS.map(item => (
+                <div className="legend-item" key={item.name}>
+                  <div className="legend-badge" style={{ background: item.color }}>{item.badge}</div>
+                  <span className="legend-name">{item.name}</span>
+                </div>
+              ))}
+              <div className="legend-perm">
+                <div className="legend-perm-ring" />
+                <span className="legend-perm-name">awaiting permission</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>

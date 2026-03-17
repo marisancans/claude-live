@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Cluster, GraphNode, Projectile, RawEvent } from '../types'
 import { tickSimulation } from './graph'
 import { drawScene } from './renderer'
+import { drawBackground } from './background'
 import { nodeKeyFor } from '../store'
 
 const TOOL_COLOR_HEX: Record<string, string> = {
@@ -122,9 +123,13 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
       const t = tRef.current
       const W = window.innerWidth, H = window.innerHeight
 
-      // Decay coreAct on all clusters
+      // Decay per-cluster transients
       for (const cluster of clustersRef.current.values()) {
-        (cluster as any).coreAct = Math.max(0, ((cluster as any).coreAct || 0) - 0.014)
+        const c = cluster as any
+        c.coreAct = Math.max(0, (c.coreAct || 0) - 0.014)
+        if ((c.coreLabelFade || 0) > 0) c.coreLabelFade = Math.max(0, c.coreLabelFade - 0.003)
+        if ((c.compacting || 0) > 0) c.compacting = Math.max(0, c.compacting - 0.0015)  // ~11s
+        if ((c.compacted || 0) > 0) c.compacted = Math.max(0, c.compacted - 0.0025)  // ~6.5s
       }
 
       tickSimulation(clustersRef.current)
@@ -134,20 +139,32 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
       for (let i = projs.length - 1; i >= 0; i--) {
         const p = projs[i]
         p.progress = Math.min(1, p.progress + 0.016 / p.duration)
-        if (p.progress >= 1) projs.splice(i, 1)
+        if (p.progress >= 1) {
+          // Trigger action label at destination when animation finishes
+          if (p.inbound) {
+            const c = p.cluster as any
+            c.coreLabelText = p.tool
+            c.coreLabelFade = 1.0
+            c.coreLabelColor = p.colorHex
+          } else if (p.node.key != null && p.cluster.nodes.has(p.node.key)) {
+            p.node.actionFade = 1.0
+          }
+          projs.splice(i, 1)
+        }
       }
 
-      // Clear + background (no transform)
+      // Clear
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
       ctx.fillStyle = '#020209'
       ctx.fillRect(0, 0, W, H)
 
-      // Apply viewport transform
+      // Apply viewport transform (background + scene both pan/zoom together)
       ctx.save()
       ctx.translate(W/2 + viewOffset.x, H/2 + viewOffset.y)
       ctx.scale(scale, scale)
       ctx.translate(-W/2, -H/2)
 
+      drawBackground(ctx, W, H, t)
       drawScene(ctx, W, H, clustersRef.current, projs, t)
 
       ctx.restore()
@@ -190,7 +207,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
         colorHex,
         tool: 'Notification',
         progress: 0,
-        duration: 2.4,
+        duration: 4.5,
       })
       return
     }
@@ -201,8 +218,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
     const target = cluster.nodes.get(key) ?? null
     if (!target) return
 
-    // Read/Grep/Glob: planet → core (inbound). Edit/Write/Bash: core → planet (outbound)
-    const inbound = ['Read', 'Grep', 'Glob'].includes(tool)
+    // Read/Grep/Glob: planet → core (inbound). Failures always outbound (show error on node)
+    const inbound = lastEvent.hook_event_name !== 'PostToolUseFailure' && ['Read', 'Grep', 'Glob'].includes(tool)
 
     projectilesRef.current.push({
       sessionId: lastEvent.session_id,
@@ -212,7 +229,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
       colorHex,
       tool,
       progress: 0,
-      duration: 1.8 + Math.random() * 0.4,
+      duration: 3.5 + Math.random() * 0.8,
     })
   }, [lastEvent])
 
