@@ -22,6 +22,9 @@ export function PixiScene({ clusters, lastEvent }: Props) {
   const textRef = useRef<PIXI.Container | null>(null)
   const ripplesRef = useRef<Ripple[]>([])
   const lastEventRef = useRef<RawEvent | null>(null)
+  // Store latest clusters in a ref so the ticker always sees current data
+  const clustersRef = useRef(clusters)
+  clustersRef.current = clusters // update every render
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -43,9 +46,10 @@ export function PixiScene({ clusters, lastEvent }: Props) {
     gfxRef.current = gfx
     textRef.current = textContainer
 
+    // Use clustersRef.current so ticker always reads latest clusters
     app.ticker.add(() => {
-      tickSimulation(clusters)
-      drawScene(app, gfx, textContainer, clusters, ripplesRef.current, performance.now())
+      tickSimulation(clustersRef.current)
+      drawScene(app, gfx, textContainer, clustersRef.current, ripplesRef.current, performance.now())
     })
 
     return () => { app.destroy(true); appRef.current = null }

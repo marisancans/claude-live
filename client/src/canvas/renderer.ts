@@ -1,6 +1,9 @@
 import * as PIXI from 'pixi.js'
 import type { Cluster, Ripple } from '../types'
 
+const NODE_TEXT_STYLE = { fontSize: 11, fill: 0xffffff, fontFamily: 'SF Mono, monospace' }
+const CLUSTER_TEXT_STYLE = { fontSize: 9, fill: 0x444444, fontFamily: 'SF Mono, monospace' }
+
 export function drawScene(
   app: PIXI.Application,
   gfx: PIXI.Graphics,
@@ -10,7 +13,21 @@ export function drawScene(
   now: number
 ) {
   gfx.clear()
-  textContainer.removeChildren()
+
+  // Reuse text objects — track index into textContainer children
+  let textIdx = 0
+
+  function getOrCreateText(style: Partial<PIXI.ITextStyle>): PIXI.Text {
+    if (textIdx < textContainer.children.length) {
+      const t = textContainer.children[textIdx] as PIXI.Text
+      textIdx++
+      return t
+    }
+    const t = new PIXI.Text('', style)
+    textContainer.addChild(t)
+    textIdx++
+    return t
+  }
 
   // Draw ripples
   for (let i = ripples.length - 1; i >= 0; i--) {
@@ -56,26 +73,28 @@ export function drawScene(
 
       // label
       if (opacity > 0.2) {
-        const label = new PIXI.Text(node.label, {
-          fontSize: 11,
-          fill: 0xffffff,
-          fontFamily: 'SF Mono, monospace',
-        })
+        const label = getOrCreateText(NODE_TEXT_STYLE)
+        label.text = node.label
+        label.style = new PIXI.TextStyle(NODE_TEXT_STYLE)
         label.alpha = opacity
         label.x = node.x - label.width / 2
         label.y = node.y + radius + 3
-        textContainer.addChild(label)
+        label.visible = true
       }
     }
 
     // cluster label
-    const clusterLabel = new PIXI.Text(cluster.label, {
-      fontSize: 9,
-      fill: 0x444444,
-      fontFamily: 'SF Mono, monospace',
-    })
+    const clusterLabel = getOrCreateText(CLUSTER_TEXT_STYLE)
+    clusterLabel.text = cluster.label
+    clusterLabel.style = new PIXI.TextStyle(CLUSTER_TEXT_STYLE)
+    clusterLabel.alpha = 1
     clusterLabel.x = cluster.centerX - clusterLabel.width / 2
     clusterLabel.y = cluster.centerY - 8
-    textContainer.addChild(clusterLabel)
+    clusterLabel.visible = true
+  }
+
+  // Hide unused text objects from previous frame (don't destroy, reuse next frame)
+  for (let i = textIdx; i < textContainer.children.length; i++) {
+    (textContainer.children[i] as PIXI.Text).visible = false
   }
 }
