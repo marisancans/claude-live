@@ -41,6 +41,7 @@ export interface Cluster {
   nodes: Map<string, GraphNode>
   edges: GraphEdge[]
   stopping: boolean     // true after Stop event received
+  lastFileKey: string | null   // key of most recently touched file node
 }
 
 // A ripple animation

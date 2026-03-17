@@ -1,8 +1,8 @@
 import * as PIXI from 'pixi.js'
 import type { Cluster, Ripple } from '../types'
 
-const NODE_TEXT_STYLE = { fontSize: 11, fill: 0xffffff, fontFamily: 'SF Mono, monospace' }
-const CLUSTER_TEXT_STYLE = { fontSize: 9, fill: 0x444444, fontFamily: 'SF Mono, monospace' }
+const NODE_TEXT_STYLE = new PIXI.TextStyle({ fontSize: 11, fill: 0xffffff, fontFamily: 'SF Mono, monospace' })
+const CLUSTER_TEXT_STYLE = new PIXI.TextStyle({ fontSize: 9, fill: 0x444444, fontFamily: 'SF Mono, monospace' })
 
 export function drawScene(
   app: PIXI.Application,
@@ -17,7 +17,7 @@ export function drawScene(
   // Reuse text objects — track index into textContainer children
   let textIdx = 0
 
-  function getOrCreateText(style: Partial<PIXI.ITextStyle>): PIXI.Text {
+  function getOrCreateText(style: PIXI.TextStyle): PIXI.Text {
     if (textIdx < textContainer.children.length) {
       const t = textContainer.children[textIdx] as PIXI.Text
       textIdx++
@@ -75,7 +75,6 @@ export function drawScene(
       if (opacity > 0.2) {
         const label = getOrCreateText(NODE_TEXT_STYLE)
         label.text = node.label
-        label.style = new PIXI.TextStyle(NODE_TEXT_STYLE)
         label.alpha = opacity
         label.x = node.x - label.width / 2
         label.y = node.y + radius + 3
@@ -86,7 +85,6 @@ export function drawScene(
     // cluster label
     const clusterLabel = getOrCreateText(CLUSTER_TEXT_STYLE)
     clusterLabel.text = cluster.label
-    clusterLabel.style = new PIXI.TextStyle(CLUSTER_TEXT_STYLE)
     clusterLabel.alpha = 1
     clusterLabel.x = cluster.centerX - clusterLabel.width / 2
     clusterLabel.y = cluster.centerY - 8

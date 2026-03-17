@@ -112,6 +112,13 @@ export function createStore() {
       cluster.edges = cluster.edges.filter(
         e => cluster.nodes.has(e.fromKey) && cluster.nodes.has(e.toKey)
       )
+      // update edge ages from their nodes
+      for (const edge of cluster.edges) {
+        const a = cluster.nodes.get(edge.fromKey)
+        const b = cluster.nodes.get(edge.toKey)
+        if (!a || !b) continue
+        edge.age = Math.max(a.age, b.age)
+      }
       // remove stopping clusters once all nodes have faded out
       if (cluster.stopping && cluster.nodes.size === 0) {
         sessions.delete(sid)
@@ -140,6 +147,7 @@ export function createStore() {
         nodes: new Map(),
         edges: [],
         stopping: false,
+        lastFileKey: null,
       })
     }
 
@@ -174,6 +182,22 @@ export function createStore() {
           lastEventIndex: buffer.length - 1,
         })
       }
+    }
+
+    // Add edge between consecutive file nodes
+    if (key && nodeTypeFor(event) === 'file') {
+      if (cluster.lastFileKey && cluster.lastFileKey !== key && cluster.nodes.has(cluster.lastFileKey)) {
+        const edgeExists = cluster.edges.some(e => e.fromKey === cluster.lastFileKey && e.toKey === key)
+        if (!edgeExists) {
+          cluster.edges.push({
+            fromKey: cluster.lastFileKey,
+            toKey: key,
+            color: TOOL_COLORS[event.tool_name || ''] ?? DEFAULT_COLOR,
+            age: 0,
+          })
+        }
+      }
+      cluster.lastFileKey = key
     }
 
     recomputeAges()
