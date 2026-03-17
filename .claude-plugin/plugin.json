@@ -1,6 +1,6 @@
 {
   "name": "claude-live",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Realtime solar system visualizer for Claude Code sessions",
   "author": { "name": "marisancans" },
   "repository": "https://github.com/marisancans/claude-live",
