@@ -9,7 +9,7 @@ const TOOL_COLOR_HEX: Record<string, string> = {
   Read: '#4ade80', Edit: '#60a5fa', Write: '#60a5fa',
   Bash: '#f59e0b', Grep: '#a78bfa', Glob: '#a78bfa',
   WebFetch: '#f472b6', Stop: '#888888', Notification: '#34d399',
-  PermissionRequest: '#fbbf24',
+  PermissionRequest: '#fbbf24', UserPromptSubmit: '#38bdf8',
 }
 
 function desaturate(hex: string): string {
@@ -196,8 +196,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
     const rawHex = TOOL_COLOR_HEX[tool] ?? '#888888'
     const colorHex = desaturate(rawHex)
 
-    // Notification + PermissionRequest: rings emanate from core — use core as both endpoints
-    if (tool === 'Notification' || tool === 'PermissionRequest') {
+    // Notification / PermissionRequest / UserPromptSubmit: rings emanate from core
+    if (tool === 'Notification' || tool === 'PermissionRequest' || tool === 'UserPromptSubmit') {
       const coreNode = { x: cluster.centerX, y: cluster.centerY } as GraphNode
       projectilesRef.current.push({
         sessionId: lastEvent.session_id,

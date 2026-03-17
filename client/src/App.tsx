@@ -47,10 +47,22 @@ interface LogEntry {
 }
 
 function fileLabel(event: RawEvent): string {
-  const input = event.tool_input as Record<string, string> | null
+  const input = event.tool_input as Record<string, any> | null
   const t = event.tool_name
-  if (['Read', 'Edit', 'Write'].includes(t || '')) {
-    const fp = input?.file_path || ''
+  if (t === 'Edit') {
+    const fp = (input?.file_path || '') as string
+    const ns = ((input?.new_string || '') as string).split('\n').length
+    const os = ((input?.old_string || '') as string).split('\n').length
+    const name = fp.split('/').pop() || ''
+    return ns !== os ? `${name} +${ns}−${os}` : `${name} ${ns}L`
+  }
+  if (t === 'Write') {
+    const fp = (input?.file_path || '') as string
+    const lines = ((input?.content || '') as string).split('\n').length
+    return `${fp.split('/').pop() || ''} ${lines}L`
+  }
+  if (t === 'Read') {
+    const fp = (input?.file_path || '') as string
     return fp.split('/').pop() || ''
   }
   if (['Grep', 'Glob'].includes(t || '')) {

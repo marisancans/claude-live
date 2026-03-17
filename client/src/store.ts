@@ -115,6 +115,62 @@ function labelFor(event: RawEvent): string {
   return t || event.hook_event_name || '?'
 }
 
+// Generate enriched action label with stats from tool_input/tool_response
+function enrichedLabel(event: RawEvent): string {
+  const t = event.tool_name || event.hook_event_name || '?'
+  const input = event.tool_input as Record<string, any> | null
+  const resp = event.tool_response as Record<string, any> | null
+  const short = t.startsWith('mcp_') ? shortToolName(t).slice(0, 14) : t
+
+  if (event.hook_event_name === 'PostToolUse' && resp) {
+    // Enrich with response data
+    if (t === 'Bash') {
+      const code = resp.exitCode ?? resp.exit_code ?? resp.code
+      if (code !== undefined && code !== null) return code === 0 ? `${short} ✓` : `${short} ✗ ${code}`
+    }
+    if (t === 'Grep') {
+      const count = resp.count ?? resp.numMatches ?? resp.total
+      if (count !== undefined) return `${short} ${count} hits`
+    }
+    if (t === 'Glob') {
+      const files = Array.isArray(resp) ? resp.length : (resp.files?.length ?? resp.count)
+      if (files !== undefined) return `${short} ${files} files`
+    }
+  }
+
+  if (input) {
+    if (t === 'Edit') {
+      const ns = (input.new_string || '') as string
+      const os = (input.old_string || '') as string
+      const added = ns.split('\n').length
+      const removed = os.split('\n').length
+      if (added !== removed) return `${short} +${added} -${removed}`
+      return `${short} ${added}L`
+    }
+    if (t === 'Write') {
+      const content = (input.content || '') as string
+      const lines = content.split('\n').length
+      return `${short} ${lines}L`
+    }
+    if (t === 'Read') {
+      const limit = input.limit
+      const offset = input.offset
+      if (offset) return `${short} @${offset}`
+      if (limit) return `${short} ${limit}L`
+    }
+    if (t === 'Bash') {
+      const cmd = (input.command || '') as string
+      const first = cmd.split(/\s+/)[0]?.split('/').pop() || ''
+      return `$ ${first}`
+    }
+    if (t === 'Grep') {
+      return `${short} /${(input.pattern || '').toString().slice(0, 10)}/`
+    }
+  }
+
+  return short
+}
+
 function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
   const t = event.tool_name
   if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t || '')) return 'file'
@@ -257,13 +313,26 @@ export function createStore() {
     const cluster = sessions.get(event.session_id)!
     ;(cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
 
-    // Update cluster label from cwd project name (better than hash)
-    if (event.cwd) {
-      const parts = event.cwd.split('/').filter(Boolean)
-      const project = parts[parts.length - 1]
-      if (project && (cluster.label.length <= 8 || cluster.label.startsWith('#'))) {
-        cluster.label = project
+    // Update cluster label from cwd or file paths (better than hash)
+    if (cluster.label.length <= 8 || cluster.label.startsWith('#')) {
+      let project = ''
+      if (event.cwd) {
+        const parts = event.cwd.split('/').filter(Boolean)
+        project = parts[parts.length - 1] || ''
       }
+      // Fallback: extract project name from file_path in tool_input
+      if (!project) {
+        const fp = (event.tool_input as Record<string, string> | null)?.file_path
+          || (event.tool_input as Record<string, string> | null)?.path || ''
+        if (fp.includes('/')) {
+          const segs = fp.split('/').filter(Boolean)
+          // Look for segment after common dirs (Users, home, src, etc.)
+          const srcIdx = segs.lastIndexOf('src')
+          if (srcIdx > 0) project = segs[srcIdx - 1]
+          else if (segs.length >= 3) project = segs[segs.length - 3]
+        }
+      }
+      if (project && project.length > 1) cluster.label = project
     }
 
     if (event.hook_event_name === 'Stop') {
@@ -340,9 +409,13 @@ export function createStore() {
       return
     }
 
-    // UserPromptSubmit: pulse core
+    // UserPromptSubmit: pulse core + show prompt snippet
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
+      const promptText = event.prompt || ''
+      ;(cluster as any).coreLabelText = promptText.slice(0, 28) + (promptText.length > 28 ? '…' : '')
+      ;(cluster as any).coreLabelFade = 1.0
+      ;(cluster as any).coreLabelColor = '#38bdf8'
       recomputeAges()
       return
     }
@@ -460,13 +533,19 @@ export function createStore() {
         node.actionLabel = '✗ error'
         node.actionFade = 0  // projectile triggers display
       } else if (event.hook_event_name === 'PostToolUse') {
-        // Refresh impact visual only; don't reset the action label
+        // Refresh impact visual; enrich label with response data
         const tool = event.tool_name || ''
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
         else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
         else if (tool === 'Bash') node.impactType = 'spark'
         else node.impactType = 'scan'
         node.impactTime = 1.0
+        // Enrich label with PostToolUse response (exit codes, match counts)
+        const enriched = enrichedLabel(event)
+        if (enriched !== tool) {
+          node.actionLabel = enriched
+          node.actionFade = 1.0  // show enriched result
+        }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
@@ -476,7 +555,7 @@ export function createStore() {
         else if (tool === 'Stop') node.impactType = 'fade'
         else node.impactType = 'scan'
         node.impactTime = 1.0
-        node.actionLabel = tool
+        node.actionLabel = enrichedLabel(event)
         // Stop/Notification: label shows immediately (no directional projectile)
         node.actionFade = (event.hook_event_name === 'Stop' || event.hook_event_name === 'Notification') ? 1.0 : 0
       }
