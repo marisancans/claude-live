@@ -1,4 +1,11 @@
 {
+  "SessionStart": [{
+    "hooks": [{
+      "type": "command",
+      "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+      "async": true
+    }]
+  }],
   "PreToolUse": [{
     "hooks": [{
       "type": "command",
