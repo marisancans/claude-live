@@ -5,7 +5,7 @@ import open from 'open'
 const portArgIdx = process.argv.findIndex(a => a === '--port' || a.startsWith('--port='))
 const portArg = portArgIdx >= 0
   ? (process.argv[portArgIdx].includes('=') ? process.argv[portArgIdx].split('=')[1] : process.argv[portArgIdx + 1])
-  : '3141'
+  : '43451'
 const desiredPort = parseInt(portArg, 10)
 
 let p = desiredPort
