@@ -40,7 +40,9 @@ export function createServer({ port = 3141 } = {}) {
     buffer.push(event)
     if (buffer.length > BUFFER_SIZE) buffer.shift()
     const data = `data: ${JSON.stringify(event)}\n\n`
-    for (const client of clients) client.write(data)
+    for (const client of clients) {
+      try { client.write(data) } catch { clients.delete(client) }
+    }
     res.json({ ok: true })
   })
 
@@ -54,8 +56,11 @@ export function createServer({ port = 3141 } = {}) {
       res.write(`data: ${JSON.stringify(event)}\n\n`)
     }
     clients.add(res)
-    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), HEARTBEAT_MS)
+    const heartbeat = setInterval(() => {
+      try { res.write(': heartbeat\n\n') } catch { clients.delete(res); clearInterval(heartbeat) }
+    }, HEARTBEAT_MS)
     req.on('close', () => { clients.delete(res); clearInterval(heartbeat) })
+    res.on('error', () => { clients.delete(res); clearInterval(heartbeat) })
   })
 
   // expose buffer for tests
