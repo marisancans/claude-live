@@ -381,6 +381,13 @@ export function drawScene(
     ctx.font = '9px monospace'; ctx.textAlign = 'center'
     ctx.fillStyle = isChild ? 'rgba(220,190,120,0.65)' : 'rgba(190,205,235,0.7)'
     ctx.fillText(`${isChild ? 'agent' : 'session'}:${cluster.label}`, cx, cy + coreR + 14)
+    // Model label
+    const model = (cluster as any).model as string | undefined
+    if (model) {
+      ctx.font = '7px monospace'
+      ctx.fillStyle = 'rgba(140,150,170,0.5)'
+      ctx.fillText(model.replace('claude-', ''), cx, cy + coreR + 24)
+    }
   }
 
   // ── Projectiles ──

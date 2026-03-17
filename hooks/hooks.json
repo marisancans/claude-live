@@ -2,9 +2,37 @@
   "description": "claude-live hooks — forwards Claude Code events to the visualizer server",
   "hooks": {
     "SessionStart": [{
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+          "async": true
+        },
+        {
+          "type": "command",
+          "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+          "async": true
+        }
+      ]
+    }],
+    "InstructionsLoaded": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "WorktreeCreate": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "WorktreeRemove": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],

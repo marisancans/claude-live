@@ -3,7 +3,7 @@ export interface RawEvent {
   id: string
   session_id: string
   timestamp: number
-  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Stop' | 'Notification' | 'PermissionRequest' | 'SubagentStart' | 'SubagentStop' | 'SessionEnd' | 'UserPromptSubmit' | 'PreCompact' | 'PostCompact'
+  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Stop' | 'Notification' | 'PermissionRequest' | 'SubagentStart' | 'SubagentStop' | 'SessionEnd' | 'UserPromptSubmit' | 'PreCompact' | 'PostCompact' | 'SessionStart' | 'InstructionsLoaded' | 'WorktreeCreate' | 'WorktreeRemove'
   tool_name: string | null
   tool_input: Record<string, unknown> | null
   tool_response: Record<string, unknown> | null
@@ -21,6 +21,11 @@ export interface RawEvent {
   is_interrupt: boolean | null
   trigger: string | null
   compact_summary: string | null
+  last_assistant_message: string | null
+  notification_type: string | null
+  title: string | null
+  agent_transcript_path: string | null
+  memory_type: string | null
 }
 
 // A node in the solar system

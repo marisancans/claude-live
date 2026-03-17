@@ -24,6 +24,10 @@ const TOOL_COLORS: Record<string, string> = {
   UserPromptSubmit: '#38bdf8',
   PreCompact:   '#94a3b8',
   PostCompact:  '#94a3b8',
+  SessionStart: '#22d3ee',
+  InstructionsLoaded: '#a3a3a3',
+  WorktreeCreate: '#86efac',
+  WorktreeRemove: '#fca5a5',
 }
 
 const LEGEND_ITEMS = [
@@ -73,6 +77,8 @@ function fileLabel(event: RawEvent): string {
   if (event.hook_event_name === 'UserPromptSubmit') return (event.prompt || '').slice(0, 30)
   if (event.hook_event_name === 'PreCompact') return event.trigger || 'compacting...'
   if (event.hook_event_name === 'PostCompact') return 'context compacted'
+  if (event.hook_event_name === 'SessionStart') return event.model || event.source || 'started'
+  if (event.hook_event_name === 'InstructionsLoaded') return event.memory_type || 'instructions'
   return ''
 }
 

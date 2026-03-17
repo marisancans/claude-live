@@ -37,6 +37,12 @@ function normalizeEvent(raw, remoteIp) {
     is_interrupt: raw.is_interrupt ?? null,
     trigger: raw.trigger ?? null,
     compact_summary: raw.compact_summary ?? null,
+    last_assistant_message: raw.last_assistant_message ?? null,
+    notification_type: raw.notification_type ?? null,
+    title: raw.title ?? null,
+    agent_transcript_path: raw.agent_transcript_path ?? null,
+    file_path_loaded: raw.file_path ?? null,
+    memory_type: raw.memory_type ?? null,
   }
 }
 

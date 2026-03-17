@@ -116,25 +116,31 @@ function labelFor(event: RawEvent): string {
 }
 
 // Generate enriched action label with stats from tool_input/tool_response
-function enrichedLabel(event: RawEvent): string {
+function enrichedLabel(event: RawEvent, latency?: string): string {
   const t = event.tool_name || event.hook_event_name || '?'
   const input = event.tool_input as Record<string, any> | null
   const resp = event.tool_response as Record<string, any> | null
   const short = t.startsWith('mcp_') ? shortToolName(t).slice(0, 14) : t
+  const suffix = latency ? ` ${latency}` : ''
+
+  // Handle is_interrupt for PostToolUseFailure
+  if (event.hook_event_name === 'PostToolUseFailure' && event.is_interrupt) {
+    return `⏹ interrupted${suffix}`
+  }
 
   if (event.hook_event_name === 'PostToolUse' && resp) {
     // Enrich with response data
     if (t === 'Bash') {
       const code = resp.exitCode ?? resp.exit_code ?? resp.code
-      if (code !== undefined && code !== null) return code === 0 ? `${short} ✓` : `${short} ✗ ${code}`
+      if (code !== undefined && code !== null) return code === 0 ? `${short} ✓${suffix}` : `${short} ✗ ${code}${suffix}`
     }
     if (t === 'Grep') {
       const count = resp.count ?? resp.numMatches ?? resp.total
-      if (count !== undefined) return `${short} ${count} hits`
+      if (count !== undefined) return `${short} ${count} hits${suffix}`
     }
     if (t === 'Glob') {
       const files = Array.isArray(resp) ? resp.length : (resp.files?.length ?? resp.count)
-      if (files !== undefined) return `${short} ${files} files`
+      if (files !== undefined) return `${short} ${files} files${suffix}`
     }
   }
 
@@ -144,31 +150,31 @@ function enrichedLabel(event: RawEvent): string {
       const os = (input.old_string || '') as string
       const added = ns.split('\n').length
       const removed = os.split('\n').length
-      if (added !== removed) return `${short} +${added} -${removed}`
-      return `${short} ${added}L`
+      if (added !== removed) return `${short} +${added} -${removed}${suffix}`
+      return `${short} ${added}L${suffix}`
     }
     if (t === 'Write') {
       const content = (input.content || '') as string
       const lines = content.split('\n').length
-      return `${short} ${lines}L`
+      return `${short} ${lines}L${suffix}`
     }
     if (t === 'Read') {
       const limit = input.limit
       const offset = input.offset
-      if (offset) return `${short} @${offset}`
-      if (limit) return `${short} ${limit}L`
+      if (offset) return `${short} @${offset}${suffix}`
+      if (limit) return `${short} ${limit}L${suffix}`
     }
     if (t === 'Bash') {
       const cmd = (input.command || '') as string
       const first = cmd.split(/\s+/)[0]?.split('/').pop() || ''
-      return `$ ${first}`
+      return `$ ${first}${suffix}`
     }
     if (t === 'Grep') {
-      return `${short} /${(input.pattern || '').toString().slice(0, 10)}/`
+      return `${short} /${(input.pattern || '').toString().slice(0, 10)}/${suffix}`
     }
   }
 
-  return short
+  return short + suffix
 }
 
 function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
@@ -206,6 +212,7 @@ function clusterPosition(index: number, existing: { centerX: number; centerY: nu
 export function createStore() {
   const buffer: RawEvent[] = []
   const sessions = new Map<string, Cluster>()
+  const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
   let replayDone = false
 
   function recomputeAges() {
@@ -348,6 +355,11 @@ export function createStore() {
       (cluster as any).awaitingPermission = false
     }
 
+    // Track tool latency: store start timestamp on PreToolUse
+    if (event.hook_event_name === 'PreToolUse' && event.tool_use_id) {
+      pendingTimings.set(event.tool_use_id, event.timestamp)
+    }
+
     // SubagentStart: spawn satellite node orbiting close to core
     if (event.hook_event_name === 'SubagentStart') {
       const agentId = event.agent_id || `${event.session_id}-sub`
@@ -420,6 +432,15 @@ export function createStore() {
       return
     }
 
+    // SessionStart: store model on cluster
+    if (event.hook_event_name === 'SessionStart') {
+      if (event.model) (cluster as any).model = event.model
+      if (event.source) (cluster as any).source = event.source
+      ;(cluster as any).coreAct = 1.0
+      recomputeAges()
+      return
+    }
+
     // PreCompact: implosion animation (skip during replay)
     if (event.hook_event_name === 'PreCompact') {
       if (replayDone) {
@@ -453,11 +474,37 @@ export function createStore() {
     const type = nodeTypeFor(event)
     const isFile = type === 'file'
 
+    // Compute tool latency for PostToolUse / PostToolUseFailure
+    let latencyStr = ''
+    if ((event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure') && event.tool_use_id) {
+      const startTs = pendingTimings.get(event.tool_use_id)
+      if (startTs) {
+        const ms = event.timestamp - startTs
+        latencyStr = ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed(1)}s`
+        pendingTimings.delete(event.tool_use_id)
+      }
+    }
+
     if (!cluster.nodes.has(key)) {
       // Skip ephemeral node creation during replay — only show live ephemerals
       if (!isFile && !replayDone) {
         recomputeAges()
         return
+      }
+
+      // Cap bash nodes at 5 per cluster — evict oldest when full
+      if (type === 'bash') {
+        const bashNodes = [...cluster.nodes.values()]
+          .filter(n => n.nodeType === 'bash')
+          .sort((a, b) => a.lastTimestamp - b.lastTimestamp)
+        while (bashNodes.length >= 5) {
+          const oldest = bashNodes.shift()!
+          if (oldest.orbitRing >= 0) {
+            cluster.ringCounts[oldest.orbitRing] = Math.max(0, cluster.ringCounts[oldest.orbitRing] - 1)
+            redistributeRing(cluster, oldest.orbitRing)
+          }
+          cluster.nodes.delete(oldest.key)
+        }
       }
 
       // Assign to least-populated ring (both file and ephemeral nodes share rings)
@@ -509,7 +556,11 @@ export function createStore() {
         const newNode = cluster.nodes.get(key)!
         newNode.impactType = 'fail'
         newNode.impactTime = 1.0
-        newNode.actionLabel = '✗ error'
+        if (event.is_interrupt) {
+          newNode.actionLabel = '⏹ interrupted' + (latencyStr ? ` ${latencyStr}` : '')
+        } else {
+          newNode.actionLabel = '✗ error' + (latencyStr ? ` ${latencyStr}` : '')
+        }
         newNode.actionFade = 0  // projectile triggers display
       } else if (event.hook_event_name === 'Stop' || event.hook_event_name === 'Notification') {
         const newNode = cluster.nodes.get(key)!
@@ -530,7 +581,11 @@ export function createStore() {
       if (event.hook_event_name === 'PostToolUseFailure') {
         node.impactType = 'fail'
         node.impactTime = 1.0
-        node.actionLabel = '✗ error'
+        if (event.is_interrupt) {
+          node.actionLabel = '⏹ interrupted' + (latencyStr ? ` ${latencyStr}` : '')
+        } else {
+          node.actionLabel = '✗ error' + (latencyStr ? ` ${latencyStr}` : '')
+        }
         node.actionFade = 0  // projectile triggers display
       } else if (event.hook_event_name === 'PostToolUse') {
         // Refresh impact visual; enrich label with response data
@@ -540,11 +595,11 @@ export function createStore() {
         else if (tool === 'Bash') node.impactType = 'spark'
         else node.impactType = 'scan'
         node.impactTime = 1.0
-        // Enrich label with PostToolUse response (exit codes, match counts)
-        const enriched = enrichedLabel(event)
+        // Enrich label with PostToolUse response (exit codes, match counts, latency)
+        // Only update the text — projectile handles the fade trigger
+        const enriched = enrichedLabel(event, latencyStr || undefined)
         if (enriched !== tool) {
           node.actionLabel = enriched
-          node.actionFade = 1.0  // show enriched result
         }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
