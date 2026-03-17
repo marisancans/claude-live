@@ -1,83 +1,63 @@
 import type { Cluster } from '../types'
 
-const K_REPULSE = 800          // node-node repulsion constant
-const K_ATTRACT = 0.03         // edge attraction factor
-const TARGET_DIST = 80         // edge rest length (simulation units)
-const K_GRAVITY = 0.005        // cluster gravity toward centerX/centerY
-const K_CLUSTER_REPULSE = 2000 // cluster-cluster repulsion
-const MIN_CLUSTER_DIST = 250   // minimum cluster separation
-const BOUNDARY_DIST = 60       // canvas boundary repulsion kickin distance
-const DAMPING = 0.88
+const ORBIT_RADII = [70, 120, 175]
+
 const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
+const MARK_SPACING = 0.10 // radians between marks (speed-independent)
+const MARK_MAX = 28
+
+// Place all clusters instantly on a circle with guaranteed spacing — no physics
+export function layoutClusters(clusters: Map<string, Cluster>) {
+  const arr = [...clusters.values()]
+  if (arr.length === 0) return
+  const N = arr.length
+  const SPACING = 520
+  const r = N === 1 ? 0 : SPACING / (2 * Math.sin(Math.PI / N))
+  const cx = CANVAS_W / 2, cy = CANVAS_H / 2
+  arr.forEach((cluster, i) => {
+    const angle = (i / N) * Math.PI * 2 - Math.PI / 2
+    cluster.centerX = cx + Math.cos(angle) * r
+    cluster.centerY = cy + Math.sin(angle) * r
+    cluster.layoutAngle = angle
+  })
+}
+
 export function tickSimulation(clusters: Map<string, Cluster>) {
-  const clusterList = [...clusters.values()]
-  const allNodes = clusterList.flatMap(c => [...c.nodes.values()])
-
-  // 1. Node-node repulsion (within each cluster only)
-  for (const cluster of clusterList) {
-    const nodes = [...cluster.nodes.values()]
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j]
-        const dx = a.x - b.x, dy = a.y - b.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        if (dist < 150) {
-          const f = K_REPULSE / (dist * dist)
-          const nx = dx / dist, ny = dy / dist
-          a.vx += nx * f; a.vy += ny * f
-          b.vx -= nx * f; b.vy -= ny * f
-        }
-      }
-    }
-  }
-
-  // 2. Edge attraction (within each cluster)
-  for (const cluster of clusterList) {
-    for (const edge of cluster.edges) {
-      const a = cluster.nodes.get(edge.fromKey)
-      const b = cluster.nodes.get(edge.toKey)
-      if (!a || !b) continue
-      const dx = b.x - a.x, dy = b.y - a.y
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1
-      const f = (dist - TARGET_DIST) * K_ATTRACT
-      const nx = dx / dist, ny = dy / dist
-      a.vx += nx * f; a.vy += ny * f
-      b.vx -= nx * f; b.vy -= ny * f
-    }
-  }
-
-  // 3. Cluster gravity (each node toward cluster centerX/centerY)
-  for (const cluster of clusterList) {
+  for (const cluster of clusters.values()) {
     for (const node of cluster.nodes.values()) {
-      node.vx += (cluster.centerX - node.x) * K_GRAVITY
-      node.vy += (cluster.centerY - node.y) * K_GRAVITY
-    }
-  }
+      // Advance orbit angle
+      node.orbitAngle += node.orbitSpeed
+      node.x = cluster.centerX + Math.cos(node.orbitAngle) * node.orbitRadius
+      node.y = cluster.centerY + Math.sin(node.orbitAngle) * node.orbitRadius
 
-  // 4. Cluster-cluster repulsion
-  for (let i = 0; i < clusterList.length; i++) {
-    for (let j = i + 1; j < clusterList.length; j++) {
-      const a = clusterList[i], b = clusterList[j]
-      const dx = a.centerX - b.centerX, dy = a.centerY - b.centerY
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1
-      if (dist < MIN_CLUSTER_DIST) {
-        const f = K_CLUSTER_REPULSE / (dist * dist)
-        const nx = dx / dist, ny = dy / dist
-        a.centerX += nx * f * 0.1; a.centerY += ny * f * 0.1
-        b.centerX -= nx * f * 0.1; b.centerY -= ny * f * 0.1
+      // Stamp a mark every MARK_SPACING radians regardless of speed
+      const lastMark = node.marks.length > 0 ? node.marks[node.marks.length - 1] : null
+      if (!lastMark || Math.abs(node.orbitAngle - lastMark.a) >= MARK_SPACING) {
+        node.marks.push({ a: node.orbitAngle, life: 1.0 })
+        if (node.marks.length > MARK_MAX) node.marks.shift()
+      }
+      // Decay marks
+      for (const m of node.marks) m.life = Math.max(0, m.life - 0.004)
+      node.marks = node.marks.filter(m => m.life > 0)
+
+      // Decay timers
+      node.impactTime = Math.max(0, node.impactTime - 0.022)
+      node.actionFade = Math.max(0, node.actionFade - 0.008)
+      node.entry = Math.min(1, node.entry + 0.05)
+
+      // Ephemerals only decay when evicted from buffer (store sets life < 0.15)
+      if (node.nodeType !== 'file' && node.life < 0.15) {
+        node.life = Math.max(0, node.life - 0.004)
       }
     }
-  }
 
-  // 5. Canvas boundary repulsion + integrate
-  for (const node of allNodes) {
-    if (node.x < BOUNDARY_DIST) node.vx += (BOUNDARY_DIST - node.x) * 0.1
-    if (node.x > CANVAS_W - BOUNDARY_DIST) node.vx -= (node.x - (CANVAS_W - BOUNDARY_DIST)) * 0.1
-    if (node.y < BOUNDARY_DIST) node.vy += (BOUNDARY_DIST - node.y) * 0.1
-    if (node.y > CANVAS_H - BOUNDARY_DIST) node.vy -= (node.y - (CANVAS_H - BOUNDARY_DIST)) * 0.1
-    node.vx *= DAMPING; node.vy *= DAMPING
-    node.x += node.vx; node.y += node.vy
+    // Remove dead ephemerals
+    for (const [key, node] of cluster.nodes) {
+      if (node.nodeType !== 'file' && node.life <= 0) {
+        cluster.nodes.delete(key)
+      }
+    }
   }
 }

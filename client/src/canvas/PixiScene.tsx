@@ -1,81 +1,225 @@
 import { useEffect, useRef } from 'react'
-import * as PIXI from 'pixi.js'
-import type { Cluster, Ripple, RawEvent } from '../types'
+import type { Cluster, GraphNode, Projectile, RawEvent } from '../types'
 import { tickSimulation } from './graph'
 import { drawScene } from './renderer'
+import { nodeKeyFor } from '../store'
 
-const TOOL_COLORS: Record<string, number> = {
-  Read: 0x4ade80, Edit: 0x60a5fa, Write: 0x60a5fa,
-  Bash: 0xf59e0b, Grep: 0xa78bfa, Glob: 0xa78bfa,
-  WebFetch: 0xf472b6, Stop: 0x888888, Notification: 0x34d399,
+const TOOL_COLOR_HEX: Record<string, string> = {
+  Read: '#4ade80', Edit: '#60a5fa', Write: '#60a5fa',
+  Bash: '#f59e0b', Grep: '#a78bfa', Glob: '#a78bfa',
+  WebFetch: '#f472b6', Stop: '#888888', Notification: '#34d399',
+  PermissionRequest: '#fbbf24',
+}
+
+function desaturate(hex: string): string {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
+  const mr = Math.round(r*0.3 + 190*0.7), mg = Math.round(g*0.3 + 190*0.7), mb = Math.round(b*0.3 + 190*0.7)
+  return `#${mr.toString(16).padStart(2,'0')}${mg.toString(16).padStart(2,'0')}${mb.toString(16).padStart(2,'0')}`
 }
 
 interface Props {
   clusters: Map<string, Cluster>
   lastEvent: RawEvent | null
+  onHover: (node: GraphNode | null, cluster: Cluster | null) => void
+  onSelect: (node: GraphNode | null, cluster: Cluster | null) => void
 }
 
-export function PixiScene({ clusters, lastEvent }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const appRef = useRef<PIXI.Application | null>(null)
-  const gfxRef = useRef<PIXI.Graphics | null>(null)
-  const textRef = useRef<PIXI.Container | null>(null)
-  const ripplesRef = useRef<Ripple[]>([])
-  const lastEventRef = useRef<RawEvent | null>(null)
-  // Store latest clusters in a ref so the ticker always sees current data
+export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const clustersRef = useRef(clusters)
-  clustersRef.current = clusters // update every render
+  clustersRef.current = clusters
+  const lastEventRef = useRef<RawEvent | null>(null)
+  const projectilesRef = useRef<Projectile[]>([])
+  const hoveredNodeRef = useRef<GraphNode | null>(null)
+  const selectedNodeRef = useRef<GraphNode | null>(null)
+  const tRef = useRef(0)
+  const rafRef = useRef<number>(0)
 
   useEffect(() => {
-    if (!containerRef.current) return
-    const app = new PIXI.Application({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: 0x080808,
-      antialias: true,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-    })
-    containerRef.current.appendChild(app.view as HTMLCanvasElement)
-    appRef.current = app
+    const canvas = canvasRef.current!
+    const ctx = canvas.getContext('2d')!
+    const DPR = Math.min(window.devicePixelRatio || 1, 2)
 
-    const gfx = new PIXI.Graphics()
-    const textContainer = new PIXI.Container()
-    app.stage.addChild(gfx)
-    app.stage.addChild(textContainer)
-    gfxRef.current = gfx
-    textRef.current = textContainer
+    function resize() {
+      const W = window.innerWidth, H = window.innerHeight
+      canvas.width = W * DPR; canvas.height = H * DPR
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px'
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+    }
+    resize()
+    window.addEventListener('resize', resize)
 
-    // Use clustersRef.current so ticker always reads latest clusters
-    app.ticker.add(() => {
+    // Pan/zoom
+    let dragging = false, dragMoved = false
+    let dragStart = { x: 0, y: 0 }, viewOffset = { x: 0, y: 0 }, viewStart = { x: 0, y: 0 }
+    let scale = 1
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? 1.1 : 0.9
+      scale = Math.max(0.2, Math.min(4, scale * factor))
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      dragging = true; dragMoved = false
+      dragStart = { x: e.clientX, y: e.clientY }
+      viewStart = { x: viewOffset.x, y: viewOffset.y }
+    }
+    const onMouseMove = (e: MouseEvent) => {
+      if (dragging) {
+        const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true
+        viewOffset = { x: viewStart.x + dx, y: viewStart.y + dy }
+        return
+      }
+      // Hover detection (world coords)
+      const W = window.innerWidth, H = window.innerHeight
+      const wx = (e.clientX - W/2 - viewOffset.x) / scale + W/2
+      const wy = (e.clientY - H/2 - viewOffset.y) / scale + H/2
+      let closest: GraphNode | null = null
+      let closestCluster: Cluster | null = null
+      let closestDist = 28
+      for (const cluster of clustersRef.current.values()) {
+        for (const node of cluster.nodes.values()) {
+          const d = Math.hypot(node.x - wx, node.y - wy)
+          if (d < closestDist) { closestDist = d; closest = node; closestCluster = cluster }
+        }
+      }
+      if (closest !== hoveredNodeRef.current) {
+        hoveredNodeRef.current = closest
+        canvas.style.cursor = closest ? 'pointer' : 'default'
+        onHover(closest, closestCluster)
+      }
+    }
+    const onMouseUp = (e: MouseEvent) => {
+      if (!dragMoved && e.button === 0) {
+        if (hoveredNodeRef.current) {
+          const prev = selectedNodeRef.current
+          if (prev === hoveredNodeRef.current) {
+            selectedNodeRef.current = null; onSelect(null, null)
+          } else {
+            selectedNodeRef.current = hoveredNodeRef.current
+            let fc: Cluster | null = null
+            for (const c of clustersRef.current.values()) {
+              if (c.nodes.has(hoveredNodeRef.current.key)) { fc = c; break }
+            }
+            onSelect(hoveredNodeRef.current, fc)
+          }
+        } else {
+          selectedNodeRef.current = null; onSelect(null, null)
+        }
+      }
+      dragging = false
+    }
+
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    canvas.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+
+    function loop() {
+      tRef.current += 0.016
+      const t = tRef.current
+      const W = window.innerWidth, H = window.innerHeight
+
+      // Decay coreAct on all clusters
+      for (const cluster of clustersRef.current.values()) {
+        (cluster as any).coreAct = Math.max(0, ((cluster as any).coreAct || 0) - 0.014)
+      }
+
       tickSimulation(clustersRef.current)
-      drawScene(app, gfx, textContainer, clustersRef.current, ripplesRef.current, performance.now())
-    })
 
-    return () => { app.destroy(true); appRef.current = null }
+      // Advance projectiles — all positions computed live from refs
+      const projs = projectilesRef.current
+      for (let i = projs.length - 1; i >= 0; i--) {
+        const p = projs[i]
+        p.progress = Math.min(1, p.progress + 0.016 / p.duration)
+        if (p.progress >= 1) projs.splice(i, 1)
+      }
+
+      // Clear + background (no transform)
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+      ctx.fillStyle = '#020209'
+      ctx.fillRect(0, 0, W, H)
+
+      // Apply viewport transform
+      ctx.save()
+      ctx.translate(W/2 + viewOffset.x, H/2 + viewOffset.y)
+      ctx.scale(scale, scale)
+      ctx.translate(-W/2, -H/2)
+
+      drawScene(ctx, W, H, clustersRef.current, projs, t)
+
+      ctx.restore()
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    rafRef.current = requestAnimationFrame(loop)
+
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('resize', resize)
+    }
   }, [])
 
-  // Spawn ripple on new event
+  // Fire projectile on new event — only on PreToolUse (not PostToolUse duplicate)
   useEffect(() => {
     if (!lastEvent || lastEvent === lastEventRef.current) return
     lastEventRef.current = lastEvent
+    if (lastEvent.hook_event_name === 'PostToolUse') return
     const cluster = clusters.get(lastEvent.session_id)
     if (!cluster) return
-    // find the youngest node (age === 0)
-    const nodeKey = [...cluster.nodes.keys()].find(k => cluster.nodes.get(k)!.age === 0)
-    if (!nodeKey) return
-    const node = cluster.nodes.get(nodeKey)!
-    const color = TOOL_COLORS[lastEvent.tool_name || lastEvent.hook_event_name] ?? 0x555555
-    ripplesRef.current.push({
-      x: node.x, y: node.y,
-      color,
-      radius: 0,
-      maxRadius: 300,
-      alpha: 0.8,
-      startTime: performance.now(),
-      duration: 600,
+
+    ;(cluster as any).coreAct = 1.0
+
+    const tool = lastEvent.tool_name || lastEvent.hook_event_name || ''
+    const rawHex = TOOL_COLOR_HEX[tool] ?? '#888888'
+    const colorHex = desaturate(rawHex)
+
+    // Notification + PermissionRequest: rings emanate from core — use core as both endpoints
+    if (tool === 'Notification' || tool === 'PermissionRequest') {
+      const coreNode = { x: cluster.centerX, y: cluster.centerY } as GraphNode
+      projectilesRef.current.push({
+        sessionId: lastEvent.session_id,
+        cluster,
+        node: coreNode,
+        inbound: false,
+        colorHex,
+        tool: 'Notification',
+        progress: 0,
+        duration: 2.4,
+      })
+      return
+    }
+
+    // Find the node this event targets by key
+    const key = nodeKeyFor(lastEvent)
+    if (!key) return
+    const target = cluster.nodes.get(key) ?? null
+    if (!target) return
+
+    // Read/Grep/Glob: planet → core (inbound). Edit/Write/Bash: core → planet (outbound)
+    const inbound = ['Read', 'Grep', 'Glob'].includes(tool)
+
+    projectilesRef.current.push({
+      sessionId: lastEvent.session_id,
+      cluster,
+      node: target,
+      inbound,
+      colorHex,
+      tool,
+      progress: 0,
+      duration: 1.8 + Math.random() * 0.4,
     })
   }, [lastEvent])
 
-  return <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: 'fixed', inset: 0, display: 'block' }}
+    />
+  )
 }

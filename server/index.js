@@ -26,7 +26,7 @@ function normalizeEvent(raw, remoteIp) {
   }
 }
 
-export function createServer({ port = 3141 } = {}) {
+export function createServer({ port = 43451 } = {}) {
   const app = express()
   const clients = new Set()
   const buffer = [] // rolling 100-event buffer
@@ -55,6 +55,7 @@ export function createServer({ port = 3141 } = {}) {
     for (const event of buffer) {
       res.write(`data: ${JSON.stringify(event)}\n\n`)
     }
+    res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`)
     clients.add(res)
     const heartbeat = setInterval(() => {
       try { res.write(': heartbeat\n\n') } catch { clients.delete(res); clearInterval(heartbeat) }
@@ -81,7 +82,7 @@ export function createServer({ port = 3141 } = {}) {
 
 // Run standalone
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const desiredPort = parseInt(process.env.PORT || '3141', 10)
+  const desiredPort = parseInt(process.env.PORT || '43451', 10)
   let p = desiredPort
   const tryStart = async () => {
     try {

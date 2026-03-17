@@ -1,0 +1,358 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #050507; }
+#root { position: relative; }
+
+/* Grain overlay */
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 150px;
+  opacity: 0.035;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── HUD ────────────────────────────────────────────────── */
+.hud {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 20;
+  font-family: 'Space Mono', monospace;
+  pointer-events: none;
+}
+.hud-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin-bottom: 14px;
+  line-height: 1;
+}
+.hud-title span { color: #4ade80; }
+.hud-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.hud-label {
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  width: 52px;
+}
+.hud-value {
+  font-size: 13px;
+  color: #ccc;
+}
+.hud-tool { font-weight: 700; }
+
+/* ── Tooltip ────────────────────────────────────────────── */
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  background: rgba(8, 8, 14, 0.94);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 10px 14px;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+  backdrop-filter: blur(16px);
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+}
+.tooltip-label {
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  color: #ffffff;
+  font-weight: 500;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tooltip-type {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 7px;
+}
+.tooltip-meta {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: #aaa;
+  margin-bottom: 3px;
+}
+.tooltip-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #666;
+}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 280px;
+  background: rgba(6, 6, 11, 0.96);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  z-index: 25;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar--open { transform: translateX(0); }
+
+.sidebar-header {
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+.sidebar-close {
+  position: absolute;
+  top: 20px;
+  right: 16px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  cursor: pointer;
+  font-size: 18px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  pointer-events: all;
+  line-height: 1;
+}
+.sidebar-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.sidebar-title {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  color: #ffffff;
+  font-weight: 500;
+  margin-bottom: 4px;
+  padding-right: 32px;
+  word-break: break-all;
+}
+.sidebar-type {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.sidebar-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.sidebar-section-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.sidebar-action {
+  font-family: 'Fira Code', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.sidebar-time {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: #777;
+}
+.sidebar-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 24px;
+  color: #ccc;
+  font-weight: 700;
+}
+.sidebar-session {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+/* ── Permission badge ───────────────────────────────────── */
+.perm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.1);
+  border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin-top: 6px;
+}
+.perm-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fbbf24;
+  animation: perm-pulse 1s ease-in-out infinite;
+}
+@keyframes perm-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ── Legend ─────────────────────────────────────────────── */
+.legend {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 20;
+  font-family: 'Space Mono', monospace;
+  pointer-events: none;
+}
+.legend-title {
+  font-size: 8px;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+.legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.legend-badge {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 700;
+  color: #000;
+  flex-shrink: 0;
+}
+.legend-name {
+  font-size: 9px;
+  color: #888;
+}
+.legend-key {
+  font-size: 8px;
+  color: #555;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* Permission legend item */
+.legend-perm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.legend-perm-ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px dashed #fbbf24;
+  flex-shrink: 0;
+}
+.legend-perm-name {
+  font-size: 9px;
+  color: #fbbf24;
+}
+
+/* Permission notifications panel */
+.perm-notifications {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 100;
+  pointer-events: none;
+}
+.perm-notifications-title {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  text-align: center;
+  margin-bottom: 2px;
+  opacity: 0.7;
+}
+.perm-notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.25);
+  border-radius: 3px;
+  padding: 8px 14px;
+  animation: perm-fadein 0.3s ease;
+}
+@keyframes perm-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.perm-notification-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fbbf24;
+  margin-top: 3px;
+  flex-shrink: 0;
+  animation: perm-pulse 1s ease-in-out infinite;
+}
+.perm-notification-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.perm-notification-session {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(251,191,36,0.6);
+  text-transform: uppercase;
+}
+.perm-notification-msg {
+  font-size: 11px;
+  color: rgba(251,191,36,0.9);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
