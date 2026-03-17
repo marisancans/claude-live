@@ -1,59 +1,60 @@
 # claude-live
 
-Realtime animated visualization of Claude Code activity. Watch files being read, edited, searched — rendered as a living force-directed graph.
+Realtime solar system visualization of Claude Code activity. Files orbit as planets, operations fire directional lasers, sessions glow as separate star systems.
 
-## Quick Start
+## Install as Plugin (Recommended)
+
+```bash
+claude plugin marketplace add marisancans/claude-live
+```
+
+Hooks are configured automatically. Open `http://localhost:43451` during a Claude Code session.
+
+## Manual Setup
+
+Start the server:
 
 ```bash
 npx claude-live
 ```
 
-Then add to `~/.claude/settings.json`:
+Add to `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
-    "PreToolUse":   [{"matcher":"","hooks":[{"type":"command","command":"echo \"$CLAUDE_HOOK_DATA\" | curl -s -X POST http://localhost:3141/hook -H 'Content-Type: application/json' -d @- || true"}]}],
-    "PostToolUse":  [{"matcher":"","hooks":[{"type":"command","command":"echo \"$CLAUDE_HOOK_DATA\" | curl -s -X POST http://localhost:3141/hook -H 'Content-Type: application/json' -d @- || true"}]}],
-    "Stop":         [{"matcher":"","hooks":[{"type":"command","command":"echo \"$CLAUDE_HOOK_DATA\" | curl -s -X POST http://localhost:3141/hook -H 'Content-Type: application/json' -d @- || true"}]}],
-    "Notification": [{"matcher":"","hooks":[{"type":"command","command":"echo \"$CLAUDE_HOOK_DATA\" | curl -s -X POST http://localhost:3141/hook -H 'Content-Type: application/json' -d @- || true"}]}]
+    "PreToolUse":         [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
+    "PostToolUse":        [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
+    "Stop":               [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
+    "Notification":       [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
+    "PermissionRequest":  [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}]
   }
 }
 ```
 
-Start a Claude Code session — the graph comes alive.
+Open `http://localhost:43451` and start a Claude Code session.
+
+## What You See
+
+- **File nodes** orbit their session's star at fixed radii — touched files grow slightly with each interaction
+- **Directional lasers**: Read/Grep/Glob fire planet→core (inbound scan), Edit/Write/Bash fire core→planet (outbound write)
+- **8 distinct effects**: reticle (Read), radar (Grep), dots (Glob), ink (Edit), burst (Write), lightning (Bash), wave (WebFetch), rings (Notification)
+- **Amber core + tether line** = agent/subagent session spawned from a parent
+- **Spinning amber ring** on core = session awaiting permission / user input
+- **Multiple clusters** = parallel Claude Code sessions, spaced dynamically
 
 ## Dev Mode
 
 ```bash
-git clone <repo>
+git clone git@github.com:marisancans/claude-live.git
 cd claude-live
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
-
-## Custom Port
-
-```bash
-npx claude-live --port=4000
-```
-
-Update your hook URLs to match.
-
-## What You See
-
-- **Green nodes** = files being read
-- **Blue nodes** = files being edited
-- **Amber nodes** = bash commands
-- **Purple nodes** = grep/glob searches
-- **Pink nodes** = web fetches
-- **Clusters** = separate Claude Code sessions
-- **Ripples** = each event as it fires
-- Nodes fade as they age (last 100 events shown)
+Client: `http://localhost:5173` — Server: `http://localhost:43451`
 
 ## Requirements
 
 - Node.js 18+
-- `curl` (for the hook command)
+- `curl`
