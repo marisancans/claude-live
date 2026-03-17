@@ -1,24 +1,28 @@
 ---
-allowed-tools: Bash(pkill:*), Bash(curl:*), Bash(npx:*), Bash(cat:*), Bash(ps:*)
+allowed-tools: Bash(pkill:*), Bash(curl:*), Bash(npx:*), Bash(ps:*), Bash(tail:*)
 description: Control and inspect the claude-live visualizer server
 ---
 
-Manage the claude-live server based on the user's argument: $ARGUMENTS
+Manage the claude-live server. The server always runs on port 43451.
+
+User's argument: $ARGUMENTS
 
 ## Subcommands
 
-- **no argument / status**: Show a dashboard — is server running, port, uptime of process, last lines of /tmp/claude-live.log, URL
-- **stop / kill**: Run `pkill -f "node.*claude-live"` and confirm
-- **start**: Check `curl -sf http://localhost:43451/buffer`, start with `npx claude-live@latest >/tmp/claude-live.log 2>&1 &` if not running
+- **no argument / status**: Run the status checks below and display results
+- **stop**: Run `pkill -f "node.*claude-live"` and confirm stopped
+- **start**: Start with `npx claude-live@latest >/tmp/claude-live.log 2>&1 &`, wait 1s, then show status
 - **restart**: Stop then start
-- **logs**: Show last 30 lines of `/tmp/claude-live.log`
-- **open**: Open `http://localhost:43451` in browser via `xdg-open` or `open`
+- **logs**: Show `tail -30 /tmp/claude-live.log`
 
-## Status dashboard format (default)
+## Status output (default and after start)
 
-Run these commands and display results in a compact block:
-1. `curl -sf http://localhost:43451/buffer >/dev/null 2>&1 && echo "● running" || echo "○ stopped"`
-2. `ps -eo pid,etime,cmd | grep "node.*claude-live" | grep -v grep`
-3. `tail -5 /tmp/claude-live.log 2>/dev/null || echo "(no log)"`
+Run these and display in a compact summary:
 
-Show: status, PID + uptime if running, last log lines, and the URL `http://localhost:43451`
+```
+curl -sf http://localhost:43451/buffer >/dev/null 2>&1 && echo "● running on port 43451 — http://localhost:43451" || echo "○ stopped"
+ps -eo pid,etime,cmd | grep "node.*claude-live" | grep -v grep
+tail -5 /tmp/claude-live.log 2>/dev/null
+```
+
+Show: running/stopped, port (always 43451), PID and uptime if running, last 5 log lines.

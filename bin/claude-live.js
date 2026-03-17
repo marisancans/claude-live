@@ -6,24 +6,21 @@ const portArgIdx = process.argv.findIndex(a => a === '--port' || a.startsWith('-
 const portArg = portArgIdx >= 0
   ? (process.argv[portArgIdx].includes('=') ? process.argv[portArgIdx].split('=')[1] : process.argv[portArgIdx + 1])
   : '43451'
-const desiredPort = parseInt(portArg, 10)
+const port = parseInt(portArg, 10)
 
-let p = desiredPort
-const tryStart = async () => {
-  try {
-    const { port } = await createServer({ port: p })
-    const url = `http://localhost:${port}`
-    console.log(`claude-live running at ${url}`)
-    if (p !== desiredPort) {
-      console.log(`(port ${desiredPort} was in use)`)
-      console.log(`Update your hook command to use port ${port}`)
-    }
-    console.log('\nAdd this to ~/.claude/settings.json hooks:')
-    console.log(`  curl -s -X POST ${url}/hook -H 'Content-Type: application/json' -d @- || true`)
-    open(url)
-  } catch (e) {
-    if (e.code === 'EADDRINUSE') { p++; tryStart() }
-    else { console.error(e); process.exit(1) }
+try {
+  await createServer({ port })
+  const url = `http://localhost:${port}`
+  console.log(`claude-live running at ${url}`)
+  open(url)
+} catch (e) {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use.`)
+    console.error(`Either claude-live is already running, or another process is using port ${port}.`)
+    console.error(`Check: curl http://localhost:${port}/buffer`)
+    process.exit(1)
+  } else {
+    console.error(e)
+    process.exit(1)
   }
 }
-tryStart()
