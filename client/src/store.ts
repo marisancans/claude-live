@@ -128,7 +128,7 @@ export function createStore() {
       if (sessions.size >= MAX_CLUSTERS) {
         // evict oldest (first inserted)
         const oldestKey = sessions.keys().next().value
-        sessions.delete(oldestKey)
+        if (oldestKey !== undefined) sessions.delete(oldestKey)
       }
       const idx = sessions.size
       const pos = clusterPosition(idx, Math.max(sessions.size + 1, 1))
