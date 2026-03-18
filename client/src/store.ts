@@ -538,17 +538,14 @@ export function createStore() {
           startAngle: spawnAngle
         }
 
-        // Add to snakes array (initialize if needed)
-        if (!cluster.promptSnakes) {
-          cluster.promptSnakes = []
-        }
+        // Add to snakes array
         cluster.promptSnakes.push(snake)
 
         // Play audio chord
         playChordForEvent(undefined, 'UserPromptSubmit')
       }
 
-      console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying, snakes: cluster.promptSnakes?.length || 0 })
+      // console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying, snakes: cluster.promptSnakes?.length || 0 })
       recomputeAges()
       return
     }
