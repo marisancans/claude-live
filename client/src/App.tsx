@@ -296,8 +296,10 @@ export function App() {
     setAudioEnabledState(newState)
     setAudioEnabled(newState)
   }
-  const setAutofitEnabled = (enabled: boolean) => {
-    setAutofitEnabledState(enabled)
+  const toggleAutofit = () => {
+    const newState = !autofitEnabled
+    setAutofitEnabledState(newState)
+    localStorage.setItem('claude-live-autofit-enabled', newState ? 'true' : 'false')
   }
 
   return (
@@ -334,7 +336,7 @@ export function App() {
       </button>
       <button
         className="autofit-toggle"
-        onClick={() => setAutofitEnabled(!autofitEnabled)}
+        onClick={toggleAutofit}
         title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
         aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
       >
