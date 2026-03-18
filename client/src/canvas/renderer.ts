@@ -40,9 +40,9 @@ function drawSnake(
     const wordT = Math.max(0, t - wordSpacing * distFromHead)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
-    // Get tangent to rotate word perpendicular to curve
+    // Get tangent to rotate word along the curve direction
     const tangent = evaluateTangent(snake.splinePath, wordT)
-    const angle = Math.atan2(tangent.y, tangent.x) + Math.PI / 2
+    const angle = Math.atan2(tangent.y, tangent.x)
 
     // Fade: words closer to head are more visible
     // Exponential fade from head to tail
