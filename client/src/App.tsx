@@ -52,6 +52,7 @@ export interface LogEntry {
   sessionLabel: string
   project: string
   colorHex: string
+  createdAt: number
 }
 
 function fileLabel(event: RawEvent): string {
@@ -248,6 +249,7 @@ export function App() {
               sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
               project: projectName(event.cwd),
               colorHex: TOOL_COLORS[tool] ?? '#888',
+              createdAt: Date.now(),
             }
             return [...prev, entry].slice(-MAX_LOG)
           })
