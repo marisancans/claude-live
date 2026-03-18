@@ -25,10 +25,18 @@ function getRandomChord(): string {
 }
 
 export function initAudio() {
+  // Load saved preference from localStorage
+  const saved = localStorage.getItem('claude-live-audio-enabled')
+  if (saved !== null) {
+    state.enabled = saved === 'true'
+  }
+
   // Pre-load a few audio elements for polyphony
   for (let i = 0; i < 6; i++) {
     const audio = new Audio()
     audio.preload = 'auto'
+    // Absolute path for served files
+    audio.crossOrigin = 'anonymous'
     state.audioContexts.set(`pool-${i}`, { audio, lastPlay: 0 })
   }
 }
@@ -53,13 +61,17 @@ export function playChord() {
   const chord = getRandomChord()
   selected.context.audio.src = chord
   selected.context.audio.currentTime = 0
-  selected.context.audio.volume = 0.3
-  selected.context.audio.play().catch(() => {}) // ignore autoplay errors
+  selected.context.audio.volume = 0.4
+  selected.context.audio.play().catch((err) => {
+    console.debug('[audio] playback failed:', err.message)
+  })
   selected.context.lastPlay = now
 }
 
 export function setAudioEnabled(enabled: boolean) {
   state.enabled = enabled
+  // Persist to localStorage
+  localStorage.setItem('claude-live-audio-enabled', enabled ? 'true' : 'false')
 }
 
 export function isAudioEnabled(): boolean {

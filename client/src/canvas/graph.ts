@@ -34,7 +34,7 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
         // Normalize difference to -π to π range
         const normalizedDiff = Math.atan2(Math.sin(diff), Math.cos(diff))
         // Smoothly interpolate toward target with easing
-        node.orbitAngle += normalizedDiff * 0.08 // 8% per frame = ~0.5s transition
+        node.orbitAngle += normalizedDiff * 0.015 // 1.5% per frame = ~3-4s transition
         // Clear stale trail stamps during transition
         if (Math.abs(normalizedDiff) > 0.01) {
           node.marks = []

@@ -5,6 +5,7 @@ import { PixiScene } from './canvas/PixiScene'
 import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
 import { initAudio, playChord, setAudioEnabled, isAudioEnabled } from './audio'
+import { SpeakerIcon } from './SpeakerIcon'
 
 const store = createStore()
 
@@ -130,12 +131,17 @@ export function App() {
   const [permNotifications, setPermNotifications] = useState<Map<string, PermNotification>>(new Map())
   const [eventLog, setEventLog] = useState<LogEntry[]>([])
   const [showHelp, setShowHelp] = useState(false)
-  const [audioEnabled, setAudioEnabledState] = useState(false)
+  const [audioEnabled, setAudioEnabledState] = useState(() => {
+    // Load from localStorage
+    const saved = localStorage.getItem('claude-live-audio-enabled')
+    return saved === 'true'
+  })
   const esRef = useRef<EventSource | null>(null)
 
   // Initialize audio on mount
   useEffect(() => {
     initAudio()
+    setAudioEnabledState(isAudioEnabled())
   }, [])
 
   useEffect(() => {
@@ -255,8 +261,9 @@ export function App() {
           className="audio-toggle"
           onClick={toggleAudio}
           title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+          aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
         >
-          {audioEnabled ? '🔊' : '🔇'}
+          <SpeakerIcon enabled={audioEnabled} />
         </button>
       </div>
 
