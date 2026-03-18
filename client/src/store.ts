@@ -378,6 +378,7 @@ export function createStore() {
         promptFlying: 0,
         promptText: '',
         promptColor: '#38bdf8',
+        promptSnakes: [],
         agentPositionMap: new Map<string, Point>(),
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
