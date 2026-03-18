@@ -33,11 +33,7 @@ function calculateClusterBounds(clusters: Map<string, Cluster>) {
   let minY = Infinity, maxY = -Infinity
 
   for (const cluster of clusters.values()) {
-    // Account for orbital nodes + actual cluster radius drift
-    // Use currentRadius if available (gravity-well system), else assume base position
-    const clusterRadius = (cluster as any).currentRadius || 400
-    const ext = ORBITAL_EXTENT + clusterRadius
-
+    const ext = ORBITAL_EXTENT
     minX = Math.min(minX, cluster.centerX - ext)
     maxX = Math.max(maxX, cluster.centerX + ext)
     minY = Math.min(minY, cluster.centerY - ext)
@@ -73,7 +69,7 @@ function calculateCameraTarget(
   }
 
   // Clamp to valid scale range
-  targetScale = Math.max(0.15, Math.min(4.0, targetScale))
+  targetScale = Math.max(0.2, Math.min(4.0, targetScale))
 
   // Center the bounds on canvas
   const centerX = (bounds.minX + bounds.maxX) / 2
