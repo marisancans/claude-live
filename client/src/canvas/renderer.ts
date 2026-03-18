@@ -33,11 +33,15 @@ function drawSnake(
   for (let i = 0; i < snake.words.length; i++) {
     const word = snake.words[i]
 
-    // Position word along curve: head is ahead, earlier words trail behind
-    // Head (last word, i = words.length - 1): positioned at `t`
-    // Earlier words: positioned at `t - spacing * (words.length - 1 - i)`
+    // All words converge to center together
+    // Position relative to head: head at front, tail trails behind
+    // As t approaches 1, spacing compresses so entire snake reaches center
     const distFromHead = snake.words.length - 1 - i
-    const wordT = Math.max(0, t - wordSpacing * distFromHead)
+    const baseOffset = wordSpacing * distFromHead
+
+    // Compress spacing as snake approaches center: full spacing at start, zero spacing at t=1
+    const spacingFactor = Math.max(0, 1 - t)
+    const wordT = Math.max(0, t - baseOffset * spacingFactor)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
     // Get tangent to rotate word along the curve direction
