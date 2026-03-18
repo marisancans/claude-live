@@ -45,7 +45,7 @@ function hexToInt(hex: string): number {
 
 /**
  * Extract words from tool response/input for ResponseSnake animation.
- * Handles different tools and limits to ~15 words for readability.
+ * Handles different tools and limits to approximately fifteen words for readability in the visualization.
  */
 function extractWords(event: RawEvent): string[] {
   const tool = event.tool_name || ''
@@ -54,7 +54,8 @@ function extractWords(event: RawEvent): string[] {
   const MAX = 15
 
   if (tool === 'Read') {
-    const text: string = resp?.content ?? resp?.text ?? resp?.output ?? ''
+    // Read response: { type, file: { filePath, content } }
+    const text: string = resp?.file?.content ?? resp?.content ?? resp?.text ?? resp?.output ?? ''
     return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
   }
   if (tool === 'Write') {
@@ -62,9 +63,15 @@ function extractWords(event: RawEvent): string[] {
     return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
   }
   if (tool === 'Bash') {
-    const code = resp?.exitCode ?? resp?.exit_code ?? resp?.code
+    // Bash response: { stdout, stderr, interrupted, isImage, noOutputExpected }
+    const output: string = resp?.stdout ?? resp?.output ?? ''
     const cmd = (input?.command ?? '').split(/\s+/)[0] || '$'
-    return [cmd, code === 0 ? '✓' : `✗${code}`]
+    // Extract words from stdout
+    if (output.trim()) {
+      const words = output.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
+      return words
+    }
+    return [cmd, '✓']
   }
   if (tool === 'Grep') {
     const n = resp?.count ?? resp?.numMatches ?? resp?.total
@@ -86,6 +93,50 @@ function extractWords(event: RawEvent): string[] {
     return [host, String(status)]
   }
   return []
+}
+
+/**
+ * Extract individual letters from tool response/input for ResponseSnake animation.
+ * Converts text to individual characters for better curving along spline paths.
+ * Preserves word boundaries as spaces for visual separation.
+ */
+function extractLetters(event: RawEvent): string[] {
+  const tool = event.tool_name || ''
+  const resp = event.tool_response as Record<string, any> | null
+  const input = event.tool_input as Record<string, any> | null
+  const MAX = 50
+
+  let text = ''
+
+  if (tool === 'Read') {
+    text = resp?.file?.content ?? resp?.content ?? resp?.text ?? resp?.output ?? ''
+  } else if (tool === 'Write') {
+    text = input?.content ?? ''
+  } else if (tool === 'Bash') {
+    text = resp?.stdout ?? resp?.output ?? ''
+  }
+
+  if (!text.trim()) return []
+
+  // Split into words, then into letters, preserving word boundaries as spaces
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  const letters: string[] = []
+
+  for (let i = 0; i < words.length && letters.length < MAX; i++) {
+    const word = words[i]
+    // Add each letter of the word
+    for (const char of word) {
+      if (letters.length < MAX) {
+        letters.push(char)
+      }
+    }
+    // Add space after word (except last word) to create separation
+    if (i < words.length - 1 && letters.length < MAX) {
+      letters.push(' ')
+    }
+  }
+
+  return letters
 }
 
 /**
@@ -746,21 +797,13 @@ export function createStore() {
         if (enriched !== tool) {
           node.actionLabel = enriched
         }
-        // Spawn ResponseSnake with tool output words
-        const words = extractWords(event)
-        if (!skipAnimations && words.length > 0) {
-          const dist = Math.hypot(node.x - cluster.centerX, node.y - cluster.centerY) || 80
-          const angle = Math.atan2(node.y - cluster.centerY, node.x - cluster.centerX)
-          const splinePath = generateRandomSpline(cluster.centerX, cluster.centerY, angle, dist)
-          const color = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
-          cluster.promptSnakes.push({
-            words,
-            color,
-            progress: 0,
-            splinePath,
-            startAngle: angle
-          })
-        }
+        // TODO: ResponseSnakes disabled for performance - re-enable after optimization
+        // Spawn ResponseSnake with tool output letters
+        // const words = extractLetters(event)
+        // if (tool === 'Write' || tool === 'Bash') {
+        //   console.log(`[Snake] ${tool}: letters=${words.length}, skipAnimations=${skipAnimations}`, words)
+        // }
+        // if (!skipAnimations && words.length > 0) { ... }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'

@@ -1,4 +1,4 @@
-// Orbital geometry
+// Orbital geometry constants for the solar system visualization
 export const ORBIT_RADII = [55, 90, 125, 160, 195]
 export const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004, 0.00025]
 export const RING_CAPACITY = [999, 999, 999, 999, 999]

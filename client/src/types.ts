@@ -95,6 +95,10 @@ export interface PromptSnake {
   progress: number          // 0-1 animation progress
   splinePath: SplinePath    // pre-computed spline curve
   startAngle: number        // 0-360° spawn direction in radians
+  trajectory?: 'curved' | 'straight'  // 'curved' for PromptSnakes, 'straight' for ResponseSnakes
+  sourceNodeKey?: string    // for ResponseSnakes: key of the source node to track
+  controlOffset?: number    // for ResponseSnakes: cached control point offset for consistency
+  controlSign?: number      // for ResponseSnakes: cached control point sign (-1 or 1)
 }
 
 // A session cluster (solar system)

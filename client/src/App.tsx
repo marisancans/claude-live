@@ -12,6 +12,7 @@ import { EventLog } from './EventLog'
 
 const store = createStore()
 
+// Tool color mapping for visualization and UI elements
 const TOOL_COLORS: Record<string, string> = {
   Read:         '#4ade80',
   Edit:         '#60a5fa',

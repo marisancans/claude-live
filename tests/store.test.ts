@@ -66,4 +66,76 @@ describe('store', () => {
       expect(node.age).toBeGreaterThanOrEqual(80)
     }
   })
+
+  it('spawns ResponseSnakes on PostToolUse Write with words', () => {
+    const store = createStore()
+    store.addEvent(makeEvent({ id: '1', tool_input: { file_path: '/test.ts' }, tool_name: 'Write' }))
+    // First pass: replay phase (skipAnimations=true)
+    store.addEvent(makeEvent({
+      id: '2',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Write',
+      tool_input: { file_path: '/test.ts', content: 'function hello world test animation' },
+      tool_response: null
+    }), true)
+    let cluster = store.getSessions().get('sess-1')!
+    expect(cluster.promptSnakes.length).toBe(0) // No snakes during replay
+
+    // Second pass: live phase (skipAnimations=false)
+    store.addEvent(makeEvent({
+      id: '3',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Write',
+      tool_input: { file_path: '/test.ts', content: 'function hello world test animation' },
+      tool_response: null
+    }), false)
+    cluster = store.getSessions().get('sess-1')!
+    expect(cluster.promptSnakes.length).toBe(1)
+    expect(cluster.promptSnakes[0].words.length).toBeGreaterThan(0)
+    expect(cluster.promptSnakes[0].words[0]).toBe('function')
+  })
+
+  it('spawns ResponseSnakes on PostToolUse Read with file content', () => {
+    const store = createStore()
+    store.addEvent(makeEvent({ id: '1', tool_input: { file_path: '/test.ts' } }))
+    store.addEvent(makeEvent({
+      id: '2',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Read',
+      tool_input: { file_path: '/test.ts' },
+      tool_response: { type: 'text', file: { filePath: '/test.ts', content: 'const x = 42 testing' } }
+    }), false)
+    const cluster = store.getSessions().get('sess-1')!
+    expect(cluster.promptSnakes.length).toBe(1)
+    expect(cluster.promptSnakes[0].words[0]).toBe('const')
+  })
+
+  it('spawns ResponseSnakes on PostToolUse Bash with stdout', () => {
+    const store = createStore()
+    store.addEvent(makeEvent({ id: '1', tool_input: { file_path: '/test.sh' } }))
+    store.addEvent(makeEvent({
+      id: '2',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'echo hello world' },
+      tool_response: { stdout: 'hello world from bash output', stderr: '', interrupted: false }
+    }), false)
+    const cluster = store.getSessions().get('sess-1')!
+    expect(cluster.promptSnakes.length).toBe(1)
+    expect(cluster.promptSnakes[0].words[0]).toBe('hello')
+  })
+
+  it('skips ResponseSnakes during replay phase', () => {
+    const store = createStore()
+    store.addEvent(makeEvent({ id: '1', tool_input: { file_path: '/test.ts' } }))
+    store.addEvent(makeEvent({
+      id: '2',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Write',
+      tool_input: { content: 'test content words' },
+      tool_response: null
+    }), true) // skipAnimations=true
+    const cluster = store.getSessions().get('sess-1')!
+    expect(cluster.promptSnakes.length).toBe(0)
+  })
 })

@@ -1,4 +1,5 @@
 import type { Cluster, GraphNode, Projectile, PromptSnake } from '../types'
+import type { Point } from '../utils/spline'
 import { getAnimationOrigin } from '../store'
 import { evaluateSpline, evaluateTangent } from '../utils/spline'
 
@@ -11,17 +12,27 @@ function hexToRgb(hex: string): [number, number, number] {
   return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)]
 }
 
+// Get current node position (always use x/y directly - they're updated every frame)
+function getNodePosition(node: GraphNode): Point {
+  return { x: node.x, y: node.y }
+}
+
 function drawSnake(
   ctx: CanvasRenderingContext2D,
   snake: PromptSnake,
   clusterCx: number,
-  clusterCy: number
+  clusterCy: number,
+  cluster?: Cluster
 ) {
   const [r, g, b] = hexToRgb(snake.color)
   const progress = snake.progress
 
+  // For ResponseSnakes, use the pre-calculated initial path
+  // No per-frame recalculation to maintain performance with multiple snakes
+  const splinePath = snake.splinePath
+
   // Fixed total snake length on curve — same for all prompts regardless of word count
-  const SNAKE_LENGTH = 0.35  // total length of snake on the curve parameter [0,1]
+  const SNAKE_LENGTH = 0.65  // curve parameter length
   const wordSpacing = snake.words.length > 1 ? SNAKE_LENGTH / (snake.words.length - 1) : 0
 
   // Map progress [0,1] to head position [0, 1 + SNAKE_LENGTH]
@@ -29,7 +40,7 @@ function drawSnake(
   // tail arrives at center when progress=1
   const headT = progress * (1 + SNAKE_LENGTH)
 
-  const fontSize = 11 * (0.6 + Math.min(1, progress * 2) * 0.4)
+  const fontSize = 7 * (0.6 + Math.min(1, progress * 2) * 0.4)
 
   for (let i = 0; i < snake.words.length; i++) {
     const word = snake.words[i]
@@ -43,10 +54,11 @@ function drawSnake(
     // Skip words that have already passed center (t > 1) — they've been absorbed
     if (wordT > 1) continue
 
-    const wordPos = evaluateSpline(snake.splinePath, wordT)
+    // All snakes now use curved splines
+    const wordPos = evaluateSpline(splinePath, wordT)
 
     // Get tangent to rotate word along the curve direction
-    const tangent = evaluateTangent(snake.splinePath, wordT)
+    const tangent = evaluateTangent(splinePath, wordT)
     const angle = Math.atan2(tangent.y, tangent.x)
 
     // All words same opacity — fade in at start, fade out as each word approaches center
@@ -56,10 +68,11 @@ function drawSnake(
 
     if (opacity <= 0.01) continue
 
-    // Draw glow around word
-    const glowR = 18
+    // Draw glow around word — smaller for ResponseSnakes (letters), normal for PromptSnakes (words)
+    const glowR = snake.sourceNodeKey ? 8 : 18  // smaller glow for ResponseSnakes
+    const glowOpacity = snake.sourceNodeKey ? opacity * 0.1 : opacity * 0.2  // reduced opacity for ResponseSnakes
     const gg = ctx.createRadialGradient(wordPos.x, wordPos.y, 0, wordPos.x, wordPos.y, glowR)
-    gg.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.2})`)
+    gg.addColorStop(0, `rgba(${r},${g},${b},${glowOpacity})`)
     gg.addColorStop(1, 'rgba(0,0,0,0)')
     ctx.beginPath()
     ctx.arc(wordPos.x, wordPos.y, glowR, 0, Math.PI * 2)
@@ -455,7 +468,7 @@ export function drawScene(
 
     // Render snakes
     for (const snake of cluster.promptSnakes) {
-      drawSnake(ctx, snake, cx, cy)
+      drawSnake(ctx, snake, cx, cy, cluster)
     }
 
     // Core label — appears when inbound animation (Read/Grep/Glob) arrives

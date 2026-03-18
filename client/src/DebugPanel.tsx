@@ -52,13 +52,21 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
     return postHook({ session_id: sessionId, hook_event_name: 'PreToolUse', tool_name, tool_input })
   }
 
+  function responseSnake(tool_name: string, tool_input: object, tool_response: object) {
+    // Send PreToolUse first to create node, then PostToolUse with slight delay
+    postHook({ session_id: sessionId, hook_event_name: 'PreToolUse', tool_name, tool_input })
+    setTimeout(() => {
+      postHook({ session_id: sessionId, hook_event_name: 'PostToolUse', tool_name, tool_input, tool_response })
+    }, 100)
+  }
+
   const TOOL_BTNS: { label: string; color: string; fn: () => void }[] = [
-    { label: 'Read',        color: '#4ade80', fn: () => pre('Read',     { file_path: nextFile() }) },
+    { label: 'Read',        color: '#4ade80', fn: () => responseSnake('Read',     { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'Response data from file read operation with individual letters streaming outward' } }) },
     { label: 'Edit',        color: '#60a5fa', fn: () => pre('Edit',     { file_path: nextFile() }) },
-    { label: 'Write',       color: '#60a5fa', fn: () => pre('Write',    { file_path: nextFile() }) },
+    { label: 'Write',       color: '#60a5fa', fn: () => responseSnake('Write',    { file_path: nextFile(), content: 'Writing content to file with response snake animation showing letters outward' }, null) },
     { label: 'Grep',        color: '#a78bfa', fn: () => pre('Grep',     { pattern: 'useState', path: '.' }) },
     { label: 'Glob',        color: '#a78bfa', fn: () => pre('Glob',     { pattern: '**/*.tsx', path: nextFile() }) },
-    { label: 'Bash',        color: '#f59e0b', fn: () => pre('Bash',     { command: nextCmd() }) },
+    { label: 'Bash',        color: '#f59e0b', fn: () => responseSnake('Bash',     { command: nextCmd() }, { stdout: 'bash command output with response letters flowing outward in straight animation paths', stderr: '', interrupted: false }) },
     { label: 'WebFetch',    color: '#f472b6', fn: () => pre('WebFetch', { url: 'https://api.github.com/repos' }) },
     { label: 'Notification',color: '#34d399', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Notification', tool_input: { message: 'Task complete! All files updated.' } }) },
     { label: 'Permission',  color: '#fbbf24', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PermissionRequest', tool_input: { message: 'Allow bash command execution?' } }) },
@@ -70,6 +78,9 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
     { label: 'Compact↓',   color: '#94a3b8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PreCompact', trigger: 'manual' }) },
     { label: 'Compact↑',   color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostCompact' }) },
     { label: 'Prompt',      color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the login bug on the dashboard page' }) },
+    { label: 'RespRead',    color: '#4ade80', fn: () => responseSnake('Read', { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'const response data flowing outward through the canvas with individual letters' } }) },
+    { label: 'RespWrite',   color: '#60a5fa', fn: () => responseSnake('Write', { file_path: nextFile(), content: 'Writing response snake letters streaming outward in straight paths with subtle glow effects' }, null) },
+    { label: 'RespBash',    color: '#f59e0b', fn: () => responseSnake('Bash', { command: nextCmd() }, { stdout: 'command output letters flowing smoothly outward from cluster center with proper spacing', stderr: '', interrupted: false }) },
   ]
 
   if (!isOpen) return null
