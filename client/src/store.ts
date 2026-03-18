@@ -375,9 +375,6 @@ export function createStore() {
         childIndex,
         compacting: 0,
         compacted: 0,
-        promptFlying: 0,
-        promptText: '',
-        promptColor: '#38bdf8',
         promptSnakes: [],
         agentPositionMap: new Map<string, Point>(),
       }
@@ -505,10 +502,6 @@ export function createStore() {
     // UserPromptSubmit: create PromptSnake objects with random splines
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
-      const promptText = event.prompt || ''
-      cluster.promptText = promptText.slice(0, 40) + (promptText.length > 40 ? '…' : '')
-      cluster.promptColor = '#38bdf8'
-      cluster.promptFlying = 1.0  // Start animation
 
       // Split prompt into words
       const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)

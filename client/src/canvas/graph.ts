@@ -38,7 +38,6 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
     // Decay animation states
     cluster.compacting = Math.max(0, cluster.compacting - 0.0003)
     cluster.compacted = Math.max(0, cluster.compacted - 0.0005)
-    cluster.promptFlying = Math.max(0, cluster.promptFlying - 0.008)  // ~2.5s flight
 
     for (const node of cluster.nodes.values()) {
       // Smooth transition to target angle (if being redistributed)
