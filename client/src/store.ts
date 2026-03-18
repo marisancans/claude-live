@@ -364,8 +364,8 @@ export function createStore() {
         label,
         centerX: pos.x,
         centerY: pos.y,
-        targetRadius: 400,     // will be computed dynamically
-        currentRadius: 400,    // will interpolate to targetRadius
+        targetRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
+        currentRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
         nodes: new Map(),
         edges: [],
         stopping: false,

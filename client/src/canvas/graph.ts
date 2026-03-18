@@ -38,7 +38,9 @@ export function layoutClusters(clusters: Map<string, Cluster>) {
  * Large clusters orbit farther out, small clusters orbit closer in.
  */
 function computeClusterRadii(clusters: Map<string, Cluster>): void {
-  const BASE_RADIUS = 400
+  // Scale base radius to window size so clusters always fit on screen
+  const shortSide = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 800
+  const BASE_RADIUS = shortSide * 0.32
   const SCALE_FACTOR = 1.2
   const DAMPING = 0.05
 
