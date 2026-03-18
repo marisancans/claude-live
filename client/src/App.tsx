@@ -214,8 +214,8 @@ export function App() {
             return next
           })
         }
-        // Clear when user approves and tool starts executing
-        if (event.tool_name && permNotifications.has(event.session_id)) {
+        // Clear when user provides input (UserPromptSubmit) or tool starts executing
+        if ((event.tool_name || event.hook_event_name === 'UserPromptSubmit') && permNotifications.has(event.session_id)) {
           setPermNotifications(prev => {
             if (!prev.has(event.session_id)) return prev
             const next = new Map(prev)
