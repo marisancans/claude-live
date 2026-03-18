@@ -69,7 +69,11 @@ export function initAudio() {
 }
 
 export function playChordForEvent(toolName?: string, hookName?: string) {
-  if (!state.enabled) return
+  if (!state.enabled) {
+    console.debug('[audio] audio disabled')
+    return
+  }
+  console.debug('[audio] playing chord for', { toolName, hookName })
 
   // Find first available audio element (not currently playing)
   let selected: AudioContext | null = null
