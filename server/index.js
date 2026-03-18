@@ -91,16 +91,11 @@ export function createServer({ port = 43451 } = {}) {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
-    // replay all events from all sessions (except old prompts)
-    for (const session of sessionBuffers.values()) {
-      for (const event of session.events) {
-        // Skip UserPromptSubmit events from replay - they'll just spam old prompts on page load
-        if (event.hook_event_name === 'UserPromptSubmit') {
-          continue
-        }
-        res.write(`data: ${JSON.stringify(event)}\n\n`)
-      }
-    }
+
+    // Don't replay any buffered events - only show new events after this connection
+    // This prevents old animations/prompts from flying in on page reload
+    // res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`) - skip this and go straight to live events
+
     res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`)
     clients.add(res)
     const heartbeat = setInterval(() => {
