@@ -91,9 +91,13 @@ export function createServer({ port = 43451 } = {}) {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
-    // replay all events from all sessions
+    // replay all events from all sessions (except old prompts)
     for (const session of sessionBuffers.values()) {
       for (const event of session.events) {
+        // Skip UserPromptSubmit events from replay - they'll just spam old prompts on page load
+        if (event.hook_event_name === 'UserPromptSubmit') {
+          continue
+        }
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }
     }
