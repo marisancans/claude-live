@@ -4,6 +4,7 @@ import { createStore } from './store'
 import { PixiScene } from './canvas/PixiScene'
 import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
+import { OperationsPanel } from './OperationsPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
 import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
@@ -172,7 +173,8 @@ export function App() {
   const [mouseY, setMouseY] = useState(0)
   const [permNotifications, setPermNotifications] = useState<Map<string, PermNotification>>(new Map())
   const [eventLog, setEventLog] = useState<LogEntry[]>([])
-  const [showHelp, setShowHelp] = useState(false)
+  const [operationsOpen, setOperationsOpen] = useState(false)
+  const [debugOpen, setDebugOpen] = useState(false)
   const [audioEnabled, setAudioEnabledState] = useState(() => {
     // Load from localStorage
     const saved = localStorage.getItem('claude-live-audio-enabled')
@@ -345,6 +347,22 @@ export function App() {
       >
         <AutofitIcon enabled={autofitEnabled} />
       </button>
+      <button
+        className="hud-button"
+        onClick={() => setOperationsOpen(true)}
+        title="Show operations legend"
+        aria-label="Operations"
+      >
+        ?
+      </button>
+      <button
+        className="hud-button"
+        onClick={() => setDebugOpen(true)}
+        title="Show debug panel"
+        aria-label="Debug"
+      >
+        ⚙
+      </button>
 
       {/* Permission notifications */}
       {permNotifications.size > 0 && (
@@ -362,10 +380,9 @@ export function App() {
         </div>
       )}
 
-      {/* Bottom-left: event log + help button */}
+      {/* Bottom-left: event log */}
       <div className="bottom-left-panel">
         <EventLog entries={eventLog} />
-        <button className="help-btn" onClick={() => setShowHelp(true)}>? operations</button>
       </div>
 
       {/* Tooltip */}
@@ -379,31 +396,8 @@ export function App() {
         )}
       </div>
 
-      <DebugPanel sessionIds={[...clusters.keys()]} />
-
-      {/* Help overlay */}
-      {showHelp && (
-        <div className="help-overlay" onClick={() => setShowHelp(false)}>
-          <div className="help-panel" onClick={e => e.stopPropagation()}>
-            <div className="help-panel-header">
-              <span className="help-panel-title">operations</span>
-              <button className="debug-close" onClick={() => setShowHelp(false)}>×</button>
-            </div>
-            <div className="legend-items" style={{ padding: '4px 0' }}>
-              {LEGEND_ITEMS.map(item => (
-                <div className="legend-item" key={item.name}>
-                  <div className="legend-badge" style={{ background: item.color }}>{item.badge}</div>
-                  <span className="legend-name">{item.name}</span>
-                </div>
-              ))}
-              <div className="legend-perm">
-                <div className="legend-perm-ring" />
-                <span className="legend-perm-name">awaiting permission</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <DebugPanel sessionIds={[...clusters.keys()]} isOpen={debugOpen} onClose={() => setDebugOpen(false)} />
+      <OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />
 
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>
