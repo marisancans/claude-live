@@ -321,23 +321,25 @@ export function App() {
             {lastEvent?.tool_name ?? '—'}
           </span>
         </div>
-        <button
-          className="audio-toggle"
-          onClick={toggleAudio}
-          title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
-          aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
-        >
-          <SpeakerIcon enabled={audioEnabled} />
-        </button>
-        <button
-          className="autofit-toggle"
-          onClick={() => setAutofitEnabled(!autofitEnabled)}
-          title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
-          aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
-        >
-          <AutofitIcon enabled={autofitEnabled} />
-        </button>
       </div>
+
+      {/* Top-right buttons */}
+      <button
+        className="audio-toggle"
+        onClick={toggleAudio}
+        title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+        aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+      >
+        <SpeakerIcon enabled={audioEnabled} />
+      </button>
+      <button
+        className="autofit-toggle"
+        onClick={() => setAutofitEnabled(!autofitEnabled)}
+        title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+        aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+      >
+        <AutofitIcon enabled={autofitEnabled} />
+      </button>
 
       {/* Permission notifications */}
       {permNotifications.size > 0 && (
