@@ -1,14 +1,9 @@
-// Audio manager for event-triggered piano key sounds
-// Uses individual notes from the Dusty Keys Sample Pack (middle to upper register)
+// Audio manager for event-triggered guitar chord sounds
+// Uses epic guitar chords from Andrew Chellman's sample pack
 
-const PIANO_NOTES = [
-  'c4', 'c5', 'c6',
-  'd4', 'd5', 'd6',
-  'e4', 'e5', 'e6',
-  'f4', 'f5', 'f6',
-  'g4', 'g5', 'g6',
-  'a4', 'a5', 'a6',
-  'b4', 'b5', 'b6'
+const GUITAR_CHORDS = [
+  '01', '02', '03', '04', '05', '06', '07', '08',
+  '09', '10', '11', '12', '13', '14', '15', '16'
 ]
 
 interface AudioContext {
@@ -26,9 +21,9 @@ const state: AudioManagerState = {
   audioContexts: [],
 }
 
-function getRandomNote(): string {
-  const note = PIANO_NOTES[Math.floor(Math.random() * PIANO_NOTES.length)]
-  return `/chords/${note}.wav`
+function getRandomChord(): string {
+  const chord = GUITAR_CHORDS[Math.floor(Math.random() * GUITAR_CHORDS.length)]
+  return `/chords/chord_${chord}.wav`
 }
 
 export function initAudio() {
@@ -73,8 +68,8 @@ export function playChord() {
     selected = state.audioContexts[0]
   }
 
-  const note = getRandomNote()
-  selected.audio.src = note
+  const chord = getRandomChord()
+  selected.audio.src = chord
   selected.audio.currentTime = 0
   selected.isPlaying = true
 
