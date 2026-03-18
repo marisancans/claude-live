@@ -96,9 +96,9 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
     // Update snake animations
     if (!cluster.promptSnakes) cluster.promptSnakes = []
 
-    // Decay progress for each snake
+    // Decay progress for each snake — fixed speed for all prompts
     for (const snake of cluster.promptSnakes) {
-      snake.progress = Math.min(1, snake.progress + 0.005)  // ~3s duration (0.005/frame * ~180 frames at 60fps)
+      snake.progress = Math.min(1, snake.progress + 0.005)
     }
 
     // Remove completed snakes (progress >= 1)

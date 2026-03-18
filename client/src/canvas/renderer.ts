@@ -20,15 +20,14 @@ function drawSnake(
   const [r, g, b] = hexToRgb(snake.color)
   const progress = snake.progress
 
-  // Constant spacing between words along the curve parameter
-  const wordSpacing = 0.12
-  // Total extra t needed so the LAST word also reaches center (t=1)
-  const tailLength = wordSpacing * (snake.words.length - 1)
+  // Fixed total snake length on curve — same for all prompts regardless of word count
+  const SNAKE_LENGTH = 0.35  // total length of snake on the curve parameter [0,1]
+  const wordSpacing = snake.words.length > 1 ? SNAKE_LENGTH / (snake.words.length - 1) : 0
 
-  // Map progress [0,1] to head position [0, 1 + tailLength]
-  // When progress=0: head starts at t=0
-  // When progress=1: head is at t=1+tailLength, meaning tail is at t=1 (center)
-  const headT = progress * (1 + tailLength)
+  // Map progress [0,1] to head position [0, 1 + SNAKE_LENGTH]
+  // All snakes take the same time: head overshoots past center,
+  // tail arrives at center when progress=1
+  const headT = progress * (1 + SNAKE_LENGTH)
 
   const fontSize = 11 * (0.6 + Math.min(1, progress * 2) * 0.4)
 

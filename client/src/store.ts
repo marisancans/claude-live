@@ -511,8 +511,8 @@ export function createStore() {
         // Generate random spawn angle (0-2π)
         const spawnAngle = Math.random() * Math.PI * 2
 
-        // Generate random spline from edge to cluster center
-        const maxDist = 400  // distance from cluster to spawn point
+        // Generate random spline from well outside viewport to cluster center
+        const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.8
         const splinePath = generateRandomSpline(
           cluster.centerX,
           cluster.centerY,
