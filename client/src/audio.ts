@@ -62,16 +62,20 @@ export function playChord() {
     }
   }
 
+  // If no idle channels, skip (don't play multiple per event)
   if (!selected) {
-    // All channels busy - find one that will finish soonest and reuse it
-    // For now, just pick the first one (will interrupt)
-    selected = state.audioContexts[0]
+    return
   }
 
   const chord = getRandomChord()
   selected.audio.src = chord
   selected.audio.currentTime = 0
   selected.isPlaying = true
+
+  // Auto-mark as idle after audio duration + buffer (ensures 'ended' event isn't needed)
+  setTimeout(() => {
+    selected!.isPlaying = false
+  }, 3000)
 
   selected.audio.play().catch((err) => {
     selected!.isPlaying = false
