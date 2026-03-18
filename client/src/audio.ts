@@ -7,14 +7,19 @@ const CHORD_THEMES = [
   'Sparkle', 'Tropical', 'Vintage', 'Wishing Well'
 ]
 
+interface AudioContext {
+  audio: HTMLAudioElement
+  isPlaying: boolean
+}
+
 interface AudioManagerState {
   enabled: boolean
-  audioContexts: Map<string, { audio: HTMLAudioElement; lastPlay: number }>
+  audioContexts: AudioContext[]
 }
 
 const state: AudioManagerState = {
   enabled: false, // muted by default
-  audioContexts: new Map(),
+  audioContexts: [],
 }
 
 function getRandomChord(): string {
@@ -31,41 +36,50 @@ export function initAudio() {
     state.enabled = saved === 'true'
   }
 
-  // Pre-load a few audio elements for polyphony
-  for (let i = 0; i < 6; i++) {
+  // Pre-load multiple audio elements for true polyphony (16 concurrent sounds)
+  for (let i = 0; i < 16; i++) {
     const audio = new Audio()
     audio.preload = 'auto'
-    // Absolute path for served files
     audio.crossOrigin = 'anonymous'
-    state.audioContexts.set(`pool-${i}`, { audio, lastPlay: 0 })
+    audio.volume = 0.4
+
+    // Track when audio finishes playing
+    audio.addEventListener('ended', () => {
+      const ctx = state.audioContexts.find(c => c.audio === audio)
+      if (ctx) ctx.isPlaying = false
+    })
+
+    state.audioContexts.push({ audio, isPlaying: false })
   }
 }
 
 export function playChord() {
   if (!state.enabled) return
 
-  const now = Date.now()
-  // Find least recently played audio element
-  let selected: { key: string; context: any } | null = null
-  let oldest = Infinity
-
-  for (const [key, context] of state.audioContexts) {
-    if (now - context.lastPlay > 200 && context.lastPlay < oldest) {
-      oldest = context.lastPlay
-      selected = { key, context }
+  // Find first available audio element (not currently playing)
+  let selected: AudioContext | null = null
+  for (const context of state.audioContexts) {
+    if (!context.isPlaying) {
+      selected = context
+      break
     }
   }
 
-  if (!selected) return
+  if (!selected) {
+    // All channels busy - find one that will finish soonest and reuse it
+    // For now, just pick the first one (will interrupt)
+    selected = state.audioContexts[0]
+  }
 
   const chord = getRandomChord()
-  selected.context.audio.src = chord
-  selected.context.audio.currentTime = 0
-  selected.context.audio.volume = 0.4
-  selected.context.audio.play().catch((err) => {
+  selected.audio.src = chord
+  selected.audio.currentTime = 0
+  selected.isPlaying = true
+
+  selected.audio.play().catch((err) => {
+    selected!.isPlaying = false
     console.debug('[audio] playback failed:', err.message)
   })
-  selected.context.lastPlay = now
 }
 
 export function setAudioEnabled(enabled: boolean) {
