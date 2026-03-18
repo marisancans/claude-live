@@ -14,11 +14,24 @@ interface AudioContext {
 interface AudioManagerState {
   enabled: boolean
   audioContexts: AudioContext[]
+  loadedCount: number
+  totalCount: number
 }
 
 const state: AudioManagerState = {
   enabled: false, // muted by default
   audioContexts: [],
+  loadedCount: 0,
+  totalCount: 16,
+}
+
+// Track last play time per event type to debounce rapid duplicates
+const lastPlayTime = new Map<string, number>()
+
+// Callbacks for loading progress
+const loadingCallbacks: Array<(loaded: number, total: number) => void> = []
+export function onAudioLoadingProgress(callback: (loaded: number, total: number) => void) {
+  loadingCallbacks.push(callback)
 }
 
 function getRandomChord(): string {
@@ -59,11 +72,20 @@ export function initAudio() {
   // Pre-load multiple audio elements for true polyphony (16 concurrent sounds)
   for (let i = 0; i < 16; i++) {
     const audio = new Audio()
-    audio.preload = 'metadata'  // Preload metadata early
+    audio.preload = 'auto'  // Actually preload the audio file data
     audio.crossOrigin = 'anonymous'
-    audio.volume = 0.4
+    audio.volume = 0.2
+
+    // Attach listeners BEFORE setting src (to catch loading events)
+    let canplayFired = false
     audio.addEventListener('canplay', () => {
-      // Audio is ready to play
+      if (!canplayFired) {
+        // Audio is ready to play — track loading progress
+        canplayFired = true
+        state.loadedCount++
+        console.debug('[audio] loaded:', state.loadedCount, '/', state.totalCount)
+        loadingCallbacks.forEach(cb => cb(state.loadedCount, state.totalCount))
+      }
     })
     audio.addEventListener('error', (e) => {
       console.debug('[audio] load error:', e)
@@ -81,6 +103,10 @@ export function initAudio() {
     })
 
     state.audioContexts.push({ audio, isPlaying: false })
+
+    // Set src to trigger loading (after listener is attached)
+    const chord = GUITAR_CHORDS[i % GUITAR_CHORDS.length]
+    audio.src = `/chords/chord_${chord}.wav`
   }
 }
 
@@ -89,6 +115,18 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
     console.debug('[audio] audio disabled')
     return
   }
+
+  // Debounce: prevent same event type from playing too frequently
+  const eventKey = toolName || hookName || 'unknown'
+  const now = Date.now()
+  const lastTime = lastPlayTime.get(eventKey) || 0
+  const debounceMs = 150  // Small blockage: 150ms minimum between same event sounds
+
+  if (now - lastTime < debounceMs) {
+    console.debug('[audio] debounced:', eventKey)
+    return
+  }
+  lastPlayTime.set(eventKey, now)
 
   // Find first available audio element (not currently playing)
   let selected: AudioContext | null = null
@@ -172,4 +210,24 @@ export function setAudioEnabled(enabled: boolean) {
 
 export function isAudioEnabled(): boolean {
   return state.enabled
+}
+
+export function getAudioLoadingProgress(): { loaded: number; total: number } {
+  return { loaded: state.loadedCount, total: state.totalCount }
+}
+
+export function getAudioDebugInfo() {
+  const playingCount = state.audioContexts.filter(ctx => ctx.isPlaying).length
+  const recentDebounces = Array.from(lastPlayTime.entries())
+    .map(([key, time]) => ({ key, msAgo: Date.now() - time }))
+    .filter(d => d.msAgo < 500)
+    .sort((a, b) => b.msAgo - a.msAgo)
+
+  return {
+    enabled: state.enabled,
+    loadedCount: state.loadedCount,
+    totalCount: state.totalCount,
+    playingCount,
+    recentDebounces,
+  }
 }
