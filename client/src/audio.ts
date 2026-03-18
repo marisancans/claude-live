@@ -59,14 +59,25 @@ export function initAudio() {
   // Pre-load multiple audio elements for true polyphony (16 concurrent sounds)
   for (let i = 0; i < 16; i++) {
     const audio = new Audio()
-    audio.preload = 'auto'
+    audio.preload = 'metadata'  // Preload metadata early
     audio.crossOrigin = 'anonymous'
     audio.volume = 0.4
+    audio.addEventListener('canplay', () => {
+      // Audio is ready to play
+    })
+    audio.addEventListener('error', (e) => {
+      console.debug('[audio] load error:', e)
+      const ctx = state.audioContexts.find(c => c.audio === audio)
+      if (ctx) ctx.isPlaying = false
+    })
 
     // Track when audio finishes playing and fade out
     audio.addEventListener('ended', () => {
       const ctx = state.audioContexts.find(c => c.audio === audio)
-      if (ctx) fadeOutAndStop(audio, ctx, 800)
+      if (ctx) {
+        ctx.isPlaying = false
+        clearTimeout((ctx as any).fadeTimeout)
+      }
     })
 
     state.audioContexts.push({ audio, isPlaying: false })
@@ -78,7 +89,6 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
     console.debug('[audio] audio disabled')
     return
   }
-  console.debug('[audio] playing chord for', { toolName, hookName })
 
   // Find first available audio element (not currently playing)
   let selected: AudioContext | null = null
@@ -111,21 +121,42 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   else chordIndex = Math.floor(Math.random() * GUITAR_CHORDS.length) // fallback to random
 
   const chord = `/chords/chord_${GUITAR_CHORDS[chordIndex]}.wav`
-  console.debug('[audio] loading chord:', chord, 'for', { toolName, hookName, chordIndex })
   selected.audio.src = chord
   selected.audio.currentTime = 0
   selected.isPlaying = true
 
-  // Auto-fade out and mark as idle after audio duration + buffer (ensures 'ended' event isn't needed)
-  // Fade out over 1 second for a smooth natural cutoff
-  setTimeout(() => {
-    fadeOutAndStop(selected!.audio, selected!, 1000)
-  }, 2200)
+  // Load and play, with automatic fadeout after duration
+  selected.audio.load()
 
-  selected.audio.play().catch((err) => {
-    fadeOutAndStop(selected!.audio, selected!, 0)
-    console.debug('[audio] playback failed:', err.message)
-  })
+  const playbackAttempt = () => {
+    selected!.audio.play()
+      .then(() => {
+        console.debug('[audio] playing:', chord)
+        // Schedule fadeout after audio duration (with safety margin)
+        const duration = selected!.audio.duration || 2.0  // Default to ~2s if unknown
+        const fadeDelay = Math.max(duration * 1000, 1500)  // At least 1.5s
+
+        const fadeTimeout = setTimeout(() => {
+          fadeOutAndStop(selected!.audio, selected!, 1000)
+        }, fadeDelay)
+        ;(selected as any).fadeTimeout = fadeTimeout
+      })
+      .catch((err) => {
+        console.debug('[audio] playback failed:', err.message)
+        selected!.isPlaying = false
+      })
+  }
+
+  // Wait for audio to be loadable before playing (handles autoplay policy)
+  if (selected.audio.readyState >= 2) {  // 2 = HAVE_CURRENT_DATA
+    playbackAttempt()
+  } else {
+    selected.audio.addEventListener('canplay', playbackAttempt, { once: true })
+    // Timeout fallback if canplay never fires
+    setTimeout(() => {
+      if (selected!.isPlaying) playbackAttempt()
+    }, 500)
+  }
 }
 
 // Legacy function for compatibility
