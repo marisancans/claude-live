@@ -4,7 +4,11 @@
 
 **Goal:** Replace the static event log with a time-decay live feed showing 5 entries max, each visible for 5 seconds then fading out. Move operations and debug panels to the top bar as separate icon buttons.
 
-**Status:** SUPERSEDES 2026-03-18-event-log-redesign.md (the initial plan). This is a complete redesign.
+**Status:** SUPERSEDES 2026-03-18-event-log-redesign.md (the initial plan). This is a **complete architectural redesign** that requires:
+- Rewriting EventLog.tsx (from position-based opacity to time-decay with rAF update loop)
+- Adding `createdAt` field to LogEntry interface
+- Refactoring existing DebugPanel (remove internal toggle, accept external control props)
+- Replacing existing help button with new OperationsPanel component in top bar
 
 ---
 
