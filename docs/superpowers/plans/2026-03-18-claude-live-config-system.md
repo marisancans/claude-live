@@ -85,9 +85,9 @@ After:
 }]
 ```
 
-- [ ] **Step 3: Update remaining 14 hooks (replace curl with bin/send-hook.sh)**
+- [ ] **Step 3: Update remaining 15 hooks (replace curl with bin/send-hook.sh)**
 
-For each of these hooks, replace the curl command with `bin/send-hook.sh`:
+For each of these 15 hooks, replace the curl command with `bin/send-hook.sh`:
 - InstructionsLoaded
 - WorktreeCreate
 - WorktreeRemove
@@ -143,14 +143,28 @@ git add hooks/hooks.json && git commit -m "refactor: replace hardcoded curl with
 **Files:**
 - Modify: `commands/claude-live.md`
 
-- [ ] **Step 1: Read current command structure**
+- [ ] **Step 1: Update allowed-tools permissions**
+
+Update line 2 of `commands/claude-live.md`. Currently:
+```
+allowed-tools: Bash(pkill:*), Bash(curl:*), Bash(npx:*), Bash(ps:*), Bash(tail:*)
+```
+
+Change to:
+```
+allowed-tools: Bash(pkill:*), Bash(curl:*), Bash(npx:*), Bash(ps:*), Bash(tail:*), Bash(grep:*), Bash(sed:*), Bash(mkdir:*), Bash(rm:*), Bash(cat:*)
+```
+
+This grants the command permission to use grep (URL extraction), sed (string manipulation), mkdir (create config dir), rm (delete config), and cat (verify files).
+
+- [ ] **Step 2: Read current command structure**
 
 Review current `commands/claude-live.md` to understand:
-- Allowed tools and permissions
+- Allowed tools and permissions (just updated)
 - Subcommand structure (status, start, stop, restart, logs)
 - How to add new functionality
 
-- [ ] **Step 2: Extend subcommands list**
+- [ ] **Step 3: Extend subcommands list**
 
 Update the "Subcommands" section to include config management:
 
@@ -172,7 +186,7 @@ Add after (before Status output section):
 - **config reset**: Reset to default endpoint (`http://localhost:43451`), delete global config file
 ```
 
-- [ ] **Step 3: Add Config Management section**
+- [ ] **Step 4: Add Config Management section**
 
 Add new section after Status output:
 
@@ -226,7 +240,7 @@ Behavior:
 - Doesn't affect project config or env var (those still take precedence if set)
 ```
 
-- [ ] **Step 4: Implement config subcommand logic in command handler**
+- [ ] **Step 5: Implement config subcommand logic in command handler**
 
 The command receives `$ARGUMENTS` (user input). Parse and implement:
 
@@ -319,7 +333,7 @@ rm -f "$HOME/.config/claude-live/config.json"
 echo "✓ Reset to default (localhost:43451)"
 ```
 
-- [ ] **Step 5: Test config display (no config set)**
+- [ ] **Step 6: Test config display (no config set)**
 
 ```bash
 /claude-live config
@@ -327,7 +341,7 @@ echo "✓ Reset to default (localhost:43451)"
 
 Expected output: `● Configured: http://localhost:43451 (default)`
 
-- [ ] **Step 6: Test config set with valid URL**
+- [ ] **Step 7: Test config set with valid URL**
 
 ```bash
 /claude-live config http://192.168.1.50:43451
@@ -342,7 +356,7 @@ cat ~/.config/claude-live/config.json
 
 Expected: `{"url": "http://192.168.1.50:43451"}`
 
-- [ ] **Step 7: Test config display after set**
+- [ ] **Step 8: Test config display after set**
 
 ```bash
 /claude-live config
@@ -350,7 +364,7 @@ Expected: `{"url": "http://192.168.1.50:43451"}`
 
 Expected output: `● Configured: http://192.168.1.50:43451 (from global config (~/.config/claude-live/config.json))`
 
-- [ ] **Step 8: Test config set with invalid URL**
+- [ ] **Step 9: Test config set with invalid URL**
 
 ```bash
 /claude-live config invalid-url
@@ -360,7 +374,7 @@ Expected output: `✗ Invalid URL format: must start with http:// or https://`
 
 Config file should NOT change.
 
-- [ ] **Step 9: Test config reset**
+- [ ] **Step 10: Test config reset**
 
 ```bash
 /claude-live config reset
@@ -380,9 +394,9 @@ Then verify:
 /claude-live config
 ```
 
-Expected output: `● Configured: http://localhost:43451 (default)`
+Expected output: `● Configured: http://localhost:43451 (default (localhost:43451))`
 
-- [ ] **Step 10: Test env var precedence**
+- [ ] **Step 11: Test env var precedence**
 
 ```bash
 export CLAUDE_LIVE_URL="http://env-override:43451"
@@ -396,7 +410,7 @@ Reset env var:
 unset CLAUDE_LIVE_URL
 ```
 
-- [ ] **Step 11: Test project config precedence**
+- [ ] **Step 12: Test project config precedence**
 
 ```bash
 mkdir -p .claude
@@ -411,7 +425,7 @@ Clean up:
 rm -rf .claude
 ```
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add commands/claude-live.md && git commit -m "feat: add /claude-live config subcommands for endpoint configuration"
@@ -557,5 +571,5 @@ Expected commits (in order):
 2. `feat: add /claude-live config subcommands for endpoint configuration`
 
 Total changes:
-- `hooks/hooks.json`: 15 hook commands updated
-- `commands/claude-live.md`: ~50 lines added for config subcommands + implementation logic
+- `hooks/hooks.json`: 15 curl commands replaced with `bin/send-hook.sh` (SessionStart 2nd command + 14 other hooks)
+- `commands/claude-live.md`: ~5 lines for allowed-tools + ~60 lines for config subcommands + implementation logic
