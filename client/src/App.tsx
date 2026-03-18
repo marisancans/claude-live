@@ -7,6 +7,7 @@ import { DebugPanel } from './DebugPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
 import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
+import { EventLog } from './EventLog'
 
 const store = createStore()
 
@@ -361,24 +362,7 @@ export function App() {
 
       {/* Bottom-left: event log + help button */}
       <div className="bottom-left-panel">
-        <div className="event-log">
-          {eventLog.map((entry, i) => {
-            const age = eventLog.length - 1 - i
-            const opacity = Math.max(0.12, 1 - age * 0.09)
-            return (
-              <div
-                key={entry.id}
-                className="event-log-entry"
-                style={{ opacity, '--entry-color': entry.colorHex } as React.CSSProperties}
-              >
-                <div className="event-log-dot" style={{ background: entry.colorHex }} />
-                <span className="event-log-tool" style={{ color: entry.colorHex }}>{entry.tool}</span>
-                {entry.file && <span className="event-log-file">{entry.file}</span>}
-                <span className="event-log-session">{entry.sessionLabel}</span>
-              </div>
-            )
-          })}
-        </div>
+        <EventLog entries={eventLog} />
         <button className="help-btn" onClick={() => setShowHelp(true)}>? operations</button>
       </div>
 
