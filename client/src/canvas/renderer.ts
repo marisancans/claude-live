@@ -31,7 +31,7 @@ function drawSnake(
     const word = snake.words[i]
 
     // Stagger words along spline: head is ahead, tail lags behind
-    const wordT = Math.max(0, t - i * 0.08)
+    const wordT = Math.max(0, t - i * 0.12)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
     // Tail fading: words fade faster if they're at tail (lower index)
@@ -497,34 +497,100 @@ function _drawProjectile(
   const hy = from.y + (to.y - from.y) * e
 
   if (tool === 'Read') {
-    // Dashed beam + collapsing reticle crosshair
-    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y)
-    ctx.strokeStyle = `rgba(${r},${g},${b},0.07)`; ctx.lineWidth = 1; ctx.stroke()
-    const trail = Math.max(0, e - 0.28)
-    const tx0 = from.x + (to.x-from.x)*trail, ty0 = from.y + (to.y-from.y)*trail
-    const grad = ctx.createLinearGradient(tx0, ty0, hx, hy)
-    grad.addColorStop(0, `rgba(${r},${g},${b},0)`)
-    grad.addColorStop(1, `rgba(${r},${g},${b},0.9)`)
-    ctx.beginPath(); ctx.moveTo(tx0, ty0); ctx.lineTo(hx, hy)
-    ctx.strokeStyle = grad; ctx.lineWidth = 1.3; ctx.stroke()
-    const crossSize = 14 * (1 - e * 0.6)
-    const alpha = Math.min(1, e * 3) * 0.7
-    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`; ctx.lineWidth = 0.8
-    for (const [ax, ay] of [[-1,0],[1,0],[0,-1],[0,1]] as [number,number][]) {
+    // Two-phase: laser scan at node → data sends to center
+    // Since inbound: from=node, to=core
+    const core = to, node = from
+    const scanH = 18  // half-height of scan area
+
+    if (progress < 0.45) {
+      // ── Phase 1: Laser scanner at node ──
+      const p1 = progress / 0.45
+      const fadeIn = Math.min(1, p1 * 4)  // quick fade in
+
+      // Scan line bounces up and down (3 full passes)
+      const bounce = Math.abs(Math.sin(p1 * Math.PI * 3))
+      const scanY = node.y - scanH + bounce * scanH * 2
+
+      // Scan boundary box (faint)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.15})`; ctx.lineWidth = 0.5
+      ctx.strokeRect(node.x - 12, node.y - scanH, 24, scanH * 2)
+
+      // Bright laser scan line
       ctx.beginPath()
-      ctx.moveTo(hx + ax*crossSize*0.4, hy + ay*crossSize*0.4)
-      ctx.lineTo(hx + ax*crossSize,     hy + ay*crossSize)
-      ctx.stroke()
+      ctx.moveTo(node.x - 13, scanY)
+      ctx.lineTo(node.x + 13, scanY)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.9})`
+      ctx.lineWidth = 1.5; ctx.stroke()
+
+      // Glow around scan line
+      ctx.beginPath()
+      ctx.moveTo(node.x - 13, scanY)
+      ctx.lineTo(node.x + 13, scanY)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.25})`
+      ctx.lineWidth = 5; ctx.stroke()
+
+      // Trail fade behind the scan line (shows where it's been)
+      const trailAlpha = fadeIn * 0.12
+      const prevBounce = Math.abs(Math.sin(Math.max(0, p1 - 0.03) * Math.PI * 3))
+      const prevY = node.y - scanH + prevBounce * scanH * 2
+      ctx.beginPath()
+      ctx.moveTo(node.x - 10, prevY)
+      ctx.lineTo(node.x + 10, prevY)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${trailAlpha})`
+      ctx.lineWidth = 1; ctx.stroke()
+
+      // Center dot
+      ctx.beginPath(); ctx.arc(node.x, node.y, 1.5, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(${r},${g},${b},${fadeIn * 0.5})`; ctx.fill()
+
+      // Flash at end of scanning
+      if (p1 > 0.85) {
+        const flash = (p1 - 0.85) / 0.15
+        ctx.beginPath(); ctx.arc(node.x, node.y, flash * 16, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - flash) * 0.5})`; ctx.lineWidth = 0.8; ctx.stroke()
+      }
+
+    } else {
+      // ── Phase 2: Data sends to center (node → core) ──
+      const p2 = (progress - 0.45) / 0.55
+      const e2 = eio(p2)
+
+      // Faint return path
+      const trailS = Math.max(0, e2 - 0.35)
+      const tsx = node.x + (core.x - node.x) * trailS
+      const tsy = node.y + (core.y - node.y) * trailS
+      const tex = node.x + (core.x - node.x) * e2
+      const tey = node.y + (core.y - node.y) * e2
+      const grad = ctx.createLinearGradient(tsx, tsy, tex, tey)
+      grad.addColorStop(0, `rgba(${r},${g},${b},0)`)
+      grad.addColorStop(1, `rgba(${r},${g},${b},0.5)`)
+      ctx.beginPath(); ctx.moveTo(tsx, tsy); ctx.lineTo(tex, tey)
+      ctx.strokeStyle = grad; ctx.lineWidth = 1.2; ctx.stroke()
+
+      // Data packets streaming to core
+      const PACKETS = 5
+      for (let i = 0; i < PACKETS; i++) {
+        const offset = i / PACKETS * 0.3
+        const pp = Math.min(1, Math.max(0, e2 - offset))
+        if (pp <= 0) continue
+        const px = node.x + (core.x - node.x) * pp
+        const py = node.y + (core.y - node.y) * pp
+        const a = pp < 0.1 ? pp / 0.1 : (pp > 0.85 ? (1 - pp) / 0.15 : 1)
+        ctx.beginPath(); ctx.arc(px, py, 2.5 - i * 0.3, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.8})`; ctx.fill()
+      }
+
+      // Lead dot
+      ctx.beginPath(); ctx.arc(tex, tey, 2, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill()
+
+      // Arrival flash at core
+      if (p2 > 0.85) {
+        const flash = (p2 - 0.85) / 0.15
+        ctx.beginPath(); ctx.arc(core.x, core.y, flash * 16, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - flash) * 0.6})`; ctx.lineWidth = 0.8; ctx.stroke()
+      }
     }
-    ctx.beginPath(); ctx.arc(hx, hy, crossSize*0.55, 0, Math.PI*2)
-    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha*0.5})`; ctx.lineWidth = 0.6; ctx.stroke()
-    if (progress > 0.85) {
-      const flash = (progress - 0.85) / 0.15
-      ctx.beginPath(); ctx.arc(to.x, to.y, flash * 16, 0, Math.PI*2)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${(1-flash)*0.6})`; ctx.lineWidth = 0.8; ctx.stroke()
-    }
-    ctx.beginPath(); ctx.arc(hx, hy, 1.8, 0, Math.PI*2)
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill()
 
   } else if (tool === 'Grep' || tool === 'Glob') {
     function rng(s: number) { const x = Math.sin(s*127.1+311.7)*43758.5453; return x-Math.floor(x) }
