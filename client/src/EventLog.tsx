@@ -1,21 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { LogEntry } from './App'
 
 interface Props {
   entries: LogEntry[]
 }
 
+// Constants for time-decay behavior
+const MAX_LIVE_AGE = 5000       // milliseconds
+const FADE_START_TIME = 4000    // when fade begins
+const FADE_DURATION = 1000      // fade-out duration
+const RAF_THROTTLE = 100        // update now every 100ms, not every frame
+
 export function EventLog({ entries }: Props) {
   const [now, setNow] = useState(Date.now())
   const [historyOpen, setHistoryOpen] = useState(false)
 
-  // Update loop: runs on every frame to recalculate entry ages
+  // Update loop: throttle to ~100ms intervals to reduce re-renders
   useEffect(() => {
     let rafId: number
+    let lastUpdateTime = Date.now()
+
     const update = () => {
-      setNow(Date.now())
+      const currentTime = Date.now()
+      if (currentTime - lastUpdateTime >= RAF_THROTTLE) {
+        setNow(currentTime)
+        lastUpdateTime = currentTime
+      }
       rafId = requestAnimationFrame(update)
     }
+
     rafId = requestAnimationFrame(update)
     return () => cancelAnimationFrame(rafId)
   }, [])
@@ -23,13 +36,22 @@ export function EventLog({ entries }: Props) {
   // Calculate opacity for a single entry based on its age
   const calculateOpacity = (entry: LogEntry): number => {
     const age = now - entry.createdAt
-    if (age >= 5000) return 0       // off-screen
-    if (age < 4000) return 1.0      // fully visible
-    return 1.0 - ((age - 4000) / 1000)  // fade from 4-5s
+    if (age >= MAX_LIVE_AGE) return 0
+    if (age < FADE_START_TIME) return 1.0
+    return 1.0 - ((age - FADE_START_TIME) / FADE_DURATION)
   }
 
-  // Filter to live entries (age < 5000ms)
-  const liveEntries = entries.filter(e => (now - e.createdAt) < 5000)
+  // Memoize live entries filtering
+  const liveEntries = useMemo(
+    () => entries.filter(e => (now - e.createdAt) < MAX_LIVE_AGE),
+    [entries, now]
+  )
+
+  // Memoize reversed entries for history
+  const reversedEntries = useMemo(
+    () => [...entries].reverse(),
+    [entries]
+  )
 
   return (
     <div className="event-log-container">
@@ -61,9 +83,9 @@ export function EventLog({ entries }: Props) {
 
       {/* History overlay: shows all entries, newest first */}
       {historyOpen && (
-        <div className="event-log-history">
+        <div className="event-log-history" aria-modal="true">
           <button className="event-log-history-back" onClick={() => setHistoryOpen(false)}>← live</button>
-          {[...entries].reverse().map(entry => (
+          {reversedEntries.map(entry => (
             <div
               key={entry.id}
               className="event-log-entry event-log-entry--static"
