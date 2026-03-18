@@ -83,7 +83,7 @@ All tool effects operate the same way structurally:
 - **Edit/Write/Bash** (outbound): origin → file
 - **WebFetch** (wave), **Notification** (rings): centered on origin
 
-Origin point is the only variable; visuals and destinations unchanged.
+Agents don't introduce new tool types — they only change the origin point from which animations originate. Origin point is the only variable; visuals, tool types, and destinations remain unchanged.
 
 ## Rendering Changes
 
@@ -131,7 +131,7 @@ Existing code already removes agent star from visualization.
 
 If agent star position updates (orbital movement), `agentSessionMap` must track current position.
 
-**Solution:** Update map value each frame when agent star position changes (link to existing orbital animation loop).
+**Solution:** Link position updates into the existing orbital animation loop. Since agent stars already update their position each frame in that loop, hook position changes into the same mechanism — update the `agentSessionMap` entry when the orbital animation updates the agent star's position.
 
 ## Success Criteria
 
