@@ -6,6 +6,7 @@ import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
 import { SpeakerIcon } from './SpeakerIcon'
+import { AutofitIcon } from './AutofitIcon'
 
 const store = createStore()
 
@@ -327,6 +328,14 @@ export function App() {
           aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
         >
           <SpeakerIcon enabled={audioEnabled} />
+        </button>
+        <button
+          className="autofit-toggle"
+          onClick={() => setAutofitEnabled(!autofitEnabled)}
+          title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+          aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+        >
+          <AutofitIcon enabled={autofitEnabled} />
         </button>
       </div>
 
