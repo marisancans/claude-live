@@ -7,6 +7,9 @@
 
 URL=""
 
+# Debug: log that hook was called
+echo "[claude-live-hook] hook called" >> /tmp/claude-live-hook.log 2>&1
+
 # Project-level config
 if [ -f ".claude/claude-live.json" ]; then
   URL=$(cat .claude/claude-live.json 2>/dev/null | grep -o '"url" *: *"[^"]*"' | head -1 | sed 's/.*: *"//;s/"//')
@@ -25,4 +28,7 @@ fi
 # Default
 URL="${URL:-http://localhost:43451}"
 
-curl -sf -X POST "$URL/hook" -H 'Content-Type: application/json' -d @- 2>/dev/null || true
+# Debug: log what URL we're using and what we're sending
+echo "[claude-live-hook] sending to $URL" >> /tmp/claude-live-hook.log 2>&1
+
+curl -sf -X POST "$URL/hook" -H 'Content-Type: application/json' -d @- 2>/tmp/claude-live-hook-error.log || true

@@ -479,6 +479,7 @@ export function createStore() {
       cluster.promptText = promptText.slice(0, 40) + (promptText.length > 40 ? '…' : '')
       cluster.promptColor = '#38bdf8'
       cluster.promptFlying = 1.0  // Start animation
+      console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying })
       recomputeAges()
       return
     }
