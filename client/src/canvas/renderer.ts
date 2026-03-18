@@ -447,6 +447,11 @@ export function drawScene(
     const [r, g, b] = hexToRgb(p.colorHex)
     // Get origin: agent star if action from agent, otherwise core
     const origin = getAnimationOrigin(p.cluster, p.agentId || null)
+    if (p.agentId) {
+      const hasAgent = p.cluster.agentPositionMap.has(p.agentId)
+      const mapSize = p.cluster.agentPositionMap.size
+      console.log(`[Renderer] agentId=${p.agentId}, inMap=${hasAgent}, mapSize=${mapSize}, origin=(${origin.x},${origin.y})`)
+    }
     const ox = origin.x, oy = origin.y
     const nx = p.node.x, ny = p.node.y
     const from = p.inbound ? { x: nx, y: ny } : { x: ox, y: oy }
@@ -627,55 +632,112 @@ function _drawProjectile(
     }
 
   } else if (tool === 'Bash') {
-    // Terminal window animation at destination
-    const termW = 50, termH = 50
+    // Mini terminal with scrolling fake logs
+    const termW = 62, termH = 52
     const termX = to.x - termW / 2, termY = to.y - termH / 2
+    const fadeIn = Math.min(1, progress * 3)
+
+    // Dark background
+    ctx.fillStyle = `rgba(15,15,20,${fadeIn * 0.92})`
+    ctx.beginPath()
+    ctx.roundRect(termX, termY, termW, termH, 3)
+    ctx.fill()
 
     // Frame border
-    ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.8})`
-    ctx.lineWidth = 1.2
-    ctx.strokeRect(termX, termY, termW, termH)
+    ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.5})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.roundRect(termX, termY, termW, termH, 3)
+    ctx.stroke()
 
-    // Title bar
-    ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.3})`
-    ctx.fillRect(termX, termY, termW, 10)
-    ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.7})`
-    ctx.font = 'bold 6px monospace'
-    ctx.textAlign = 'left'
-    ctx.fillText('bash', termX + 2, termY + 8)
+    // Title bar background
+    ctx.fillStyle = `rgba(${r},${g},${b},${fadeIn * 0.15})`
+    ctx.beginPath()
+    ctx.roundRect(termX, termY, termW, 9, [3, 3, 0, 0])
+    ctx.fill()
 
-    // Terminal commands cycling
-    const commands = ['ls', 'cd', 'cat', 'grep', 'find', 'git', 'npm', 'sh']
-    const cols = 2, rows = 4
-    const cycleTime = 0.15
-    const termProgress = progress < 0.3 ? progress / 0.3 : 1
-
-    for (let col = 0; col < cols; col++) {
-      for (let row = 0; row < rows; row++) {
-        const seed = col * rows + row + Math.floor(progress / cycleTime)
-        const command = commands[seed % commands.length]
-
-        const cellW = (termW - 2) / cols
-        const cellH = (termH - 10 - 2) / rows
-        const cx = termX + 1 + cellW * (col + 0.5)
-        const cy = termY + 10 + cellH * (row + 0.5) + 1
-
-        const cycleP = (progress / cycleTime) % 1
-        const cmdAlpha = cycleP < 0.5 ? cycleP * 2 : (1 - cycleP) * 2
-
-        ctx.fillStyle = `rgba(${r},${g},${b},${termProgress * cmdAlpha * 0.8})`
-        ctx.font = 'bold 6px monospace'
-        ctx.textAlign = 'center'
-        ctx.fillText(command, cx, cy + 1)
-      }
+    // Title bar dots
+    const dotColors = ['#ff5f57', '#febc2e', '#28c840']
+    for (let d = 0; d < 3; d++) {
+      ctx.fillStyle = `rgba(${d===0?'255,95,87':d===1?'254,188,46':'40,200,64'},${fadeIn * 0.8})`
+      ctx.beginPath()
+      ctx.arc(termX + 5 + d * 6, termY + 4.5, 1.5, 0, Math.PI * 2)
+      ctx.fill()
     }
 
-    // Glow effect
-    const glowAlpha = Math.sin(progress * Math.PI * 0.5) * 0.1
-    ctx.fillStyle = `rgba(${r},${g},${b},${glowAlpha})`
+    // Title text
+    ctx.fillStyle = `rgba(${r},${g},${b},${fadeIn * 0.5})`
+    ctx.font = '5px monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('bash', termX + termW / 2, termY + 7)
+
+    // Clip log area
+    ctx.save()
     ctx.beginPath()
-    ctx.arc(to.x, to.y, 25, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.rect(termX + 1, termY + 10, termW - 2, termH - 11)
+    ctx.clip()
+
+    // Fake log lines — deterministic from progress, scrolling upward
+    const logLines = [
+      '$ npm run build',
+      'compiling 42 modules...',
+      'transform: es2022',
+      'chunk vendor [hash]',
+      'minify: terser pass 1',
+      'tree-shake: 12 removed',
+      'emit: dist/index.js',
+      'asset: 142kb gzip:38kb',
+      '$ git status',
+      'M  src/store.ts',
+      'M  renderer.ts',
+      '$ eslint --fix .',
+      'fixed 3 warnings',
+      '$ tsc --noEmit',
+      'no errors found',
+      '$ vitest run',
+      'PASS tests/unit.ts',
+      'PASS tests/e2e.ts',
+      '3 passed, 0 failed',
+      '$ docker build .',
+      'layer 1/5 cached',
+      'layer 2/5 RUN npm ci',
+      'layer 3/5 COPY .',
+      'built in 4.2s',
+      '$ deploy --prod',
+      'uploading bundle...',
+      'deployed v2.1.0 ✓',
+    ]
+    const lineH = 6.5
+    const visibleLines = Math.floor((termH - 11) / lineH)
+    // Scroll speed: one new line per 0.08 progress
+    const scrollOffset = progress / 0.08
+    const startLine = Math.floor(scrollOffset)
+    // Fractional pixel offset for smooth scrolling
+    const fracOffset = (scrollOffset - startLine) * lineH
+
+    ctx.font = '5px monospace'
+    ctx.textAlign = 'left'
+    for (let i = -1; i <= visibleLines; i++) {
+      const lineIdx = (startLine + i) % logLines.length
+      const text = logLines[lineIdx < 0 ? logLines.length + lineIdx : lineIdx]
+      const ly = termY + 10 + lineH + i * lineH - fracOffset
+
+      // Prompt lines get color, rest get dimmer
+      const isPrompt = text.startsWith('$')
+      const alpha = fadeIn * (isPrompt ? 0.9 : 0.6)
+      ctx.fillStyle = isPrompt
+        ? `rgba(${r},${g},${b},${alpha})`
+        : `rgba(180,200,180,${alpha})`
+      ctx.fillText(text.slice(0, 14), termX + 3, ly)
+    }
+
+    ctx.restore()
+
+    // Subtle scanline overlay
+    ctx.fillStyle = `rgba(0,0,0,${fadeIn * 0.06})`
+    for (let sy = termY + 10; sy < termY + termH; sy += 2) {
+      ctx.fillRect(termX, sy, termW, 1)
+    }
 
   } else if (tool === 'WebFetch') {
     // Sine wave beam

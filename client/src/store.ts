@@ -1,5 +1,7 @@
-import type { RawEvent, GraphNode, Cluster } from './types'
+import type { RawEvent, GraphNode, Cluster, PromptSnake } from './types'
 import type { Point } from './utils/spline'
+import { generateRandomSpline } from './utils/spline'
+import { playChordForEvent } from './audio'
 
 function shortHash(s: string): string {
   let h = 5381
@@ -469,6 +471,7 @@ export function createStore() {
           x: agentNode.x,
           y: agentNode.y
         })
+        console.log(`[Store] Agent ${agentId} registered at (${agentNode.x.toFixed(0)}, ${agentNode.y.toFixed(0)})`)
       }
       recomputeAges()
       return
@@ -498,14 +501,53 @@ export function createStore() {
       return
     }
 
-    // UserPromptSubmit: pulse core + trigger prompt flying animation
+    // UserPromptSubmit: create PromptSnake objects with random splines
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
       const promptText = event.prompt || ''
       cluster.promptText = promptText.slice(0, 40) + (promptText.length > 40 ? '…' : '')
       cluster.promptColor = '#38bdf8'
       cluster.promptFlying = 1.0  // Start animation
-      console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying })
+
+      // Split prompt into words
+      const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)
+
+      if (words.length > 0) {
+        // Generate random spawn angle (0-2π)
+        const spawnAngle = Math.random() * Math.PI * 2
+
+        // Generate random spline from edge to cluster center
+        const maxDist = 400  // distance from cluster to spawn point
+        const splinePath = generateRandomSpline(
+          cluster.centerX,
+          cluster.centerY,
+          spawnAngle,
+          maxDist
+        )
+
+        // Get color from event or use default
+        const color = (event as any).color || '#b0c8f0'
+
+        // Create snake object
+        const snake: PromptSnake = {
+          words,
+          color,
+          progress: 0,      // start at 0, will animate to 1
+          splinePath,
+          startAngle: spawnAngle
+        }
+
+        // Add to snakes array (initialize if needed)
+        if (!cluster.promptSnakes) {
+          cluster.promptSnakes = []
+        }
+        cluster.promptSnakes.push(snake)
+
+        // Play audio chord
+        playChordForEvent(undefined, 'UserPromptSubmit')
+      }
+
+      console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying, snakes: cluster.promptSnakes?.length || 0 })
       recomputeAges()
       return
     }
