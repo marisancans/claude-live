@@ -1,3 +1,5 @@
+import type { Point, SplinePath } from './utils/spline'
+
 // Raw event shape as received from server over SSE
 export interface RawEvent {
   id: string
@@ -80,6 +82,15 @@ export interface Projectile {
   duration: number      // seconds
 }
 
+// A prompt snake: animated words flowing along a spline path
+export interface PromptSnake {
+  words: string[]           // split prompt text
+  color: string             // animation color (hex)
+  progress: number          // 0-1 animation progress
+  splinePath: SplinePath    // pre-computed spline curve
+  startAngle: number        // 0-360° spawn direction in radians
+}
+
 // A session cluster (solar system)
 export interface Cluster {
   sessionId: string
@@ -102,10 +113,8 @@ export interface Cluster {
   compacting: number
   // Post-compaction hold state (1.0 → 0.0)
   compacted: number
-  // User prompt flying in animation state (1.0 → 0.0)
-  promptFlying: number
-  promptText: string
-  promptColor: string
+  // Array of in-flight prompt snakes
+  promptSnakes: PromptSnake[]
 }
 
 // Ripple (kept for compatibility, not used in solar renderer)
