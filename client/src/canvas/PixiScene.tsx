@@ -73,8 +73,8 @@ function calculateCameraTarget(
     targetScale = canvasHeight / boundsHeight
   }
 
-  // Clamp to valid scale range
-  targetScale = Math.max(0.2, Math.min(4.0, targetScale))
+  // Clamp to valid scale range (allow zoom-out to 0.1x for large spreads from gravity-well system)
+  targetScale = Math.max(0.1, Math.min(4.0, targetScale))
 
   // Center the bounds on canvas
   const centerX = (bounds.minX + bounds.maxX) / 2
