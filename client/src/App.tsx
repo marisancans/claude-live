@@ -44,7 +44,7 @@ const LEGEND_ITEMS = [
   { color: '#c084fc', badge: '⬡', name: 'Subagent' },
 ]
 
-interface LogEntry {
+export interface LogEntry {
   id: string
   tool: string
   file: string
@@ -124,7 +124,7 @@ function enrichedFileLabel(event: RawEvent): string {
   return fileLabel(event)
 }
 
-const MAX_LOG = 10
+const MAX_LOG = 100
 
 function toolColor(event: RawEvent | null | undefined): string {
   if (!event) return '#888'
