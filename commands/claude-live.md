@@ -91,7 +91,7 @@ if [[ "$ARGUMENTS" == "config" ]] || [[ "$ARGUMENTS" == config* ]]; then
     echo "✓ Reset to default (localhost:43451)"
   elif [[ "$ARGUMENTS" == "config" ]]; then
     # Display current URL
-    URL_SOURCE="default (localhost:43451)"
+    URL_SOURCE="default"
     URL="http://localhost:43451"
 
     if [ -n "$CLAUDE_LIVE_URL" ]; then
@@ -117,7 +117,7 @@ if [[ "$ARGUMENTS" == "config" ]] || [[ "$ARGUMENTS" == config* ]]; then
     NEW_URL="${ARGUMENTS#config }"
 
     # Validate URL format
-    if ! echo "$NEW_URL" | grep -q '^https\?://'; then
+    if ! echo "$NEW_URL" | grep -q '^https\?://[^/]'; then
       echo "✗ Invalid URL format: must start with http:// or https://"
       exit 1
     fi
