@@ -26,6 +26,30 @@ interface Props {
   autofitEnabled: boolean
 }
 
+const ORBITAL_EXTENT = 175 // Max radius of orbiting nodes (ORBIT_RADII[2])
+
+function calculateClusterBounds(clusters: Map<string, Cluster>) {
+  let minX = Infinity, maxX = -Infinity
+  let minY = Infinity, maxY = -Infinity
+
+  for (const cluster of clusters.values()) {
+    const ext = ORBITAL_EXTENT
+    minX = Math.min(minX, cluster.centerX - ext)
+    maxX = Math.max(maxX, cluster.centerX + ext)
+    minY = Math.min(minY, cluster.centerY - ext)
+    maxY = Math.max(maxY, cluster.centerY + ext)
+  }
+
+  // Add padding in world coordinates
+  const padding = 120
+  return {
+    minX: minX - padding,
+    maxX: maxX + padding,
+    minY: minY - padding,
+    maxY: maxY + padding,
+  }
+}
+
 export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabled }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const clustersRef = useRef(clusters)
