@@ -136,6 +136,8 @@ export function App() {
     const saved = localStorage.getItem('claude-live-audio-enabled')
     return saved === 'true'
   })
+  const [replayDone, setReplayDone] = useState(false)
+  const replayDoneRef = useRef(false)
   const esRef = useRef<EventSource | null>(null)
 
   // Initialize audio on mount
@@ -160,6 +162,8 @@ export function App() {
           store.markReplayDone()
           layoutClusters(store.getSessions())
           setClusters(new Map(store.getSessions()))
+          replayDoneRef.current = true
+          setReplayDone(true)
           return
         }
         const event: RawEvent = parsed
@@ -171,7 +175,7 @@ export function App() {
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
-        playChord() // Play audio on event
+        if (replayDoneRef.current) playChord() // Play audio on event (only after replay completes)
 
         // Live event log (skip PostToolUse to avoid duplicate entries)
         if (event.hook_event_name !== 'PostToolUse') {
