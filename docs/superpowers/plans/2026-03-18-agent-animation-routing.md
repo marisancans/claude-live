@@ -12,45 +12,41 @@
 
 ## File Structure
 
+Key insight: Agent nodes are created with key format `agent:{agentId}` directly in store.ts SubagentStart handler. We map agent IDs → positions for animation routing.
+
 ```
 client/src/
-  types.ts                    — Add AgentSessionInfo type, extend Cluster
-  store.ts                    — Add agentSessionMap management, session registration
-  canvas/graph.ts             — Add helpers for agent position lookup
-  canvas/renderer.ts          — Modify projectile origin computation
-  canvas/PixiScene.tsx        — Hook agent spawn/terminate into lifecycle
+  types.ts                    — Add AgentPositionMap type, extend Cluster
+  store.ts                    — Add agentPositionMap mgmt, registration in SubagentStart/Stop handlers
+  canvas/renderer.ts          — Modify projectile origin computation using agent ID lookup
 ```
 
 ---
 
-### Task 1: Add Type Definitions for Agent Session Mapping
+### Task 1: Add Type Definitions for Agent Position Mapping
 
 **Files:**
 - Modify: `client/src/types.ts`
 
-- [ ] **Step 1: Add AgentSessionInfo type**
+- [ ] **Step 1: Add AgentPositionMap type alias**
 
-Open `client/src/types.ts` and add after the Projectile interface:
+Open `client/src/types.ts` and add after the Projectile interface (after line 83):
 
 ```typescript
-// Agent session position tracking for animation routing
-export interface AgentSessionInfo {
-  sessionId: string           // unique agent session identifier
-  position: {x: number, y: number}  // current orbital position (updates each frame)
-  angle: number              // current angle in orbit (0-360 in radians)
-  radius: number             // orbit radius (fixed, matches orbitRadius of agent node)
-  spawnTime: number          // when agent spawned
-}
+// Maps agent IDs to their current positions for animation routing
+// Key: agent ID from SubagentStart event (e.g., "abc123")
+// Value: {x, y} position of agent node in space
+export type AgentPositionMap = Map<string, {x: number, y: number}>
 ```
 
 - [ ] **Step 2: Extend Cluster type**
 
-Find the `Cluster` interface (around line 95) and add this field:
+Find the `Cluster` interface (line 95-118) and add this field before the closing brace:
 
 ```typescript
-  // Maps session IDs to their agent star positions (for animation routing)
-  // Only contains entries for direct child agents, not nested agents
-  agentSessionMap: Map<string, AgentSessionInfo>
+  // Maps agent IDs to their current star positions (for animation routing)
+  // Populated by SubagentStart, updated each frame, cleared by SubagentStop
+  agentPositionMap: AgentPositionMap
 ```
 
 - [ ] **Step 3: Verify types compile**
@@ -70,120 +66,112 @@ git commit -m "feat: add AgentSessionInfo type and agentSessionMap to Cluster"
 
 ---
 
-### Task 2: Initialize Agent Session Map in Clusters
+### Task 2: Initialize Agent Position Map & Add Helper
 
 **Files:**
 - Modify: `client/src/store.ts`
 
 - [ ] **Step 1: Locate cluster initialization**
 
-Find the code that creates new Cluster instances. Should be near the top-level state management. Look for `new Cluster()` or cluster creation.
+Find the code that creates new Cluster instances. Look for where the empty Cluster object is created (around line 195-220 where clusters are first created).
 
-- [ ] **Step 2: Initialize agentSessionMap**
+- [ ] **Step 2: Initialize agentPositionMap**
 
 In cluster creation, add:
 
 ```typescript
-// When creating a new cluster, initialize the agent mapping
-agentSessionMap: new Map<string, AgentSessionInfo>()
+agentPositionMap: new Map<string, {x: number, y: number}>()
 ```
 
-Ensure this is done in:
-- Initial cluster creation
-- Any cluster cloning/reset functions
+This creates an empty map that will be populated as agents spawn.
 
-- [ ] **Step 3: Add helper function to get agent origin**
+- [ ] **Step 3: Add helper function**
 
-Add to `store.ts` after the cluster creation code:
+Add this function to `store.ts` after helper functions like `hexToInt`, before the main event processing (around line 180):
 
 ```typescript
 /**
- * Get the animation origin point for a session.
- * If the session is an agent, returns the agent star position.
- * Otherwise, returns the cluster core position.
+ * Get the animation origin point for an action.
+ * If agentId exists and points to an active agent, returns agent position.
+ * Otherwise, returns cluster core position.
  */
 export function getAnimationOrigin(
   cluster: Cluster,
-  sessionId: string
+  agentId: string | null
 ): {x: number, y: number} {
-  const agentInfo = cluster.agentSessionMap.get(sessionId)
-  if (agentInfo) {
-    return agentInfo.position
+  if (agentId && cluster.agentPositionMap.has(agentId)) {
+    return cluster.agentPositionMap.get(agentId)!
   }
   // Fallback to core position
   return {x: cluster.centerX, y: cluster.centerY}
 }
 ```
 
-- [ ] **Step 4: Test the helper function**
+- [ ] **Step 4: Test compilation**
 
 ```bash
-npm run build 2>&1 | head -30
+npm run build 2>&1 | head -20
 ```
 
-Expected: No errors.
+Expected: No TypeScript errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add client/src/store.ts
-git commit -m "feat: initialize agentSessionMap and add getAnimationOrigin helper"
+git commit -m "feat: initialize agentPositionMap and add getAnimationOrigin helper"
 ```
 
 ---
 
-### Task 3: Register Agent Sessions on Spawn
+### Task 3: Register Agent Positions on Spawn
 
 **Files:**
-- Modify: `client/src/canvas/PixiScene.tsx` (or similar lifecycle hook)
 - Modify: `client/src/store.ts`
 
-- [ ] **Step 1: Locate event processing for SubagentStart**
+- [ ] **Step 1: Locate SubagentStart handler**
 
-Search for `SubagentStart` hook event handling in the codebase:
-
-```bash
-grep -r "SubagentStart" client/src --include="*.ts" --include="*.tsx"
-```
-
-This should be where agents are spawned and agent nodes are created.
-
-- [ ] **Step 2: Find where agent nodes are created**
-
-In the same file, locate where `nodeType === 'agent'` nodes are added to `cluster.nodes`.
-
-- [ ] **Step 3: Add registration code after agent node creation**
-
-After the agent node is created and positioned in the orbit ring, add:
+In `store.ts`, find the SubagentStart event handler (line 416-453). It creates agent nodes with this pattern:
 
 ```typescript
-// Register agent session for animation routing
-cluster.agentSessionMap.set(agentSessionId, {
-  sessionId: agentSessionId,
-  position: {x: agentNode.x, y: agentNode.y},
-  angle: agentNode.orbitAngle,
-  radius: agentNode.orbitRadius,
-  spawnTime: Date.now()
+if (event.hook_event_name === 'SubagentStart') {
+  const agentId = event.agent_id || `${event.session_id}-sub`
+  const agentKey = `agent:${agentId}`
+  if (!cluster.nodes.has(agentKey)) {
+    cluster.nodes.set(agentKey, { ... agent node data ... })
+  }
+}
+```
+
+- [ ] **Step 2: Extract initial position from agent node**
+
+Inside the SubagentStart handler, right after creating the agent node (after line 449, before the closing brace), add:
+
+```typescript
+// Register agent position for animation routing
+const agentNode = cluster.nodes.get(agentKey)!
+cluster.agentPositionMap.set(agentId, {
+  x: agentNode.x,
+  y: agentNode.y
 })
 ```
 
-- [ ] **Step 4: Test with single agent spawn**
-
-Start the dev server and spawn an agent. Verify no console errors:
+- [ ] **Step 3: Test with single agent spawn**
 
 ```bash
 npm run dev
 # Open http://localhost:5173
-# Trigger an agent spawn (via Claude Code session)
+# In Claude Code: trigger agent spawn
+# Check F12 console for any errors
 ```
 
-Check browser console (F12) for any errors related to agentSessionMap.
+Expected: No errors, map is populated.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add client/src/canvas/PixiScene.tsx
-git commit -m "feat: register agent sessions in agentSessionMap on spawn"
+git add client/src/store.ts
+git commit -m "feat: register agent positions in agentPositionMap on spawn"
 ```
 
 ---
@@ -191,36 +179,38 @@ git commit -m "feat: register agent sessions in agentSessionMap on spawn"
 ### Task 4: Update Agent Positions Each Frame
 
 **Files:**
-- Modify: `client/src/canvas/graph.ts` (or animation loop in PixiScene)
+- Modify: `client/src/store.ts`
 
-- [ ] **Step 1: Locate the animation frame update loop**
+- [ ] **Step 1: Locate the main animation update loop**
 
-Find where agent node positions are updated each frame (orbital animation loop). Should be in the main update function.
+In `store.ts`, find the main update/animation loop where nodes are updated per-frame. This should be around line 530-600 where orbital mechanics are computed.
 
-- [ ] **Step 2: Add position sync after agent orbital update**
+- [ ] **Step 2: Sync agent positions after orbital update**
 
-After agent node position is updated in the orbital animation, sync to agentSessionMap:
+For each agent node updated in the loop, sync its position to the map. Find where agent nodes are iterated and add:
 
 ```typescript
-// Sync agent position to animation routing map
-if (cluster.agentSessionMap.has(agentNode.sessionId)) {
-  const info = cluster.agentSessionMap.get(agentNode.sessionId)!
-  info.position = {x: agentNode.x, y: agentNode.y}
-  info.angle = agentNode.orbitAngle
+// Sync agent position to animation routing map each frame
+if (node.nodeType === 'agent') {
+  const agentId = node.key.replace('agent:', '')  // extract ID from key
+  cluster.agentPositionMap.set(agentId, {
+    x: node.x,
+    y: node.y
+  })
 }
 ```
 
-Do this for each agent node in the cluster.
+This keeps the map current as agents orbit.
 
-- [ ] **Step 3: Verify no performance impact**
+- [ ] **Step 3: Performance check**
 
-The lookup and assignment are O(1). Should have no measurable impact.
+The assignment is O(1) and happens once per agent per frame. With <10 agents, this is negligible.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add client/src/canvas/graph.ts
-git commit -m "feat: sync agent node positions to agentSessionMap each frame"
+git add client/src/store.ts
+git commit -m "feat: sync agent positions to agentPositionMap each frame"
 ```
 
 ---
@@ -232,7 +222,7 @@ git commit -m "feat: sync agent node positions to agentSessionMap each frame"
 
 - [ ] **Step 1: Locate projectile rendering code**
 
-Find the projectile loop around line 445:
+Find the projectile loop around line 445 in `renderer.ts`:
 
 ```typescript
 for (const p of projectiles) {
@@ -243,38 +233,38 @@ for (const p of projectiles) {
 
 - [ ] **Step 2: Import getAnimationOrigin**
 
-At the top of renderer.ts, add:
+At the top of renderer.ts, add the import:
 
 ```typescript
 import { getAnimationOrigin } from '../store'
 ```
 
-- [ ] **Step 3: Compute origin dynamically**
+- [ ] **Step 3: Compute origin from agent or core**
 
-Replace the hardcoded origin (`ox`, `oy`) with a dynamic lookup:
+Replace the hardcoded `ox`, `oy` extraction. Change from:
 
 ```typescript
-for (const p of projectiles) {
-  const [r, g, b] = hexToRgb(p.colorHex)
-
-  // Get origin: agent star if action from agent, otherwise core
-  const origin = getAnimationOrigin(p.cluster, p.sessionId)
-  const ox = origin.x, oy = origin.y
-
-  const nx = p.node.x, ny = p.node.y
-  const from = p.inbound ? { x: nx, y: ny } : { x: ox, y: oy }
-  const to   = p.inbound ? { x: ox, y: oy } : { x: nx, y: ny }
-  _drawProjectile(ctx, p.tool, p.progress, from, to, r, g, b, t)
-}
+const ox = p.cluster.centerX, oy = p.cluster.centerY
 ```
+
+To:
+
+```typescript
+// Get origin: agent star if action from agent, otherwise core
+const origin = getAnimationOrigin(p.cluster, (p as any).agentId || null)
+const ox = origin.x, oy = origin.y
+```
+
+The rest of the projectile loop stays the same.
 
 - [ ] **Step 4: Test visual rendering**
 
 ```bash
 npm run dev
 # Open http://localhost:5173
-# Spawn agent and run tools
-# Observe: animations should originate from agent star, not core
+# Spawn agent and have it run tools (Bash, Read, etc)
+# Observe: animations originate from agent star (orbiting), not core
+# Core operations still originate from blue core
 ```
 
 - [ ] **Step 5: Commit**
@@ -289,91 +279,53 @@ git commit -m "feat: route animation origins through getAnimationOrigin"
 ### Task 6: Clean Up on Agent Termination
 
 **Files:**
-- Modify: `client/src/canvas/PixiScene.tsx` (or SubagentStop handler)
+- Modify: `client/src/store.ts`
 
-- [ ] **Step 1: Locate SubagentStop event handling**
+- [ ] **Step 1: Locate SubagentStop handler**
 
-Find where `SubagentStop` events are processed and agent nodes are removed.
-
-- [ ] **Step 2: Add cleanup after agent removal**
-
-After the agent node is removed from `cluster.nodes`, add:
+In `store.ts`, find the SubagentStop handler (line 455-467):
 
 ```typescript
-// Unregister agent session from animation routing
-cluster.agentSessionMap.delete(agentSessionId)
+if (event.hook_event_name === 'SubagentStop') {
+  const agentId = event.agent_id || `${event.session_id}-sub`
+  const agentKey = `agent:${agentId}`
+  const agentNode = cluster.nodes.get(agentKey)
+  if (agentNode) {
+    agentNode.life = 0.08  // fade out
+  }
+}
 ```
 
-This ensures that when an agent terminates:
-1. Agent star disappears from visualization (already handled)
-2. Agent session mapping is cleaned up (new)
-3. Future animations won't try to route to a non-existent agent
+- [ ] **Step 2: Add position map cleanup**
+
+After the agent node's life is set to fade (line 461), add:
+
+```typescript
+// Clean up position map immediately so no new animations route to this agent
+cluster.agentPositionMap.delete(agentId)
+```
+
+This removes the agent from routing as soon as it terminates, even though the visual star is still fading out.
 
 - [ ] **Step 3: Test agent termination**
 
 ```bash
 npm run dev
-# Spawn agent, run tools
-# Wait for agent to complete
-# Verify: agent star disappears AND no console errors
+# Spawn agent, have it run tools
+# Let agent complete and terminate
+# Verify: no console errors, agent star fades naturally
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add client/src/canvas/PixiScene.tsx
-git commit -m "feat: clean up agentSessionMap on agent termination"
-```
-
----
-
-### Task 7: Handle Edge Cases — Orphaned Entries
-
-**Files:**
-- Modify: `client/src/store.ts`
-
-- [ ] **Step 1: Add cleanup helper**
-
-Add this function to `store.ts`:
-
-```typescript
-/**
- * Remove orphaned agent entries from the map.
- * Call this periodically or when a cluster's nodes change.
- */
-export function cleanupOrphanedAgents(cluster: Cluster): void {
-  const validSessionIds = new Set<string>()
-
-  // Collect all agent session IDs that have active nodes
-  for (const node of cluster.nodes.values()) {
-    if (node.nodeType === 'agent') {
-      validSessionIds.add(node.sessionId || '')
-    }
-  }
-
-  // Remove entries for agents that no longer have nodes
-  for (const sessionId of cluster.agentSessionMap.keys()) {
-    if (!validSessionIds.has(sessionId)) {
-      cluster.agentSessionMap.delete(sessionId)
-    }
-  }
-}
-```
-
-- [ ] **Step 2: Call cleanup in update loop (optional)**
-
-This is defensive; cleanup should happen naturally via Task 6. Only add if issues arise during testing.
-
-- [ ] **Step 3: Commit**
-
-```bash
 git add client/src/store.ts
-git commit -m "feat: add cleanupOrphanedAgents helper for consistency"
+git commit -m "feat: clean up agentPositionMap on agent termination"
 ```
 
 ---
 
-### Task 8: Manual Visual Testing
+### Task 7: Manual Visual Testing
 
 **Files:**
 - None (integration testing)
@@ -424,7 +376,7 @@ git commit --allow-empty -m "test: verified agent animation routing across scena
 
 ---
 
-### Task 9: Performance Verification
+### Task 8: Performance Verification (Optional)
 
 **Files:**
 - None (profiling)
@@ -458,7 +410,7 @@ git commit --allow-empty -m "perf: verified no regression with concurrent agents
 
 ---
 
-### Task 10: Final Integration & Cleanup
+### Task 9: Final Integration & Cleanup
 
 **Files:**
 - Review: all modified files
@@ -487,7 +439,7 @@ Create a summary commit:
 
 ```bash
 git log --oneline -10
-# Should see commits from Tasks 1-9
+# Should see commits from Tasks 1-6 plus testing
 ```
 
 - [ ] **Step 4: Done**
@@ -507,8 +459,9 @@ All tasks complete. Agent animation routing is implemented and tested.
 
 ## Notes
 
-- Agent stars already spawn in the orbit ring (pre-existing feature)
-- Session IDs are globally unique (sourced from Claude Code hooks)
+- Agent stars already spawn in the orbit ring (pre-existing feature, line 416-450 store.ts)
+- Agent IDs are extracted from SubagentStart hook: `event.agent_id || "${event.session_id}-sub"`
 - Map entries are ephemeral (in-memory only, no persistence)
 - Animations still reach the same core ring destinations
 - No changes to animation effects, colors, or timing
+- Projectile type needs verification: check if agentId is populated in hook data when agents execute tools
