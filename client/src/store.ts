@@ -364,6 +364,8 @@ export function createStore() {
         label,
         centerX: pos.x,
         centerY: pos.y,
+        targetRadius: 400,     // will be computed dynamically
+        currentRadius: 400,    // will interpolate to targetRadius
         nodes: new Map(),
         edges: [],
         stopping: false,
