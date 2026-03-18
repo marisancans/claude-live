@@ -33,6 +33,50 @@ export function layoutClusters(clusters: Map<string, Cluster>) {
   })
 }
 
+/**
+ * Compute target radius for each cluster based on size relative to neighbors.
+ * Large clusters orbit farther out, small clusters orbit closer in.
+ */
+function computeClusterRadii(clusters: Map<string, Cluster>): void {
+  const BASE_RADIUS = 400
+  const SCALE_FACTOR = 1.2
+  const DAMPING = 0.05
+
+  const clusterArray = Array.from(clusters.values())
+
+  for (const cluster of clusterArray) {
+    // Compute this cluster's size (based on orbital rings used)
+    const lastActiveRing = Math.max(0, cluster.ringCounts.length - 1)
+    const clusterSize = lastActiveRing < 3 ? [70, 120, 175, 225][lastActiveRing] : 225
+
+    // Get all other clusters
+    const otherClusters = clusterArray.filter(c => c !== cluster)
+    let avgNeighborSize = BASE_RADIUS / 2  // fallback for single cluster
+
+    // Compute average size of neighbors
+    if (otherClusters.length > 0) {
+      const neighborSizes = otherClusters.map(c => {
+        const ring = Math.max(0, c.ringCounts.length - 1)
+        return ring < 3 ? [70, 120, 175, 225][ring] : 225
+      })
+      avgNeighborSize = neighborSizes.reduce((a, b) => a + b, 0) / neighborSizes.length
+    }
+
+    // Size delta (clamped to prevent extreme values)
+    const delta = Math.max(-100, Math.min(100, clusterSize - avgNeighborSize))
+
+    // Target radius (clamped to 60%-200% of BASE_RADIUS)
+    const target = Math.max(
+      BASE_RADIUS * 0.6,
+      Math.min(BASE_RADIUS * 2.0, BASE_RADIUS + delta * SCALE_FACTOR)
+    )
+
+    // Update target and smoothly interpolate current toward target
+    cluster.targetRadius = target
+    cluster.currentRadius += (cluster.targetRadius - cluster.currentRadius) * DAMPING
+  }
+}
+
 export function tickSimulation(clusters: Map<string, Cluster>) {
   for (const cluster of clusters.values()) {
     // Decay animation states
