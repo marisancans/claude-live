@@ -51,6 +51,7 @@ export interface GraphNode {
   orbitRing: number     // 0, 1, or 2
   orbitAngle: number    // current angle in radians
   orbitSpeed: number    // radians per frame
+  targetOrbitAngle?: number // for smooth redistribution transitions
 
   // Ephemeral fields (non-file nodes)
   orbitRadius: number   // distance from cluster center

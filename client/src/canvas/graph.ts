@@ -28,8 +28,26 @@ export function layoutClusters(clusters: Map<string, Cluster>) {
 export function tickSimulation(clusters: Map<string, Cluster>) {
   for (const cluster of clusters.values()) {
     for (const node of cluster.nodes.values()) {
-      // Advance orbit angle
-      node.orbitAngle += node.orbitSpeed
+      // Smooth transition to target angle (if being redistributed)
+      if (node.targetOrbitAngle !== undefined) {
+        const diff = node.targetOrbitAngle - node.orbitAngle
+        // Normalize difference to -π to π range
+        const normalizedDiff = Math.atan2(Math.sin(diff), Math.cos(diff))
+        // Smoothly interpolate toward target with easing
+        node.orbitAngle += normalizedDiff * 0.08 // 8% per frame = ~0.5s transition
+        // Clear stale trail stamps during transition
+        if (Math.abs(normalizedDiff) > 0.01) {
+          node.marks = []
+        }
+        // Stop transitioning when close enough
+        if (Math.abs(normalizedDiff) < 0.01) {
+          node.orbitAngle = node.targetOrbitAngle
+          delete node.targetOrbitAngle
+        }
+      } else {
+        // Normal orbit advancement
+        node.orbitAngle += node.orbitSpeed
+      }
       node.x = cluster.centerX + Math.cos(node.orbitAngle) * node.orbitRadius
       node.y = cluster.centerY + Math.sin(node.orbitAngle) * node.orbitRadius
 

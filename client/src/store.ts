@@ -55,10 +55,8 @@ export function redistributeRing(cluster: Cluster, ring: number) {
   const base = nodes[0].orbitAngle
   nodes.forEach((node, i) => {
     const newAngle = base + (i / n) * Math.PI * 2
-    if (Math.abs(newAngle - node.orbitAngle) > 0.05) {
-      node.marks = []  // clear stale trail stamps when angle jumps
-    }
-    node.orbitAngle = newAngle
+    // Set target for smooth interpolation instead of snapping
+    node.targetOrbitAngle = newAngle
   })
 }
 
