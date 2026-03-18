@@ -502,6 +502,7 @@ export function createStore() {
     // UserPromptSubmit: create PromptSnake objects with random splines
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
+      const promptText = event.prompt || ''
 
       // Split prompt into words
       const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)
