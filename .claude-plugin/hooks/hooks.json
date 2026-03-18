@@ -2,44 +2,123 @@
   "description": "claude-live hooks — forwards Claude Code events to the visualizer server",
   "hooks": {
     "SessionStart": [{
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+          "async": true
+        },
+        {
+          "type": "command",
+          "command": "bin/send-hook.sh",
+          "async": true
+        }
+      ]
+    }],
+    "InstructionsLoaded": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "WorktreeCreate": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "WorktreeRemove": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }],
     "PreToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }],
     "PostToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }],
     "Notification": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }],
     "PermissionRequest": [{
       "hooks": [{
         "type": "command",
-        "command": "curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "SubagentStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "SubagentStop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "PostToolUseFailure": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "PreCompact": [{
+      "match": { "trigger": ["manual", "auto"] },
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
+        "async": true
+      }]
+    }],
+    "PostCompact": [{
+      "match": { "trigger": ["manual", "auto"] },
+      "hooks": [{
+        "type": "command",
+        "command": "bin/send-hook.sh",
         "async": true
       }]
     }]

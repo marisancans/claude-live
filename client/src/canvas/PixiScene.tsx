@@ -4,19 +4,7 @@ import { tickSimulation } from './graph'
 import { drawScene } from './renderer'
 import { drawBackground } from './background'
 import { nodeKeyFor } from '../store'
-
-const TOOL_COLOR_HEX: Record<string, string> = {
-  Read: '#4ade80', Edit: '#60a5fa', Write: '#60a5fa',
-  Bash: '#f59e0b', Grep: '#a78bfa', Glob: '#a78bfa',
-  WebFetch: '#f472b6', Stop: '#888888', Notification: '#34d399',
-  PermissionRequest: '#fbbf24', UserPromptSubmit: '#38bdf8',
-}
-
-function desaturate(hex: string): string {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-  const mr = Math.round(r*0.3 + 190*0.7), mg = Math.round(g*0.3 + 190*0.7), mb = Math.round(b*0.3 + 190*0.7)
-  return `#${mr.toString(16).padStart(2,'0')}${mg.toString(16).padStart(2,'0')}${mb.toString(16).padStart(2,'0')}`
-}
+import { TOOL_COLOR_HEX, desaturate, ORBIT_RADII } from '../constants'
 
 interface Props {
   clusters: Map<string, Cluster>
@@ -26,18 +14,29 @@ interface Props {
   autofitEnabled: boolean
 }
 
-const ORBITAL_EXTENT = 175 // Max radius of orbiting nodes (ORBIT_RADII[2])
-
 function calculateClusterBounds(clusters: Map<string, Cluster>) {
   let minX = Infinity, maxX = -Infinity
   let minY = Infinity, maxY = -Infinity
 
   for (const cluster of clusters.values()) {
-    const ext = ORBITAL_EXTENT
-    minX = Math.min(minX, cluster.centerX - ext)
-    maxX = Math.max(maxX, cluster.centerX + ext)
-    minY = Math.min(minY, cluster.centerY - ext)
-    maxY = Math.max(maxY, cluster.centerY + ext)
+    // Calculate max radius for this cluster based on active rings
+    let maxR = ORBIT_RADII[0]
+    for (let ri = 4; ri >= 0; ri--) {
+      if (cluster.ringSpawnProgress[ri] > 0) {
+        maxR = ORBIT_RADII[ri]
+        break
+      }
+    }
+    // Add margin for node radius and trails
+    const ext = maxR + 20
+
+    // Use target positions for accurate bounds of where clusters are moving to
+    const cx = cluster.targetCenterX ?? cluster.centerX
+    const cy = cluster.targetCenterY ?? cluster.centerY
+    minX = Math.min(minX, cx - ext)
+    maxX = Math.max(maxX, cx + ext)
+    minY = Math.min(minY, cy - ext)
+    maxY = Math.max(maxY, cy + ext)
   }
 
   // Add padding in world coordinates
@@ -90,6 +89,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   const selectedNodeRef = useRef<GraphNode | null>(null)
   const tRef = useRef(0)
   const rafRef = useRef<number>(0)
+  const autofitEnabledRef = useRef(autofitEnabled)
+  autofitEnabledRef.current = autofitEnabled
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -101,6 +102,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       canvas.width = W * DPR; canvas.height = H * DPR
       canvas.style.width = W + 'px'; canvas.style.height = H + 'px'
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+      // Force bounds recalculation on window resize
+      lastBboxUpdateTime = 0
     }
     resize()
     window.addEventListener('resize', resize)
@@ -220,7 +223,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       }
 
       // Auto-fit camera if enabled
-      if (autofitEnabled && clustersRef.current.size > 0) {
+      if (autofitEnabledRef.current && clustersRef.current.size > 0) {
         const now = Date.now()
 
         // Update blend factor based on interaction
@@ -232,7 +235,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
           blendFactor = Math.min(1.0, timeSinceInteraction / 800)
         }
 
-        // Debounce bounding box calculation (~100ms)
+        // Debounce bounding box calculation (~100ms) but always update when bounds changed
         if (now - lastBboxUpdateTime > 100) {
           const bounds = calculateClusterBounds(clustersRef.current)
           const target = calculateCameraTarget(bounds, W, H)
@@ -251,6 +254,9 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
 
           lastBboxUpdateTime = now
         }
+      } else if (!autofitEnabledRef.current) {
+        // When auto-fit is disabled, user retains full pan/zoom control
+        // (no automatic camera updates)
       }
 
       // Clear

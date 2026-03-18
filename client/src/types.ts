@@ -86,13 +86,16 @@ export interface Cluster {
   label: string
   centerX: number
   centerY: number
+  targetCenterX: number
+  targetCenterY: number
   nodes: Map<string, GraphNode>
   edges: Array<{ fromKey: string; toKey: string; color: number; colorHex: string; age: number }>
   stopping: boolean
   lastFileKey: string | null
   parentSessionId: string | null
   // Orbit ring assignment state
-  ringCounts: [number, number, number]
+  ringCounts: [number, number, number, number, number]
+  ringSpawnProgress: [number, number, number, number, number]
   // Base angle on the global layout circle (set at creation, used for repulsion)
   layoutAngle: number
   // Agent/subagent
@@ -102,6 +105,8 @@ export interface Cluster {
   compacting: number
   // Post-compaction hold state (1.0 → 0.0)
   compacted: number
+  // Timestamp of last received event (ms), used for stale session detection
+  lastEventTime: number
 }
 
 // Ripple (kept for compatibility, not used in solar renderer)

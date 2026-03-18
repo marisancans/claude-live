@@ -1,27 +1,41 @@
 import type { Cluster } from '../types'
 import { redistributeRing } from '../store'
+import { ORBIT_RADII, CANVAS_W, CANVAS_H } from '../constants'
 
-const ORBIT_RADII = [70, 120, 175]
 const MARK_PX_SPACING = 5   // pixels between stamp centers (uniform across all rings)
 const MARK_MAX = 12         // half trail length
 
-const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
-const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
-
-// Place all clusters instantly on a circle with guaranteed spacing — no physics
+// Place all clusters on a circle with dynamic spacing based on active ring radii
 export function layoutClusters(clusters: Map<string, Cluster>) {
   const arr = [...clusters.values()]
   if (arr.length === 0) return
   const N = arr.length
-  const SPACING = 380
+
+  // Dynamic spacing from max active radius
+  let maxActiveR = ORBIT_RADII[0]
+  for (const cluster of arr) {
+    for (let ri = 4; ri >= 0; ri--) {
+      if (cluster.ringSpawnProgress[ri] > 0) {
+        if (ORBIT_RADII[ri] > maxActiveR) maxActiveR = ORBIT_RADII[ri]
+        break
+      }
+    }
+  }
+  const SPACING = 2 * maxActiveR + 20
   const r = N === 1 ? 0 : SPACING / (2 * Math.sin(Math.PI / N))
   const cx = CANVAS_W / 2, cy = CANVAS_H / 2
+
   arr.forEach((cluster, i) => {
     const angle = (i / N) * Math.PI * 2 - Math.PI / 2
-    cluster.centerX = cx + Math.cos(angle) * r
-    cluster.centerY = cy + Math.sin(angle) * r
+    const wasAtTarget = cluster.centerX === cluster.targetCenterX && cluster.centerY === cluster.targetCenterY
+    cluster.targetCenterX = cx + Math.cos(angle) * r
+    cluster.targetCenterY = cy + Math.sin(angle) * r
     cluster.layoutAngle = angle
+    if (wasAtTarget) {  // snap new clusters immediately
+      cluster.centerX = cluster.targetCenterX
+      cluster.centerY = cluster.targetCenterY
+    }
   })
 }
 
@@ -30,6 +44,18 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
     // Decay compacting animation state
     cluster.compacting = Math.max(0, cluster.compacting - 0.0003)
     cluster.compacted = Math.max(0, cluster.compacted - 0.0005)
+
+    // Advance ring spawn animations
+    for (let ri = 0; ri < 5; ri++) {
+      const p = cluster.ringSpawnProgress[ri]
+      if (p > 0 && p < 1) {
+        cluster.ringSpawnProgress[ri] = Math.min(1, p + 0.004)
+      }
+    }
+
+    // Lerp cluster center toward target position for smooth repositioning
+    cluster.centerX += (cluster.targetCenterX - cluster.centerX) * 0.025
+    cluster.centerY += (cluster.targetCenterY - cluster.centerY) * 0.025
 
     for (const node of cluster.nodes.values()) {
       // Smooth transition to target angle (if being redistributed)

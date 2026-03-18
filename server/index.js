@@ -6,7 +6,8 @@ import { join, dirname } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(__dirname, '../client/dist')
-const BUFFER_SIZE = 100
+const EVENTS_PER_SESSION = 50  // rolling buffer per session
+const SESSION_TIMEOUT_MS = 11 * 60 * 1000  // 11 minutes (server-side cleanup)
 const HEARTBEAT_MS = 15000
 
 function makeSessionId(ip, ts) {
@@ -49,7 +50,23 @@ function normalizeEvent(raw, remoteIp) {
 export function createServer({ port = 43451 } = {}) {
   const app = express()
   const clients = new Set()
-  const buffer = [] // rolling 100-event buffer
+  const sessionBuffers = new Map()  // session_id -> { events: [], lastEventTime: number }
+
+  function getOrCreateSession(sessionId) {
+    if (!sessionBuffers.has(sessionId)) {
+      sessionBuffers.set(sessionId, { events: [], lastEventTime: Date.now() })
+    }
+    return sessionBuffers.get(sessionId)
+  }
+
+  function cleanupStaleSessions() {
+    const now = Date.now()
+    for (const [sid, session] of sessionBuffers) {
+      if (now - session.lastEventTime > SESSION_TIMEOUT_MS) {
+        sessionBuffers.delete(sid)
+      }
+    }
+  }
 
   app.use(express.json())
 
@@ -57,8 +74,11 @@ export function createServer({ port = 43451 } = {}) {
     const raw = req.body
     if (!raw || typeof raw !== 'object') return res.status(400).json({ error: 'invalid json' })
     const event = normalizeEvent(raw, req.ip)
-    buffer.push(event)
-    if (buffer.length > BUFFER_SIZE) buffer.shift()
+    const session = getOrCreateSession(event.session_id)
+    session.events.push(event)
+    session.lastEventTime = Date.now()
+    if (session.events.length > EVENTS_PER_SESSION) session.events.shift()
+
     const data = `data: ${JSON.stringify(event)}\n\n`
     for (const client of clients) {
       try { client.write(data) } catch { clients.delete(client) }
@@ -71,9 +91,11 @@ export function createServer({ port = 43451 } = {}) {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
-    // replay buffer
-    for (const event of buffer) {
-      res.write(`data: ${JSON.stringify(event)}\n\n`)
+    // replay all events from all sessions
+    for (const session of sessionBuffers.values()) {
+      for (const event of session.events) {
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      }
     }
     res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`)
     clients.add(res)
@@ -84,8 +106,17 @@ export function createServer({ port = 43451 } = {}) {
     res.on('error', () => { clients.delete(res); clearInterval(heartbeat) })
   })
 
-  // expose buffer for tests
-  app.get('/buffer', (req, res) => res.json(buffer))
+  // expose session buffers for tests
+  app.get('/buffer', (req, res) => {
+    const allEvents = []
+    for (const session of sessionBuffers.values()) {
+      allEvents.push(...session.events)
+    }
+    res.json(allEvents)
+  })
+
+  // cleanup stale sessions periodically
+  setInterval(cleanupStaleSessions, 60000)
 
   // serve static build
   app.use(express.static(DIST_DIR))

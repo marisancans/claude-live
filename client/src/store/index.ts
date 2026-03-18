@@ -1,217 +1,28 @@
-import type { RawEvent, GraphNode, Cluster } from './types'
+import type { RawEvent, GraphNode, Cluster } from '../types'
+import {
+  ORBIT_RADII,
+  ORBIT_SPEEDS,
+  RING_CAPACITY,
+  MAX_CLUSTERS,
+  TOOL_COLOR_HEX,
+  DEFAULT_HEX,
+  desaturate,
+  hexToInt,
+  radialJitter,
+} from '../constants'
+import { nodeKeyFor, labelFor, enrichedLabel, nodeTypeFor } from './nodeKeys'
+import { redistributeRing, clusterPosition } from './orbitLayout'
 
-function shortHash(s: string): string {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i)
-  return (h >>> 0).toString(16).slice(0, 8)
-}
-
-// Small deterministic radial offset per node so trails on the same ring don't overlap
-function radialJitter(key: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193)
-  return ((h >>> 0) % 15) - 7  // -7 to +7 px
-}
-
-const BUFFER_SIZE = 100
-const MAX_CLUSTERS = 6
-
-const TOOL_COLOR_HEX: Record<string, string> = {
-  Read:         '#4ade80',
-  Edit:         '#60a5fa',
-  Write:        '#60a5fa',
-  Bash:         '#f59e0b',
-  Grep:         '#a78bfa',
-  Glob:         '#a78bfa',
-  WebFetch:     '#f472b6',
-  Stop:         '#888888',
-  Notification: '#34d399',
-}
-const DEFAULT_HEX = '#555555'
-
-// Desaturate toward white — same formula as mockup
-function desaturate(hex: string): string {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-  const mr = Math.round(r*0.3 + 190*0.7), mg = Math.round(g*0.3 + 190*0.7), mb = Math.round(b*0.3 + 190*0.7)
-  return `#${mr.toString(16).padStart(2,'0')}${mg.toString(16).padStart(2,'0')}${mb.toString(16).padStart(2,'0')}`
-}
-
-function hexToInt(hex: string): number {
-  return parseInt(hex.replace('#',''), 16)
-}
-
-const ORBIT_RADII = [70, 120, 175]
-const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006]
-
-const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
-const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
-
-export function redistributeRing(cluster: Cluster, ring: number) {
-  const nodes = [...cluster.nodes.values()]
-    .filter(n => n.orbitRing === ring)
-    .sort((a, b) => a.orbitAngle - b.orbitAngle)
-  const n = nodes.length
-  if (n === 0) return
-  const base = nodes[0].orbitAngle
-  nodes.forEach((node, i) => {
-    const newAngle = base + (i / n) * Math.PI * 2
-    // Set target for smooth interpolation instead of snapping
-    node.targetOrbitAngle = newAngle
-  })
-}
-
-export function nodeKeyFor(event: RawEvent): string | null {
-  const t = event.tool_name
-  if (!t) {
-    if (event.hook_event_name === 'Stop') return 'session:stop'
-    if (event.hook_event_name === 'Notification') {
-      const msg = (event.tool_input as Record<string, string> | null)?.message || ''
-      return `notification:${msg.slice(0, 20)}`
-    }
-    if (event.hook_event_name === 'PermissionRequest') return null // handled at cluster level
-    return null
-  }
-  const input = event.tool_input as Record<string, string> | null
-  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t)) {
-    const fp = input?.file_path || input?.path || null
-    return fp ? `file:${fp}` : null
-  }
-  if (t === 'Bash') {
-    const cmd = input?.command || ''
-    return `bash:${cmd}`
-  }
-  if (t === 'WebFetch') {
-    try { return `web:${new URL(input?.url || '').hostname}` } catch { return 'web:unknown' }
-  }
-  return `tool:${t}`
-}
-
-// Shorten MCP tool names: mcp__plugin_foo__bar__action → action
-function shortToolName(name: string): string {
-  if (name.startsWith('mcp_')) {
-    const parts = name.split('__')
-    return parts[parts.length - 1].replace(/_/g, ' ')
-  }
-  return name
-}
-
-function labelFor(event: RawEvent): string {
-  const t = event.tool_name
-  const input = event.tool_input as Record<string, string> | null
-  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t || '')) {
-    const fp = input?.file_path || input?.path || ''
-    return fp.split('/').pop() || fp
-  }
-  if (t === 'Bash') return `$ ${(input?.command || '').slice(0, 22)}`
-  if (t === 'WebFetch') { try { return `↗ ${new URL(input?.url || '').hostname}` } catch { return '↗ web' } }
-  if (event.hook_event_name === 'Stop') return '✓ done'
-  if (event.hook_event_name === 'Notification') {
-    const msg = (event.tool_input as Record<string, string> | null)?.message || 'notification'
-    return msg.slice(0, 24)
-  }
-  if (t && t.startsWith('mcp_')) return shortToolName(t).slice(0, 20)
-  return t || event.hook_event_name || '?'
-}
-
-// Generate enriched action label with stats from tool_input/tool_response
-function enrichedLabel(event: RawEvent, latency?: string): string {
-  const t = event.tool_name || event.hook_event_name || '?'
-  const input = event.tool_input as Record<string, any> | null
-  const resp = event.tool_response as Record<string, any> | null
-  const short = t.startsWith('mcp_') ? shortToolName(t).slice(0, 14) : t
-  const suffix = latency ? ` ${latency}` : ''
-
-  // Handle is_interrupt for PostToolUseFailure
-  if (event.hook_event_name === 'PostToolUseFailure' && event.is_interrupt) {
-    return `⏹ interrupted${suffix}`
-  }
-
-  if (event.hook_event_name === 'PostToolUse' && resp) {
-    // Enrich with response data
-    if (t === 'Bash') {
-      const code = resp.exitCode ?? resp.exit_code ?? resp.code
-      if (code !== undefined && code !== null) return code === 0 ? `${short} ✓${suffix}` : `${short} ✗ ${code}${suffix}`
-    }
-    if (t === 'Grep') {
-      const count = resp.count ?? resp.numMatches ?? resp.total
-      if (count !== undefined) return `${short} ${count} hits${suffix}`
-    }
-    if (t === 'Glob') {
-      const files = Array.isArray(resp) ? resp.length : (resp.files?.length ?? resp.count)
-      if (files !== undefined) return `${short} ${files} files${suffix}`
-    }
-  }
-
-  if (input) {
-    if (t === 'Edit') {
-      const ns = (input.new_string || '') as string
-      const os = (input.old_string || '') as string
-      const added = ns.split('\n').length
-      const removed = os.split('\n').length
-      if (added !== removed) return `${short} +${added} -${removed}${suffix}`
-      return `${short} ${added}L${suffix}`
-    }
-    if (t === 'Write') {
-      const content = (input.content || '') as string
-      const lines = content.split('\n').length
-      return `${short} ${lines}L${suffix}`
-    }
-    if (t === 'Read') {
-      const limit = input.limit
-      const offset = input.offset
-      if (offset) return `${short} @${offset}${suffix}`
-      if (limit) return `${short} ${limit}L${suffix}`
-    }
-    if (t === 'Bash') {
-      const cmd = (input.command || '') as string
-      const first = cmd.split(/\s+/)[0]?.split('/').pop() || ''
-      return `$ ${first}${suffix}`
-    }
-    if (t === 'Grep') {
-      return `${short} /${(input.pattern || '').toString().slice(0, 10)}/${suffix}`
-    }
-  }
-
-  return short + suffix
-}
-
-function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
-  const t = event.tool_name
-  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t || '')) return 'file'
-  if (t === 'Bash') return 'bash'
-  if (t === 'WebFetch') return 'web'
-  if (event.hook_event_name === 'Stop') return 'stop'
-  if (event.hook_event_name === 'Notification') return 'notification'
-  return 'tool'
-}
-
-// Minimum distance between cluster centers (outermost orbit ~340px radius each side)
-const MIN_CLUSTER_DIST = 720
-
-function clusterPosition(index: number, existing: { centerX: number; centerY: number }[]): { x: number; y: number } {
-  // Try evenly-spaced angles first, then nudge if too close
-  const candidates = 24 // angular candidates to try
-  for (let attempt = 0; attempt < candidates; attempt++) {
-    const angle = ((index + attempt / candidates) / Math.max(MAX_CLUSTERS, 1)) * Math.PI * 2
-    // Scale radius so clusters fit: for N clusters on a circle, chord = 2r*sin(π/N) >= MIN_DIST
-    const minR = (MIN_CLUSTER_DIST / 2) / Math.sin(Math.PI / Math.max(MAX_CLUSTERS, 2))
-    const r = Math.max(minR, Math.min(CANVAS_W, CANVAS_H) * 0.38)
-    const x = CANVAS_W / 2 + Math.cos(angle) * r
-    const y = CANVAS_H / 2 + Math.sin(angle) * r
-    const tooClose = existing.some(c => Math.hypot(c.centerX - x, c.centerY - y) < MIN_CLUSTER_DIST)
-    if (!tooClose) return { x, y }
-  }
-  // Fallback: just use evenly spaced
-  const angle = (index / Math.max(MAX_CLUSTERS, 1)) * Math.PI * 2
-  const r = Math.min(CANVAS_W, CANVAS_H) * 0.38
-  return { x: CANVAS_W / 2 + Math.cos(angle) * r, y: CANVAS_H / 2 + Math.sin(angle) * r }
-}
+// Re-exports for backward compatibility
+export { nodeKeyFor } from './nodeKeys'
+export { redistributeRing } from './orbitLayout'
 
 export function createStore() {
-  const buffer: RawEvent[] = []
+  const buffer: RawEvent[] = []  // transient buffer for visualization only
   const sessions = new Map<string, Cluster>()
   const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
   let replayDone = false
+  const MAX_BUFFER_SIZE = 500  // keep some history for visualization, server enforces session limits
 
   function recomputeAges() {
     const lastIndex = new Map<string, Map<string, number>>()
@@ -226,7 +37,8 @@ export function createStore() {
       const sMap = lastIndex.get(sid)
       for (const [key, node] of cluster.nodes) {
         if (!sMap?.has(key)) {
-          if (node.nodeType !== 'file') {
+          // Only fade out non-file nodes if the cluster is stopping
+          if (cluster.stopping && node.nodeType !== 'file') {
             node.life = Math.min(node.life, 0.15) // start fade-out
           }
           continue
@@ -247,7 +59,7 @@ export function createStore() {
 
   function addEvent(event: RawEvent) {
     buffer.push(event)
-    if (buffer.length > BUFFER_SIZE) buffer.shift()
+    if (buffer.length > MAX_BUFFER_SIZE) buffer.shift()
 
     if (!sessions.has(event.session_id)) {
       if (sessions.size >= MAX_CLUSTERS) {
@@ -295,17 +107,21 @@ export function createStore() {
         label,
         centerX: pos.x,
         centerY: pos.y,
+        targetCenterX: pos.x,
+        targetCenterY: pos.y,
         nodes: new Map(),
         edges: [],
         stopping: false,
         lastFileKey: null,
         parentSessionId,
-        ringCounts: [0, 0, 0] as [number, number, number],
+        ringCounts: [0, 0, 0, 0, 0] as [number, number, number, number, number],
+        ringSpawnProgress: [1.0, 0.0, 0.0, 0.0, 0.0] as [number, number, number, number, number],
         layoutAngle,
         isChild,
         childIndex,
         compacting: 0,
         compacted: 0,
+        lastEventTime: Date.now(),
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)
@@ -313,11 +129,14 @@ export function createStore() {
         ORBIT_SPEEDS[0] * (1 + (rj + 3) / 7 * 0.2),
         ORBIT_SPEEDS[1] * (1 + (rj - 1) / 7 * 0.2),
         ORBIT_SPEEDS[2] * (1 + (rj + 5) / 7 * 0.2),
+        ORBIT_SPEEDS[3] * (1 + (rj + 2) / 7 * 0.2),
+        ORBIT_SPEEDS[4] * (1 + (rj - 3) / 7 * 0.2),
       ]
       sessions.set(event.session_id, c)
     }
 
     const cluster = sessions.get(event.session_id)!
+    cluster.lastEventTime = Date.now()
     ;(cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
 
     // Update cluster label from cwd or file paths (better than hash)
@@ -362,7 +181,9 @@ export function createStore() {
 
     // SubagentStart: spawn satellite node orbiting close to core
     if (event.hook_event_name === 'SubagentStart') {
-      const agentId = event.agent_id || `${event.session_id}-sub`
+      // Use agent_id if available, otherwise generate unique key from existing count
+      const existingAgents = [...cluster.nodes.keys()].filter(k => k.startsWith('agent:')).length
+      const agentId = event.agent_id || `${event.session_id}-sub-${existingAgents}`
       const agentKey = `agent:${agentId}`
       if (!cluster.nodes.has(agentKey)) {
         const angle = Math.random() * Math.PI * 2
@@ -401,9 +222,16 @@ export function createStore() {
 
     // SubagentStop: fade out agent satellite
     if (event.hook_event_name === 'SubagentStop') {
-      const agentId = event.agent_id || `${event.session_id}-sub`
-      const agentKey = `agent:${agentId}`
-      const agentNode = cluster.nodes.get(agentKey)
+      let agentNode: GraphNode | undefined
+      if (event.agent_id) {
+        agentNode = cluster.nodes.get(`agent:${event.agent_id}`)
+      }
+      // Fallback: find first alive agent satellite (for when agent_id is missing)
+      if (!agentNode) {
+        for (const [k, n] of cluster.nodes) {
+          if (k.startsWith('agent:') && n.life > 0.15) { agentNode = n; break }
+        }
+      }
       if (agentNode) {
         agentNode.life = 0.08
         agentNode.impactType = 'fade'
@@ -492,23 +320,25 @@ export function createStore() {
         return
       }
 
-      // Cap bash nodes at 5 per cluster — evict oldest when full
-      if (type === 'bash') {
-        const bashNodes = [...cluster.nodes.values()]
-          .filter(n => n.nodeType === 'bash')
-          .sort((a, b) => a.lastTimestamp - b.lastTimestamp)
-        while (bashNodes.length >= 5) {
-          const oldest = bashNodes.shift()!
-          if (oldest.orbitRing >= 0) {
-            cluster.ringCounts[oldest.orbitRing] = Math.max(0, cluster.ringCounts[oldest.orbitRing] - 1)
-            redistributeRing(cluster, oldest.orbitRing)
-          }
-          cluster.nodes.delete(oldest.key)
+      // Assign orbit ring (all node types use same logic)
+      let orbitRing = 0
+      for (let ri = 0; ri < 5; ri++) {
+        if (cluster.ringSpawnProgress[ri] > 0 && cluster.ringCounts[ri] < RING_CAPACITY[ri]) {
+          orbitRing = ri
+          break
         }
       }
-
-      // Bash nodes always go to outer orbit (ring 2), others to least-populated ring
-      const orbitRing = type === 'bash' ? 2 : cluster.ringCounts.indexOf(Math.min(...cluster.ringCounts))
+      // Ensure at least ring 0 is spawning
+      if (cluster.ringSpawnProgress[0] === 0) {
+        cluster.ringSpawnProgress[0] = 0.001
+      }
+      // If this ring will now be full, preemptively activate next ring
+      const nextRing = orbitRing + 1
+      if (nextRing < 5 && cluster.ringCounts[orbitRing] + 1 >= RING_CAPACITY[orbitRing]) {
+        if (cluster.ringSpawnProgress[nextRing] === 0) {
+          cluster.ringSpawnProgress[nextRing] = 0.001
+        }
+      }
       cluster.ringCounts[orbitRing]++
       // Use per-ring speed from cluster (all nodes on same ring share the same speed)
       const ringSpeeds = (cluster as any).ringSpeeds as number[] | undefined
@@ -637,10 +467,21 @@ export function createStore() {
 
   function markReplayDone() { replayDone = true }
 
+  function checkStaleSessions(thresholdMs: number) {
+    const now = Date.now()
+    for (const cluster of sessions.values()) {
+      if (!cluster.stopping && now - cluster.lastEventTime > thresholdMs) {
+        cluster.stopping = true
+        for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
+      }
+    }
+  }
+
   return {
     addEvent,
     markReplayDone,
     getBuffer: () => [...buffer],
     getSessions: () => sessions,
+    checkStaleSessions,
   }
 }
