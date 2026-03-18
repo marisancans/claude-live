@@ -1,7 +1,7 @@
 import type { Cluster, GraphNode, Projectile } from '../types'
 
 // Atomic orbital structure: dynamically grows from 1 to 4 rings
-const RING_CAPACITIES = [2, 8, 18, 22]  // sum = 50 total slots per session
+const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
 const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
 
 function hexToRgb(hex: string): [number, number, number] {

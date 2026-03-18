@@ -42,7 +42,7 @@ function hexToInt(hex: string): number {
 
 // Atomic orbital structure: each ring has progressively more slots
 // Ring capacities based on electron orbitals
-const RING_CAPACITIES = [2, 8, 18, 22]  // sum = 50 total slots per session
+const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
 const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
 const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
 
