@@ -94,6 +94,17 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       }
     }
 
+    // Update snake animations
+    if (!cluster.promptSnakes) cluster.promptSnakes = []
+
+    // Decay progress for each snake
+    for (const snake of cluster.promptSnakes) {
+      snake.progress = Math.min(1, snake.progress + 0.005)  // ~3s duration (0.005/frame * ~180 frames at 60fps)
+    }
+
+    // Remove completed snakes (progress >= 1)
+    cluster.promptSnakes = cluster.promptSnakes.filter(s => s.progress < 1)
+
     // Remove dead ephemerals and redistribute remaining nodes on affected rings
     const removedRings = new Set<number>()
     for (const [key, node] of cluster.nodes) {
