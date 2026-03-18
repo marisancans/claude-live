@@ -296,27 +296,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
     const rawHex = TOOL_COLOR_HEX[tool] ?? '#888888'
     const colorHex = desaturate(rawHex)
 
-    // UserPromptSubmit: comet flies in from random direction in outer space
-    if (tool === 'UserPromptSubmit') {
-      const angle = Math.random() * Math.PI * 2
-      const dist = 600 + Math.random() * 400 // far outside orbit rings
-      const farNode = {
-        x: cluster.centerX + Math.cos(angle) * dist,
-        y: cluster.centerY + Math.sin(angle) * dist,
-      } as GraphNode
-      projectilesRef.current.push({
-        sessionId: lastEvent.session_id,
-        cluster,
-        node: farNode,
-        inbound: true,
-        colorHex,
-        tool: 'UserPromptSubmit',
-        progress: 0,
-        duration: 2.5 + Math.random() * 0.5,
-        agentId: lastEvent.agent_id || null,
-      })
-      return
-    }
+    // UserPromptSubmit: handled by snake animation in store.ts — no projectile needed
+    if (tool === 'UserPromptSubmit') return
 
     // Notification / PermissionRequest: rings emanate from core
     if (tool === 'Notification' || tool === 'PermissionRequest') {
