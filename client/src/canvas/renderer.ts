@@ -20,47 +20,54 @@ function drawSnake(
   const [r, g, b] = hexToRgb(snake.color)
   const progress = snake.progress
 
-  // Easing: quadratic ease-out
-  const eased = 1 - (1 - progress) * (1 - progress)
+  // Constant spacing between words along the curve parameter
+  const wordSpacing = 0.12
+  // Total extra t needed so the LAST word also reaches center (t=1)
+  const tailLength = wordSpacing * (snake.words.length - 1)
 
-  // Current position on spline (0 = start, 1 = center/head position)
-  const t = eased
+  // Map progress [0,1] to head position [0, 1 + tailLength]
+  // When progress=0: head starts at t=0
+  // When progress=1: head is at t=1+tailLength, meaning tail is at t=1 (center)
+  const headT = progress * (1 + tailLength)
 
-  // All words move together, spaced backward from the head
-  const wordSpacing = 0.15  // space between consecutive words along curve
-  const fontSize = 11 * (0.6 + progress * 0.4)
+  const fontSize = 11 * (0.6 + Math.min(1, progress * 2) * 0.4)
 
   for (let i = 0; i < snake.words.length; i++) {
     const word = snake.words[i]
 
-    // All words move together maintaining constant spacing
-    // Head at progress t, each word trails by fixed distance
+    // Head is last word in array, tail is first
     const distFromHead = snake.words.length - 1 - i
-    const wordT = Math.max(0, t - wordSpacing * distFromHead)
+    const wordT = headT - wordSpacing * distFromHead
+
+    // Skip words that haven't entered the curve yet (t < 0)
+    if (wordT < 0) continue
+    // Skip words that have already passed center (t > 1) — they've been absorbed
+    if (wordT > 1) continue
+
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
     // Get tangent to rotate word along the curve direction
     const tangent = evaluateTangent(snake.splinePath, wordT)
     const angle = Math.atan2(tangent.y, tangent.x)
 
-    // Fade: words closer to head are more visible
-    // Exponential fade from head to tail
-    const visibilityFade = Math.pow(1 - distFromHead / snake.words.length, 0.7)
-    const fadeInFactor = Math.min(1, progress * 3)  // fade in quickly
-    const opacity = visibilityFade * fadeInFactor
+    // All words same opacity — fade in at start, fade out as each word approaches center
+    const fadeIn = Math.min(1, wordT * 5)           // fade in over first 20% of curve
+    const fadeOut = Math.min(1, (1 - wordT) * 5)    // fade out over last 20% of curve
+    const opacity = fadeIn * fadeOut
+
+    if (opacity <= 0.01) continue
 
     // Draw glow around word
-    const scale = 0.6 + progress * 0.4
-    const glowR = 20 * scale
+    const glowR = 18
     const gg = ctx.createRadialGradient(wordPos.x, wordPos.y, 0, wordPos.x, wordPos.y, glowR)
-    gg.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.25})`)
+    gg.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.2})`)
     gg.addColorStop(1, 'rgba(0,0,0,0)')
     ctx.beginPath()
     ctx.arc(wordPos.x, wordPos.y, glowR, 0, Math.PI * 2)
     ctx.fillStyle = gg
     ctx.fill()
 
-    // Draw word ROTATED along the curve
+    // Draw word rotated along the curve
     ctx.save()
     ctx.translate(wordPos.x, wordPos.y)
     ctx.rotate(angle)
