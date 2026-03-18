@@ -98,6 +98,10 @@ export interface Cluster {
   // Agent/subagent
   isChild: boolean
   childIndex: number  // which child of parent (0, 1, 2...)
+  // Compacting animation state (1.0 → 0.0)
+  compacting: number
+  // Post-compaction hold state (1.0 → 0.0)
+  compacted: number
 }
 
 // Ripple (kept for compatibility, not used in solar renderer)

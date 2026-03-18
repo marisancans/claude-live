@@ -304,6 +304,8 @@ export function createStore() {
         layoutAngle,
         isChild,
         childIndex,
+        compacting: 0,
+        compacted: 0,
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)

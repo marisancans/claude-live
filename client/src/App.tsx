@@ -225,6 +225,22 @@ export function App() {
             return next
           })
         }
+
+        // Trigger compacting animation on PreCompact/PostCompact events
+        if (event.hook_event_name === 'PreCompact' || event.hook_event_name === 'PostCompact') {
+          const cluster = sessions.get(event.session_id)
+          if (cluster) {
+            if (event.hook_event_name === 'PreCompact') {
+              cluster.compacting = 1
+              cluster.compacted = 0
+            } else {
+              // PostCompact: transition to the post-compaction hold state
+              cluster.compacting = 0
+              cluster.compacted = 1
+            }
+            setClusters(new Map(sessions))
+          }
+        }
       } catch { /* ignore malformed */ }
     }
     es.onerror = (err) => console.warn('[claude-live] SSE error', err)

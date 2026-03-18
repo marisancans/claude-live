@@ -27,6 +27,10 @@ export function layoutClusters(clusters: Map<string, Cluster>) {
 
 export function tickSimulation(clusters: Map<string, Cluster>) {
   for (const cluster of clusters.values()) {
+    // Decay compacting animation state
+    cluster.compacting = Math.max(0, cluster.compacting - 0.0003)
+    cluster.compacted = Math.max(0, cluster.compacted - 0.0005)
+
     for (const node of cluster.nodes.values()) {
       // Smooth transition to target angle (if being redistributed)
       if (node.targetOrbitAngle !== undefined) {
