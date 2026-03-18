@@ -102,6 +102,10 @@ export interface Cluster {
   compacting: number
   // Post-compaction hold state (1.0 → 0.0)
   compacted: number
+  // User prompt flying in animation state (1.0 → 0.0)
+  promptFlying: number
+  promptText: string
+  promptColor: string
 }
 
 // Ripple (kept for compatibility, not used in solar renderer)

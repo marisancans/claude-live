@@ -338,6 +338,9 @@ export function createStore() {
         childIndex,
         compacting: 0,
         compacted: 0,
+        promptFlying: 0,
+        promptText: '',
+        promptColor: '#38bdf8',
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)
@@ -451,13 +454,13 @@ export function createStore() {
       return
     }
 
-    // UserPromptSubmit: pulse core + show prompt snippet
+    // UserPromptSubmit: pulse core + trigger prompt flying animation
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
       const promptText = event.prompt || ''
-      ;(cluster as any).coreLabelText = promptText.slice(0, 28) + (promptText.length > 28 ? '…' : '')
-      ;(cluster as any).coreLabelFade = 1.0
-      ;(cluster as any).coreLabelColor = '#38bdf8'
+      cluster.promptText = promptText.slice(0, 40) + (promptText.length > 40 ? '…' : '')
+      cluster.promptColor = '#38bdf8'
+      cluster.promptFlying = 1.0  // Start animation
       recomputeAges()
       return
     }

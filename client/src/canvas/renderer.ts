@@ -374,6 +374,47 @@ export function drawScene(
       _drawPermRing(ctx, cx, cy, coreR + 8, t)
     }
 
+    // User prompt flying in from outer space
+    const promptFlying = cluster.promptFlying
+    if (promptFlying > 0 && cluster.promptText) {
+      const [pr, pg, pb] = hexToRgb(cluster.promptColor)
+      // Easing: fast in, slow out (inverse quadratic)
+      const eased = 1 - (1 - promptFlying) * (1 - promptFlying)
+      const progress = 1 - eased  // 0 = start (far), 1 = end (center)
+
+      // Start from edge of screen, fly toward center
+      const maxDist = Math.max(W, H) * 0.6
+      const currentDist = maxDist * (1 - progress)
+      const angle = Math.atan2(cy - H/2, cx - W/2)
+      const startX = cx + Math.cos(angle) * currentDist
+      const startY = cy + Math.sin(angle) * currentDist
+
+      // Scaling and opacity
+      const scale = 0.6 + progress * 0.4  // grows from 0.6 → 1.0
+      const opacity = Math.min(1, promptFlying * 3)  // fade in quickly
+
+      // Draw glow
+      const glowR = 40 * scale
+      const gg = ctx.createRadialGradient(startX, startY, 0, startX, startY, glowR)
+      gg.addColorStop(0, `rgba(${pr},${pg},${pb},${opacity * 0.3})`)
+      gg.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.beginPath(); ctx.arc(startX, startY, glowR, 0, Math.PI * 2)
+      ctx.fillStyle = gg; ctx.fill()
+
+      // Draw text with shadow
+      const fontSize = 11 * scale
+      ctx.font = `700 ${fontSize}px monospace`
+      ctx.textAlign = 'center'
+
+      // Shadow
+      ctx.fillStyle = `rgba(0,0,0,${opacity * 0.4})`
+      ctx.fillText(cluster.promptText, startX + 1, startY + 1)
+
+      // Main text
+      ctx.fillStyle = `rgba(${pr},${pg},${pb},${opacity})`
+      ctx.fillText(cluster.promptText, startX, startY)
+    }
+
     // Core label — appears when inbound animation (Read/Grep/Glob) arrives
     const coreLabelFade = (cluster as any).coreLabelFade as number || 0
     if (coreLabelFade > 0) {
