@@ -203,6 +203,7 @@ export function App() {
         if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
           const cluster = sessions.get(event.session_id)
           const msg = (event.tool_input as Record<string, string> | null)?.message ?? 'awaiting input'
+          console.log('[perm] showing notification:', { session: event.session_id, msg })
           setPermNotifications(prev => {
             const next = new Map(prev)
             next.set(event.session_id, {
@@ -214,8 +215,9 @@ export function App() {
             return next
           })
         }
-        // Clear when user provides input (UserPromptSubmit) or tool starts executing
-        if ((event.tool_name || event.hook_event_name === 'UserPromptSubmit') && permNotifications.has(event.session_id)) {
+        // Clear when tool starts executing on a session with awaiting input
+        if (event.tool_name && permNotifications.has(event.session_id)) {
+          console.log('[perm] clearing notification on tool:', { session: event.session_id, tool: event.tool_name })
           setPermNotifications(prev => {
             if (!prev.has(event.session_id)) return prev
             const next = new Map(prev)
