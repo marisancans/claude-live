@@ -17,80 +17,22 @@ const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
 
-// Place all clusters instantly on a circle with guaranteed spacing — no physics
+// Physics-based layout: clusters positioned by Matter.js in PixiScene
+// This is now a no-op since PixiScene handles all cluster positioning via physics
 export function layoutClusters(clusters: Map<string, Cluster>) {
-  const arr = [...clusters.values()]
-  if (arr.length === 0) return
-  const N = arr.length
-  const SPACING = 380
-  const r = N === 1 ? 0 : SPACING / (2 * Math.sin(Math.PI / N))
-  const cx = CANVAS_W / 2, cy = CANVAS_H / 2
-  arr.forEach((cluster, i) => {
-    const angle = (i / N) * Math.PI * 2 - Math.PI / 2
-    cluster.centerX = cx + Math.cos(angle) * r
-    cluster.centerY = cy + Math.sin(angle) * r
-    cluster.layoutAngle = angle
-  })
+  // No-op: PixiScene handles positioning via Matter.js physics engine
 }
 
 /**
- * Compute target radius for each cluster based on size relative to neighbors.
- * Large clusters orbit farther out, small clusters orbit closer in.
+ * Cluster radius animation is now handled by physics engine in PixiScene.
+ * This is a no-op but kept for compatibility.
  */
 function computeClusterRadii(clusters: Map<string, Cluster>): void {
-  // Scale base radius to window size so clusters always fit on screen
-  const shortSide = typeof window !== 'undefined' ? Math.min(window.innerWidth, window.innerHeight) : 800
-  const BASE_RADIUS = shortSide * 0.32
-  const SCALE_FACTOR = 1.2
-  const DAMPING = 0.05
-
-  const clusterArray = Array.from(clusters.values())
-
-  for (const cluster of clusterArray) {
-    // Compute this cluster's size (based on orbital rings used)
-    const lastActiveRing = Math.max(0, cluster.ringCounts.length - 1)
-    const clusterSize = lastActiveRing < 3 ? [70, 120, 175, 225][lastActiveRing] : 225
-
-    // Get all other clusters
-    const otherClusters = clusterArray.filter(c => c !== cluster)
-    let avgNeighborSize = BASE_RADIUS / 2  // fallback for single cluster
-
-    // Compute average size of neighbors
-    if (otherClusters.length > 0) {
-      const neighborSizes = otherClusters.map(c => {
-        const ring = Math.max(0, c.ringCounts.length - 1)
-        return ring < 3 ? [70, 120, 175, 225][ring] : 225
-      })
-      avgNeighborSize = neighborSizes.reduce((a, b) => a + b, 0) / neighborSizes.length
-    }
-
-    // Size delta (clamped to prevent extreme values)
-    const delta = Math.max(-100, Math.min(100, clusterSize - avgNeighborSize))
-
-    // Target radius (clamped to 60%-200% of BASE_RADIUS)
-    const target = Math.max(
-      BASE_RADIUS * 0.6,
-      Math.min(BASE_RADIUS * 2.0, BASE_RADIUS + delta * SCALE_FACTOR)
-    )
-
-    // Update target and smoothly interpolate current toward target
-    cluster.targetRadius = target
-    cluster.currentRadius += (cluster.targetRadius - cluster.currentRadius) * DAMPING
-  }
+  // No-op: PixiScene physics handles all positioning
 }
 
 export function tickSimulation(clusters: Map<string, Cluster>) {
-  // Update cluster radii based on size relative to neighbors
-  computeClusterRadii(clusters)
-
-  // Update cluster center positions based on currentRadius and angle
-  const cx = CANVAS_W / 2
-  const cy = CANVAS_H / 2
-
-  for (const cluster of clusters.values()) {
-    cluster.centerX = cx + Math.cos(cluster.layoutAngle) * cluster.currentRadius
-    cluster.centerY = cy + Math.sin(cluster.layoutAngle) * cluster.currentRadius
-  }
+  // Cluster positions are managed by physics in PixiScene — do not overwrite here
 
   for (const cluster of clusters.values()) {
     // Decay animation states
@@ -156,7 +98,7 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
 
     // Decay progress for each snake — fixed speed for all prompts
     for (const snake of cluster.promptSnakes) {
-      snake.progress = Math.min(1, snake.progress + 0.005)
+      snake.progress = Math.min(1, snake.progress + 0.003)
     }
 
     // Remove completed snakes (progress >= 1)

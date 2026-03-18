@@ -10,6 +10,141 @@ const EVENTS_PER_SESSION = 50  // rolling buffer per session
 const SESSION_TIMEOUT_MS = 11 * 60 * 1000  // 11 minutes (server-side cleanup)
 const HEARTBEAT_MS = 15000
 
+// ── Ported from client constants/nodeKeys (JS) ──────────────────────────────
+
+const TOOL_COLOR_HEX = {
+  Read: '#4ade80', Edit: '#60a5fa', Write: '#60a5fa',
+  Bash: '#f59e0b', Grep: '#a78bfa', Glob: '#a78bfa',
+  WebFetch: '#f472b6', Stop: '#888888', Notification: '#34d399',
+}
+const DEFAULT_HEX = '#555555'
+const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'Glob', 'Grep'])
+
+function nodeKeyFor(event) {
+  const t = event.tool_name
+  if (!t) {
+    if (event.hook_event_name === 'Stop') return 'session:stop'
+    if (event.hook_event_name === 'Notification') {
+      const msg = event.tool_input?.message || ''
+      return `notification:${msg.slice(0, 20)}`
+    }
+    return null
+  }
+  const input = event.tool_input || {}
+  if (FILE_TOOLS.has(t)) {
+    const fp = input.file_path || input.path || null
+    return fp ? `file:${fp}` : null
+  }
+  if (t === 'Bash') return `bash:${input.command || ''}`
+  if (t === 'WebFetch') {
+    try { return `web:${new URL(input.url || '').hostname}` } catch { return 'web:unknown' }
+  }
+  return `tool:${t}`
+}
+
+function nodeTypeFor(event) {
+  const t = event.tool_name
+  if (FILE_TOOLS.has(t || '')) return 'file'
+  if (t === 'Bash') return 'bash'
+  if (t === 'WebFetch') return 'web'
+  if (event.hook_event_name === 'Stop') return 'stop'
+  if (event.hook_event_name === 'Notification') return 'notification'
+  return 'tool'
+}
+
+function labelFor(event) {
+  const t = event.tool_name
+  const input = event.tool_input || {}
+  if (FILE_TOOLS.has(t || '')) {
+    const fp = input.file_path || input.path || ''
+    return fp.split('/').pop() || fp
+  }
+  if (t === 'Bash') return `$ ${(input.command || '').slice(0, 22)}`
+  if (t === 'WebFetch') { try { return `↗ ${new URL(input.url || '').hostname}` } catch { return '↗ web' } }
+  if (event.hook_event_name === 'Stop') return '✓ done'
+  if (event.hook_event_name === 'Notification') return (input.message || 'notification').slice(0, 24)
+  return t || event.hook_event_name || '?'
+}
+
+// ── State snapshot computation ───────────────────────────────────────────────
+
+// Compute a lightweight state snapshot from a session's event buffer.
+// Returns null if the session has no events.
+function computeSessionSnapshot(session_id, events) {
+  if (events.length === 0) return null
+
+  let label = null
+  let cwd = null
+  let stopping = false
+  let eventCount = events.length
+
+  // file nodes: persistent, grow with each touch
+  const fileNodes = new Map()  // key → { key, nodeType, label, colorHex, baseRadius }
+  // ephemeral keys seen in recent N events (they decay fast so only show recent ones)
+  const RECENT_N = 15
+  const recentEphemeralKeys = new Set()
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i]
+
+    if (event.cwd) cwd = event.cwd
+    if (cwd && (!label || label.length <= 8)) {
+      const parts = cwd.split('/').filter(Boolean)
+      label = parts[parts.length - 1] || null
+    }
+
+    if (event.hook_event_name === 'Stop') {
+      stopping = true
+    } else if (event.hook_event_name !== 'SessionEnd') {
+      stopping = false
+    }
+
+    const key = nodeKeyFor(event)
+    if (!key) continue
+    const type = nodeTypeFor(event)
+    const isFile = type === 'file'
+    const colorHex = TOOL_COLOR_HEX[event.tool_name || event.hook_event_name] ?? DEFAULT_HEX
+
+    if (isFile) {
+      if (fileNodes.has(key)) {
+        fileNodes.get(key).baseRadius = Math.min(8, fileNodes.get(key).baseRadius + 0.3)
+      } else {
+        fileNodes.set(key, { key, nodeType: type, label: labelFor(event), colorHex, baseRadius: 2.5 })
+      }
+    } else if (i >= events.length - RECENT_N) {
+      recentEphemeralKeys.add(key)
+    }
+  }
+
+  // Build node list: files first, then recent ephemerals
+  const nodes = [...fileNodes.values()]
+
+  // Add recent ephemerals (not already in files)
+  const fileKeySet = new Set(fileNodes.keys())
+  for (let i = Math.max(0, events.length - RECENT_N); i < events.length; i++) {
+    const event = events[i]
+    const key = nodeKeyFor(event)
+    if (!key || fileKeySet.has(key)) continue
+    const type = nodeTypeFor(event)
+    const colorHex = TOOL_COLOR_HEX[event.tool_name || event.hook_event_name] ?? DEFAULT_HEX
+    if (!nodes.find(n => n.key === key)) {
+      nodes.push({ key, nodeType: type, label: labelFor(event), colorHex, baseRadius: 4 })
+    }
+  }
+
+  // Ring assignment is handled by the client (server just sends node data)
+  return {
+    session_id,
+    label: label || session_id.slice(0, 8),
+    cwd,
+    stopping,
+    eventCount,
+    nodes,  // [{ key, nodeType, label, colorHex, baseRadius }]
+  }
+}
+
+// ── Server ───────────────────────────────────────────────────────────────────
+
 function makeSessionId(ip, ts) {
   return 'unknown-' + createHash('sha1').update(ip + ts).digest('hex').slice(0, 8)
 }
@@ -28,7 +163,6 @@ function normalizeEvent(raw, remoteIp) {
     agent_type: raw.agent_type ?? null,
     cwd: raw.cwd ?? null,
     error: raw.error ?? null,
-    // Extended fields
     tool_use_id: raw.tool_use_id ?? null,
     prompt: raw.prompt ?? null,
     model: raw.model ?? null,
@@ -92,13 +226,14 @@ export function createServer({ port = 43451 } = {}) {
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    // Replay all events from all sessions
-    for (const session of sessionBuffers.values()) {
-      for (const event of session.events) {
-        res.write(`data: ${JSON.stringify(event)}\n\n`)
-      }
+    // Send state snapshot instead of replaying raw events
+    const sessions = []
+    for (const [sid, session] of sessionBuffers) {
+      const snap = computeSessionSnapshot(sid, session.events)
+      if (snap) sessions.push(snap)
     }
-    res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`)
+    res.write(`data: ${JSON.stringify({ type: 'state_snapshot', sessions })}\n\n`)
+
     clients.add(res)
     const heartbeat = setInterval(() => {
       try { res.write(': heartbeat\n\n') } catch { clients.delete(res); clearInterval(heartbeat) }

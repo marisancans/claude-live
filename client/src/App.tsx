@@ -212,6 +212,15 @@ export function App() {
     es.onmessage = (e) => {
       try {
         const parsed = JSON.parse(e.data)
+        if (parsed.type === 'state_snapshot') {
+          store.initFromSnapshot(parsed.sessions)
+          layoutClusters(store.getSessions())
+          setClusters(new Map(store.getSessions()))
+          replayDoneRef.current = true
+          setReplayDone(true)
+          return
+        }
+        // Legacy: old server sends replay_done after individual event replay
         if (parsed.type === 'replay_done') {
           store.markReplayDone()
           layoutClusters(store.getSessions())
@@ -229,13 +238,13 @@ export function App() {
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
-        if (replayDoneRef.current) playChordForEvent(event.tool_name, event.hook_event_name) // Play audio on event (only after replay completes)
+        if (replayDoneRef.current) playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined) // Play audio on event (only after replay completes)
 
         // Live event log: show PostToolUse for tools with enriched data, skip others to avoid duplication
         const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
         const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
 
-        if (!skipDuplicate) {
+        if (!skipDuplicate && replayDoneRef.current) {
           const cluster = sessions.get(event.session_id)
           let tool = event.tool_name || event.hook_event_name || '?'
           // Shorten MCP names: mcp__plugin_X__Y__action → action
@@ -331,38 +340,40 @@ export function App() {
       </div>
 
       {/* Top-right buttons */}
-      <button
-        className="audio-toggle"
-        onClick={toggleAudio}
-        title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
-        aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
-      >
-        <SpeakerIcon enabled={audioEnabled} />
-      </button>
-      <button
-        className="autofit-toggle"
-        onClick={toggleAutofit}
-        title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
-        aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
-      >
-        <AutofitIcon enabled={autofitEnabled} />
-      </button>
-      <button
-        className="hud-button"
-        onClick={() => setOperationsOpen(true)}
-        title="Show operations legend"
-        aria-label="Operations"
-      >
-        ?
-      </button>
-      <button
-        className="hud-button"
-        onClick={() => setDebugOpen(true)}
-        title="Show debug panel"
-        aria-label="Debug"
-      >
-        ⚙
-      </button>
+      <div className="top-right-buttons">
+        <button
+          className="audio-toggle"
+          onClick={toggleAudio}
+          title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+          aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+        >
+          <SpeakerIcon enabled={audioEnabled} />
+        </button>
+        <button
+          className="autofit-toggle"
+          onClick={toggleAutofit}
+          title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+          aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}
+        >
+          <AutofitIcon enabled={autofitEnabled} />
+        </button>
+        <button
+          className="hud-button"
+          onClick={() => setOperationsOpen(true)}
+          title="Show operations legend"
+          aria-label="Operations"
+        >
+          ?
+        </button>
+        <button
+          className="hud-button"
+          onClick={() => setDebugOpen(true)}
+          title="Show debug panel"
+          aria-label="Debug"
+        >
+          ⚙
+        </button>
+      </div>
 
       {/* Permission notifications */}
       {permNotifications.size > 0 && (

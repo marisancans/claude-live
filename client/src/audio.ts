@@ -69,6 +69,13 @@ export function initAudio() {
     state.enabled = saved === 'true'
   }
 
+  // If audio is already enabled, unlock elements on first user interaction
+  // (browser autoplay policy blocks play() until a user gesture occurs)
+  if (state.enabled) {
+    document.addEventListener('click', primeAutoplay, { capture: true, once: true })
+    document.addEventListener('keydown', primeAutoplay, { capture: true, once: true })
+  }
+
   // Pre-load multiple audio elements for true polyphony (16 concurrent sounds)
   for (let i = 0; i < 16; i++) {
     const audio = new Audio()
@@ -128,22 +135,9 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   }
   lastPlayTime.set(eventKey, now)
 
-  // Find first available audio element (not currently playing)
-  let selected: AudioContext | null = null
-  for (const context of state.audioContexts) {
-    if (!context.isPlaying) {
-      selected = context
-      break
-    }
-  }
-
-  // If no idle channels, skip (don't play multiple per event)
-  if (!selected) {
-    console.debug('[audio] no idle channels available')
-    return
-  }
-
-  // Map event types to specific chords for consistent audio feedback
+  // Map event types to specific chords for consistent audio feedback.
+  // Each chord index maps directly to a pool element (pre-loaded in initAudio),
+  // so we can play without reassigning src or calling load().
   let chordIndex = 0
   if (toolName === 'Read') chordIndex = 0
   else if (toolName === 'Edit' || toolName === 'Write') chordIndex = 1
@@ -156,45 +150,37 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   else if (hookName === 'UserPromptSubmit') chordIndex = 8
   else if (hookName === 'SessionStart') chordIndex = 9
   else if (hookName === 'SessionEnd') chordIndex = 10
-  else chordIndex = Math.floor(Math.random() * GUITAR_CHORDS.length) // fallback to random
+  else chordIndex = Math.floor(Math.random() * GUITAR_CHORDS.length)
 
-  const chord = `/chords/chord_${GUITAR_CHORDS[chordIndex]}.wav`
-  selected.audio.src = chord
+  // Prefer the element pre-loaded for this chord; fall back to any idle element.
+  let selected = state.audioContexts[chordIndex % state.audioContexts.length]
+  if (selected.isPlaying) {
+    const idle = state.audioContexts.find(c => !c.isPlaying)
+    if (!idle) {
+      console.debug('[audio] no idle channels available')
+      return
+    }
+    selected = idle
+  }
+
+  // Play the pre-loaded element directly — no src reassignment, no async load.
+  // Elements are already loaded from initAudio so play() resolves synchronously.
   selected.audio.currentTime = 0
   selected.isPlaying = true
 
-  // Load and play, with automatic fadeout after duration
-  selected.audio.load()
-
-  const playbackAttempt = () => {
-    selected!.audio.play()
-      .then(() => {
-        console.debug('[audio] playing:', chord)
-        // Schedule fadeout after audio duration (with safety margin)
-        const duration = selected!.audio.duration || 2.0  // Default to ~2s if unknown
-        const fadeDelay = Math.max(duration * 1000, 1500)  // At least 1.5s
-
-        const fadeTimeout = setTimeout(() => {
-          fadeOutAndStop(selected!.audio, selected!, 1000)
-        }, fadeDelay)
-        ;(selected as any).fadeTimeout = fadeTimeout
-      })
-      .catch((err) => {
-        console.debug('[audio] playback failed:', err.message)
-        selected!.isPlaying = false
-      })
-  }
-
-  // Wait for audio to be loadable before playing (handles autoplay policy)
-  if (selected.audio.readyState >= 2) {  // 2 = HAVE_CURRENT_DATA
-    playbackAttempt()
-  } else {
-    selected.audio.addEventListener('canplay', playbackAttempt, { once: true })
-    // Timeout fallback if canplay never fires
-    setTimeout(() => {
-      if (selected!.isPlaying) playbackAttempt()
-    }, 500)
-  }
+  selected.audio.play()
+    .then(() => {
+      const duration = selected!.audio.duration || 2.0
+      const fadeDelay = Math.max(duration * 1000, 1500)
+      const fadeTimeout = setTimeout(() => {
+        fadeOutAndStop(selected!.audio, selected!, 1000)
+      }, fadeDelay)
+      ;(selected as any).fadeTimeout = fadeTimeout
+    })
+    .catch((err) => {
+      console.debug('[audio] playback failed:', err.message)
+      selected!.isPlaying = false
+    })
 }
 
 // Legacy function for compatibility
@@ -202,10 +188,30 @@ export function playChord() {
   playChordForEvent()
 }
 
+// Prime all pool elements by playing them at volume 0 then pausing.
+// This satisfies browsers (especially Safari) that require each element to be
+// individually user-activated before it can play outside a gesture context.
+function primeAutoplay() {
+  for (const ctx of state.audioContexts) {
+    const { audio } = ctx
+    ctx.isPlaying = true
+    const prevVol = audio.volume
+    audio.volume = 0
+    audio.play().then(() => {
+      audio.pause()
+      audio.currentTime = 0
+      audio.volume = prevVol
+      ctx.isPlaying = false
+    }).catch(() => {
+      ctx.isPlaying = false
+    })
+  }
+}
+
 export function setAudioEnabled(enabled: boolean) {
   state.enabled = enabled
-  // Persist to localStorage
   localStorage.setItem('claude-live-audio-enabled', enabled ? 'true' : 'false')
+  if (enabled) primeAutoplay()
 }
 
 export function isAudioEnabled(): boolean {

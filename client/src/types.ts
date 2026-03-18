@@ -122,6 +122,10 @@ export interface Cluster {
   compacting: number
   // Post-compaction hold state (1.0 → 0.0)
   compacted: number
+  // Ring spawn animation progress per ring (0 = not yet visible, 1 = fully spawned)
+  ringSpawnProgress?: [number, number, number, number, number]
+  // Last event timestamp (ms) — used for stale session detection
+  lastEventTime?: number
   // Array of in-flight prompt snakes
   promptSnakes: PromptSnake[]
   // Maps agent IDs to their current star positions (for animation routing)

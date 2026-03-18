@@ -318,9 +318,9 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
 
 /* ── Event log: history overlay ────────────────────────────────── */
 .event-log-history {
-  max-width: 250px;
-  max-height: 220px;
-  overflow-y: auto;
+  width: 280px;
+  height: calc(100vh - 80px);
+  overflow-y: scroll;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -328,6 +328,7 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
   padding: 6px;
+  box-sizing: border-box;
 }
 .event-log-history-back {
   font-family: 'Space Mono', monospace;
@@ -372,18 +373,23 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
 .help-btn:hover { color: #999; border-color: rgba(255,255,255,0.25); }
 
 /* ── Audio toggle button ─────────────────────────────────── */
-.audio-toggle {
+.top-right-buttons {
   position: fixed;
   top: 24px;
   right: 24px;
   z-index: 50;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.audio-toggle {
   background: none;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 4px;
   color: #666;
   cursor: pointer;
-  z-index: 20;
-  pointer-events: auto;
   transition: color 0.15s, border-color 0.15s, background-color 0.15s;
   display: flex;
   align-items: center;
@@ -409,10 +415,6 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
 
 /* ── Autofit toggle button ──────────────────────────────── */
 .autofit-toggle {
-  position: fixed;
-  top: 24px;
-  right: 64px;
-  z-index: 50;
   background: none;
   border: 1px solid rgba(255,255,255,0.1);
   color: #ccc;

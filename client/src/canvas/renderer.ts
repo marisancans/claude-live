@@ -208,7 +208,7 @@ export function drawScene(
     for (const node of cluster.nodes.values()) {
       if (node.nodeType !== 'agent') continue
       const [r, g, b] = hexToRgb(node.colorHex)
-      const al = node.life * Math.min(1, node.entry)
+      const al = Math.min(1, node.entry)
       if (al <= 0.01) continue
       const sz = 1.8
       const spinAngle = t * 2.5
@@ -245,7 +245,7 @@ export function drawScene(
     for (const node of cluster.nodes.values()) {
       if (node.nodeType === 'file' || node.nodeType === 'agent') continue
       const [r, g, b] = hexToRgb(node.colorHex)
-      const al = node.life * Math.min(1, node.entry)
+      const al = Math.min(1, node.entry)
       if (al <= 0.01) continue
 
       const sz = node.baseRadius * Math.min(1, node.entry)

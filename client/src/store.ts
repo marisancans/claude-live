@@ -44,6 +44,51 @@ function hexToInt(hex: string): number {
 }
 
 /**
+ * Extract words from tool response/input for ResponseSnake animation.
+ * Handles different tools and limits to ~15 words for readability.
+ */
+function extractWords(event: RawEvent): string[] {
+  const tool = event.tool_name || ''
+  const resp = event.tool_response as Record<string, any> | null
+  const input = event.tool_input as Record<string, any> | null
+  const MAX = 15
+
+  if (tool === 'Read') {
+    const text: string = resp?.content ?? resp?.text ?? resp?.output ?? ''
+    return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
+  }
+  if (tool === 'Write') {
+    const text: string = input?.content ?? ''
+    return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
+  }
+  if (tool === 'Bash') {
+    const code = resp?.exitCode ?? resp?.exit_code ?? resp?.code
+    const cmd = (input?.command ?? '').split(/\s+/)[0] || '$'
+    return [cmd, code === 0 ? '✓' : `✗${code}`]
+  }
+  if (tool === 'Grep') {
+    const n = resp?.count ?? resp?.numMatches ?? resp?.total
+    return n != null ? [`${n} matches`] : []
+  }
+  if (tool === 'Glob') {
+    const files: string[] = resp?.files ?? (Array.isArray(resp) ? resp : [])
+    return files.length > 0 ? [`${files.length} files`] : []
+  }
+  if (tool === 'WebFetch') {
+    const status = resp?.status ?? resp?.statusCode ?? '?'
+    const host = (() => {
+      try {
+        return new URL((input?.url ?? '') as string).hostname
+      } catch {
+        return 'web'
+      }
+    })()
+    return [host, String(status)]
+  }
+  return []
+}
+
+/**
  * Get the animation origin point for an action.
  * If agentId exists and points to an active agent, returns agent position.
  * Otherwise, returns cluster core position.
@@ -701,6 +746,21 @@ export function createStore() {
         if (enriched !== tool) {
           node.actionLabel = enriched
         }
+        // Spawn ResponseSnake with tool output words
+        const words = extractWords(event)
+        if (!skipAnimations && words.length > 0) {
+          const dist = Math.hypot(node.x - cluster.centerX, node.y - cluster.centerY) || 80
+          const angle = Math.atan2(node.y - cluster.centerY, node.x - cluster.centerX)
+          const splinePath = generateRandomSpline(cluster.centerX, cluster.centerY, angle, dist)
+          const color = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
+          cluster.promptSnakes.push({
+            words,
+            color,
+            progress: 0,
+            splinePath,
+            startAngle: angle
+          })
+        }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
@@ -738,9 +798,99 @@ export function createStore() {
 
   function markReplayDone() { replayDone = true }
 
+  // Initialize cluster state directly from a server snapshot — no event replay, no animations
+  function initFromSnapshot(snapshotSessions: Array<{
+    session_id: string
+    label: string
+    cwd: string | null
+    stopping: boolean
+    eventCount: number
+    nodes: Array<{ key: string; nodeType: string; label: string; colorHex: string; baseRadius: number }>
+  }>) {
+    for (const snap of snapshotSessions) {
+      const sid = snap.session_id
+      const pos = clusterPosition(sessions.size, [...sessions.values()])
+      const rj = radialJitter(sid)
+
+      const c = {
+        sessionId: sid,
+        label: snap.label,
+        centerX: pos.x,
+        centerY: pos.y,
+        targetRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
+        currentRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
+        nodes: new Map(),
+        edges: [],
+        stopping: snap.stopping,
+        lastFileKey: null,
+        parentSessionId: null,
+        ringCounts: [] as number[],
+        layoutAngle: 0,
+        isChild: false,
+        childIndex: 0,
+        compacting: 0,
+        compacted: 0,
+        promptSnakes: [] as PromptSnake[],
+        agentPositionMap: new Map<string, Point>(),
+      }
+      ;(c as any).ringSpeeds = ORBIT_SPEEDS.map((speed, i) =>
+        speed * (1 + (rj + (i * 2 - 1)) / 7 * 0.2)
+      )
+      ;(c as any).eventCount = snap.eventCount
+
+      for (const nodeSnap of snap.nodes) {
+        const orbitRing = assignRing(c as Cluster)
+        c.ringCounts[orbitRing] = (c.ringCounts[orbitRing] || 0) + 1
+        const ringSpeeds = (c as any).ringSpeeds as number[]
+        const orbitSpeed = ringSpeeds[orbitRing] ?? ORBIT_SPEEDS[orbitRing]
+        const orbitRadius = ORBIT_RADII[orbitRing]
+        const orbitAngle = 0
+
+        const colorHex = desaturate(nodeSnap.colorHex)
+        c.nodes.set(nodeSnap.key, {
+          key: nodeSnap.key,
+          label: nodeSnap.label,
+          nodeType: nodeSnap.nodeType as any,
+          baseRadius: nodeSnap.baseRadius,
+          color: hexToInt(colorHex),
+          colorHex,
+          x: pos.x + Math.cos(orbitAngle) * orbitRadius,
+          y: pos.y + Math.sin(orbitAngle) * orbitRadius,
+          vx: 0, vy: 0,
+          age: 0,
+          lastEventIndex: 0,
+          lastTool: null,
+          lastTimestamp: Date.now(),
+          eventCount: 1,
+          awaitingPermission: false,
+          orbitRing,
+          orbitAngle,
+          orbitSpeed,
+          orbitRadius,
+          life: 1.0,
+          entry: 1.0,  // already arrived, skip entry animation
+          impactType: null,
+          impactTime: 0,
+          actionLabel: null,
+          actionFade: 0,
+          marks: [],
+        })
+      }
+
+      // Spread all nodes evenly per ring
+      const usedRings = new Set(c.ringCounts.map((_, i) => i).filter(i => c.ringCounts[i] > 0))
+      for (const ring of usedRings) redistributeRing(c as Cluster, ring)
+
+      sessions.set(sid, c as Cluster)
+    }
+
+    replayDone = true
+  }
+
   return {
     addEvent,
     markReplayDone,
+    initFromSnapshot,
     getBuffer: () => [...buffer],
     getSessions: () => sessions,
   }

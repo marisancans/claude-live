@@ -26,7 +26,7 @@ interface Props {
   autofitEnabled: boolean
 }
 
-const ORBITAL_EXTENT = 175 // Max radius of orbiting nodes (ORBIT_RADII[2])
+const ORBITAL_EXTENT = 195 // Max radius of orbiting nodes (ORBIT_RADII[4] in constants.ts)
 
 function calculateClusterBounds(clusters: Map<string, Cluster>) {
   let minX = Infinity, maxX = -Infinity
@@ -40,8 +40,7 @@ function calculateClusterBounds(clusters: Map<string, Cluster>) {
     maxY = Math.max(maxY, cluster.centerY + ext)
   }
 
-  // Add padding in world coordinates
-  const padding = 120
+  const padding = 80
   return {
     minX: minX - padding,
     maxX: maxX + padding,
@@ -68,14 +67,14 @@ function calculateCameraTarget(
     targetScale = canvasHeight / boundsHeight
   }
 
-  // Clamp to valid scale range
-  targetScale = Math.max(0.2, Math.min(4.0, targetScale))
+  // Clamp scale: zoom in up to 4x, zoom out enough to always show all clusters
+  targetScale = Math.max(0.3, Math.min(4.0, targetScale * 1.4))
 
   // Center the bounds on canvas
   const centerX = (bounds.minX + bounds.maxX) / 2
   const centerY = (bounds.minY + bounds.maxY) / 2
-  const targetOffsetX = canvasWidth / 2 - centerX * targetScale
-  const targetOffsetY = canvasHeight / 2 - centerY * targetScale
+  const targetOffsetX = (canvasWidth / 2 - centerX) * targetScale
+  const targetOffsetY = (canvasHeight / 2 - centerY) * targetScale
 
   return { targetScale, targetOffsetX, targetOffsetY }
 }
@@ -98,6 +97,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
     const ctx = canvas.getContext('2d')!
     const DPR = Math.min(window.devicePixelRatio || 1, 2)
 
+    // Simple velocity-based physics for cluster spacing
+
     function resize() {
       const W = window.innerWidth, H = window.innerHeight
       canvas.width = W * DPR; canvas.height = H * DPR
@@ -106,6 +107,15 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
     }
     resize()
     window.addEventListener('resize', resize)
+
+    // Helper: clusterFootprint calculates orbital extent
+    function clusterFootprint(cluster: Cluster): number {
+      const radii = [55, 90, 125, 160, 195]
+      for (let i = cluster.ringCounts.length - 1; i >= 0; i--) {
+        if (cluster.ringCounts[i] > 0) return radii[i] ?? 195
+      }
+      return radii[0]
+    }
 
     // Pan/zoom
     let dragging = false, dragMoved = false
@@ -185,6 +195,50 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       const t = tRef.current
       const W = window.innerWidth, H = window.innerHeight
 
+      // Position-based relaxation — directly nudge positions, never accumulates momentum
+      const clusters = clustersRef.current
+      const centerX = W / 2
+      const centerY = H / 2
+
+      const clusterArray = Array.from(clusters.entries())
+      const n = clusterArray.length
+
+      if (n === 1) {
+        // Single cluster: snap to center smoothly
+        const c = clusterArray[0][1]
+        c.centerX += (centerX - c.centerX) * 0.1
+        c.centerY += (centerY - c.centerY) * 0.1
+      } else {
+        // Repulsion: directly separate overlapping clusters
+        for (let i = 0; i < n; i++) {
+          const [, c1] = clusterArray[i]
+          const fp1 = clusterFootprint(c1)
+          for (let j = i + 1; j < n; j++) {
+            const [, c2] = clusterArray[j]
+            const fp2 = clusterFootprint(c2)
+            const minDist = fp1 + fp2 + 120
+
+            const dx = c2.centerX - c1.centerX
+            const dy = c2.centerY - c1.centerY
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01
+
+            if (dist < minDist) {
+              const half = (minDist - dist) / dist * 0.5
+              c1.centerX -= dx * half
+              c1.centerY -= dy * half
+              c2.centerX += dx * half
+              c2.centerY += dy * half
+            }
+          }
+        }
+
+        // Center gravity: slow drift toward screen center
+        for (const [, cluster] of clusterArray) {
+          cluster.centerX += (centerX - cluster.centerX) * 0.003
+          cluster.centerY += (centerY - cluster.centerY) * 0.003
+        }
+      }
+
       // Decay per-cluster transients
       for (const cluster of clustersRef.current.values()) {
         const c = cluster as any
@@ -249,11 +303,14 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
             viewOffset.x = targetOffsetX
             viewOffset.y = targetOffsetY
           } else {
-            // Smooth follow — 8% per frame (~33 frames / ~0.5s to converge)
-            const alpha = 0.08
-            scale += (targetScale - scale) * alpha * blendFactor
-            viewOffset.x += (targetOffsetX - viewOffset.x) * alpha * blendFactor
-            viewOffset.y += (targetOffsetY - viewOffset.y) * alpha * blendFactor
+            const alpha = 0.15 * blendFactor
+            const ds = (targetScale - scale) * alpha
+            const dx = (targetOffsetX - viewOffset.x) * alpha
+            const dy = (targetOffsetY - viewOffset.y) * alpha
+            // Snap when close enough — avoids endless micro-drift
+            scale += Math.abs(ds) > 0.001 ? ds : (targetScale - scale)
+            viewOffset.x += Math.abs(dx) > 0.5 ? dx : (targetOffsetX - viewOffset.x)
+            viewOffset.y += Math.abs(dy) > 0.5 ? dy : (targetOffsetY - viewOffset.y)
           }
 
           lastBboxUpdateTime = now
@@ -317,7 +374,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
         colorHex,
         tool: 'Notification',
         progress: 0,
-        duration: 4.5,
+        duration: 9,
         agentId: lastEvent.agent_id || null,
       })
       return
@@ -340,7 +397,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       colorHex,
       tool,
       progress: 0,
-      duration: tool === 'Read' ? 4.5 + Math.random() * 0.6 : 3.5 + Math.random() * 0.8,
+      duration: tool === 'Read' ? 9 + Math.random() * 1.2 : 7 + Math.random() * 1.6,
       agentId: lastEvent.agent_id || null,
     })
   }, [lastEvent])
