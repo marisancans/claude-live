@@ -138,7 +138,6 @@ export function App() {
   })
   const [replayDone, setReplayDone] = useState(false)
   const replayDoneRef = useRef(false)
-  const notificationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
   const esRef = useRef<EventSource | null>(null)
 
   // Initialize audio on mount
@@ -204,23 +203,6 @@ export function App() {
         if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
           const cluster = sessions.get(event.session_id)
           const msg = (event.tool_input as Record<string, string> | null)?.message ?? 'awaiting input'
-
-          // Clear existing timeout for this session
-          const existingTimeout = notificationTimeoutsRef.current.get(event.session_id)
-          if (existingTimeout) clearTimeout(existingTimeout)
-
-          // Set new timeout to auto-clear after 30 seconds
-          const timeout = setTimeout(() => {
-            setPermNotifications(prev => {
-              if (!prev.has(event.session_id)) return prev
-              const next = new Map(prev)
-              next.delete(event.session_id)
-              notificationTimeoutsRef.current.delete(event.session_id)
-              return next
-            })
-          }, 30000)
-          notificationTimeoutsRef.current.set(event.session_id, timeout)
-
           setPermNotifications(prev => {
             const next = new Map(prev)
             next.set(event.session_id, {
@@ -232,11 +214,8 @@ export function App() {
             return next
           })
         }
-        // Clear when Claude resumes acting
-        if (event.hook_event_name === 'PreToolUse') {
-          const timeout = notificationTimeoutsRef.current.get(event.session_id)
-          if (timeout) clearTimeout(timeout)
-          notificationTimeoutsRef.current.delete(event.session_id)
+        // Clear when user approves and tool starts executing
+        if (event.tool_name && permNotifications.has(event.session_id)) {
           setPermNotifications(prev => {
             if (!prev.has(event.session_id)) return prev
             const next = new Map(prev)
@@ -247,12 +226,7 @@ export function App() {
       } catch { /* ignore malformed */ }
     }
     es.onerror = (err) => console.warn('[claude-live] SSE error', err)
-    return () => {
-      es.close()
-      // Clean up all notification timeouts
-      notificationTimeoutsRef.current.forEach(timeout => clearTimeout(timeout))
-      notificationTimeoutsRef.current.clear()
-    }
+    return () => es.close()
   }, [])
 
   const handleHover = (node: GraphNode | null, _cluster: Cluster | null) => setHoveredNode(node)
