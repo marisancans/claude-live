@@ -55,17 +55,22 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
     let dragging = false, dragMoved = false
     let dragStart = { x: 0, y: 0 }, viewOffset = { x: 0, y: 0 }, viewStart = { x: 0, y: 0 }
     let scale = 1
+    let lastInteractionTime = 0
+    let blendFactor = 1.0
+    let lastBboxUpdateTime = 0
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const factor = e.deltaY < 0 ? 1.1 : 0.9
       scale = Math.max(0.2, Math.min(4, scale * factor))
+      lastInteractionTime = Date.now()
     }
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return
       dragging = true; dragMoved = false
       dragStart = { x: e.clientX, y: e.clientY }
       viewStart = { x: viewOffset.x, y: viewOffset.y }
+      lastInteractionTime = Date.now()
     }
     const onMouseMove = (e: MouseEvent) => {
       if (dragging) {
