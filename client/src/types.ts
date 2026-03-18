@@ -82,6 +82,11 @@ export interface Projectile {
   duration: number      // seconds
 }
 
+// Maps agent IDs to their current positions for animation routing
+// Key: agent ID from SubagentStart event (e.g., "abc123")
+// Value: {x, y} position of agent node in space
+export type AgentPositionMap = Map<string, {x: number, y: number}>
+
 // A prompt snake: animated words flowing along a spline path
 export interface PromptSnake {
   words: string[]           // split prompt text
@@ -115,6 +120,9 @@ export interface Cluster {
   compacted: number
   // Array of in-flight prompt snakes
   promptSnakes: PromptSnake[]
+  // Maps agent IDs to their current star positions (for animation routing)
+  // Populated by SubagentStart, updated each frame, cleared by SubagentStop
+  agentPositionMap: AgentPositionMap
 }
 
 // Ripple (kept for compatibility, not used in solar renderer)
