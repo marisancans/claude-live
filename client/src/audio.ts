@@ -1,10 +1,14 @@
-// Audio manager for event-triggered chord sounds
+// Audio manager for event-triggered piano key sounds
+// Uses individual notes from the Dusty Keys Sample Pack (middle to upper register)
 
-const CHORD_THEMES = [
-  'Auto', 'Butterflies', 'Chardonnay', 'Cloudy', 'Cozy', 'Dreamy',
-  'Enchanted', 'Epic', 'Fantasy', 'Glowing', 'Golden', 'Heavenly',
-  'Intense', 'Magical', 'Mystical', 'Old Tape', 'Perfume', 'Pixie',
-  'Sparkle', 'Tropical', 'Vintage', 'Wishing Well'
+const PIANO_NOTES = [
+  'c4', 'c5', 'c6',
+  'd4', 'd5', 'd6',
+  'e4', 'e5', 'e6',
+  'f4', 'f5', 'f6',
+  'g4', 'g5', 'g6',
+  'a4', 'a5', 'a6',
+  'b4', 'b5', 'b6'
 ]
 
 interface AudioContext {
@@ -22,11 +26,9 @@ const state: AudioManagerState = {
   audioContexts: [],
 }
 
-function getRandomChord(): string {
-  const theme = CHORD_THEMES[Math.floor(Math.random() * CHORD_THEMES.length)]
-  const variant = Math.floor(Math.random() * 8) + 1
-  // Format: "Auto 001.wav" not "Auto_001.wav"
-  return `/chords/${theme} ${String(variant).padStart(3, '0')}.wav`
+function getRandomNote(): string {
+  const note = PIANO_NOTES[Math.floor(Math.random() * PIANO_NOTES.length)]
+  return `/chords/${note}.wav`
 }
 
 export function initAudio() {
@@ -71,8 +73,8 @@ export function playChord() {
     selected = state.audioContexts[0]
   }
 
-  const chord = getRandomChord()
-  selected.audio.src = chord
+  const note = getRandomNote()
+  selected.audio.src = note
   selected.audio.currentTime = 0
   selected.isPlaying = true
 
