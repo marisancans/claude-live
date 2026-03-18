@@ -64,7 +64,7 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       // Decay timers
       node.impactTime = Math.max(0, node.impactTime - 0.022)
       node.actionFade = Math.max(0, node.actionFade - 0.003)
-      node.entry = Math.min(1, node.entry + 0.05)
+      node.entry = Math.min(1, node.entry + 0.01) // Slower entry: ~3.2 seconds instead of 1.2
 
       // Ephemerals only decay when evicted from buffer (store sets life < 0.15)
       if (node.nodeType !== 'file' && node.life < 0.15) {

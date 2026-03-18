@@ -4,6 +4,7 @@ import { createStore } from './store'
 import { PixiScene } from './canvas/PixiScene'
 import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
+import { initAudio, playChord, setAudioEnabled, isAudioEnabled } from './audio'
 
 const store = createStore()
 
@@ -129,7 +130,13 @@ export function App() {
   const [permNotifications, setPermNotifications] = useState<Map<string, PermNotification>>(new Map())
   const [eventLog, setEventLog] = useState<LogEntry[]>([])
   const [showHelp, setShowHelp] = useState(false)
+  const [audioEnabled, setAudioEnabledState] = useState(false)
   const esRef = useRef<EventSource | null>(null)
+
+  // Initialize audio on mount
+  useEffect(() => {
+    initAudio()
+  }, [])
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => { setMouseX(e.clientX); setMouseY(e.clientY) }
@@ -158,6 +165,7 @@ export function App() {
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
+        playChord() // Play audio on event
 
         // Live event log (skip PostToolUse to avoid duplicate entries)
         if (event.hook_event_name !== 'PostToolUse') {
@@ -216,6 +224,11 @@ export function App() {
     setSelectedNode(node)
     setSelectedCluster(cluster)
   }
+  const toggleAudio = () => {
+    const newState = !audioEnabled
+    setAudioEnabledState(newState)
+    setAudioEnabled(newState)
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -238,6 +251,13 @@ export function App() {
             {lastEvent?.tool_name ?? '—'}
           </span>
         </div>
+        <button
+          className="audio-toggle"
+          onClick={toggleAudio}
+          title={audioEnabled ? 'Mute audio' : 'Unmute audio'}
+        >
+          {audioEnabled ? '🔊' : '🔇'}
+        </button>
       </div>
 
       {/* Permission notifications */}
