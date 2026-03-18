@@ -483,6 +483,8 @@ export function createStore() {
         agentNode.life = 0.08
         agentNode.impactType = 'fade'
         agentNode.impactTime = 1.0
+        // Clean up position map immediately so no new animations route to this agent
+        cluster.agentPositionMap.delete(agentId)
       }
       recomputeAges()
       return
