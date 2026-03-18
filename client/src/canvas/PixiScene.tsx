@@ -32,8 +32,13 @@ function calculateClusterBounds(clusters: Map<string, Cluster>) {
   let minX = Infinity, maxX = -Infinity
   let minY = Infinity, maxY = -Infinity
 
+  // Account for both orbital node extent and cluster center drift from gravity-well system
+  // ORBITAL_EXTENT = 175px (max radius of nodes)
+  // MAX_CLUSTER_RADIUS = 800px (max currentRadius clusters can reach)
+  const MAX_CLUSTER_RADIUS = 800
+  const ext = ORBITAL_EXTENT + MAX_CLUSTER_RADIUS
+
   for (const cluster of clusters.values()) {
-    const ext = ORBITAL_EXTENT
     minX = Math.min(minX, cluster.centerX - ext)
     maxX = Math.max(maxX, cluster.centerX + ext)
     minY = Math.min(minY, cluster.centerY - ext)
