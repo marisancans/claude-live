@@ -50,21 +50,22 @@ const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
 // Find which ring to assign a new node to, respecting per-ring capacities
+// Only spawns next ring when current ring is full
 function assignRing(cluster: Cluster): number {
-  // Initialize ringCounts if empty
-  while (cluster.ringCounts.length < RING_CAPACITIES.length) {
-    cluster.ringCounts.push(0)
-  }
-
-  // Find first ring with space, or the least-populated ring if all full
+  // Find the first ring that isn't full yet
   for (let i = 0; i < RING_CAPACITIES.length; i++) {
+    // Initialize ring if needed
+    if (i >= cluster.ringCounts.length) {
+      cluster.ringCounts[i] = 0
+    }
+    // If this ring has space, use it
     if (cluster.ringCounts[i] < RING_CAPACITIES[i]) {
       return i
     }
   }
 
-  // All rings full — assign to least-populated ring (shouldn't happen with 50 cap)
-  return cluster.ringCounts.indexOf(Math.min(...cluster.ringCounts))
+  // All rings full (shouldn't happen with 50 cap), use last ring
+  return RING_CAPACITIES.length - 1
 }
 
 export function redistributeRing(cluster: Cluster, ring: number) {
@@ -208,9 +209,8 @@ function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
 
 // Calculate actual outer radius of a cluster based on its current nodes
 function getClusterOuterRadius(cluster: Cluster): number {
-  if (cluster.ringCounts.length === 0) return ORBIT_RADII[0]
-  const lastRing = cluster.ringCounts.length - 1
-  return ORBIT_RADII[Math.min(lastRing, ORBIT_RADII.length - 1)]
+  const lastActiveRing = Math.max(0, cluster.ringCounts.length - 1)
+  return ORBIT_RADII[Math.min(lastActiveRing, ORBIT_RADII.length - 1)]
 }
 
 function clusterPosition(index: number, existing: Cluster[]): { x: number; y: number } {
