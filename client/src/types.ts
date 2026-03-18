@@ -103,6 +103,9 @@ export interface Cluster {
   label: string
   centerX: number
   centerY: number
+  // Size-aware positioning
+  targetRadius: number      // computed target orbit distance (px)
+  currentRadius: number     // smoothly interpolates to target
   nodes: Map<string, GraphNode>
   edges: Array<{ fromKey: string; toKey: string; color: number; colorHex: string; age: number }>
   stopping: boolean
