@@ -62,7 +62,7 @@ export function EventLog({ entries }: Props) {
             const opacity = calculateOpacity(entry)
             return (
               <div
-                key={entry.id}
+                key={`live-${entry.id}`}
                 className="event-log-entry"
                 style={{ opacity, '--entry-color': entry.colorHex } as React.CSSProperties}
               >
@@ -87,7 +87,7 @@ export function EventLog({ entries }: Props) {
           <button className="event-log-history-back" onClick={() => setHistoryOpen(false)}>← live</button>
           {reversedEntries.map(entry => (
             <div
-              key={entry.id}
+              key={`history-${entry.id}`}
               className="event-log-entry event-log-entry--static"
               style={{ opacity: 0.7, '--entry-color': entry.colorHex } as React.CSSProperties}
             >
