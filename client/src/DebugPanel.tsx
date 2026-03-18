@@ -31,10 +31,11 @@ async function postHook(event: object) {
 
 interface Props {
   sessionIds: string[]
+  isOpen: boolean
+  onClose: () => void
 }
 
-export function DebugPanel({ sessionIds }: Props) {
-  const [open, setOpen] = useState(false)
+export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
   const [sessionId, setSessionId] = useState(genId)
   const fileIdx = useRef(0)
   const cmdIdx = useRef(0)
@@ -71,52 +72,48 @@ export function DebugPanel({ sessionIds }: Props) {
     { label: 'Prompt',      color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the login bug on the dashboard page' }) },
   ]
 
+  if (!isOpen) return null
+
   const knownIds = sessionIds.includes(sessionId) ? sessionIds : [...sessionIds, sessionId]
 
   return (
-    <>
-      <button className="debug-toggle" onClick={() => setOpen(o => !o)} title="Debug panel">
-        dbg
-      </button>
+    <div className="panel-overlay">
+      <div className="debug-panel-header">
+        <span className="debug-panel-title">debug</span>
+        <button className="debug-close" onClick={onClose}>×</button>
+      </div>
 
-      <div className={`debug-panel ${open ? 'debug-panel--open' : ''}`}>
-        <div className="debug-panel-header">
-          <span className="debug-panel-title">debug</span>
-          <button className="debug-close" onClick={() => setOpen(false)}>×</button>
-        </div>
-
-        <div className="debug-section">
-          <div className="debug-section-label">session</div>
-          <div className="debug-session-row">
-            <select
-              className="debug-select"
-              value={sessionId}
-              onChange={e => setSessionId(e.target.value)}
-            >
-              {knownIds.map(sid => (
-                <option key={sid} value={sid}>{sid.slice(0, 18)}</option>
-              ))}
-            </select>
-            <button className="debug-new-btn" onClick={() => setSessionId(genId())}>+ new</button>
-          </div>
-        </div>
-
-        <div className="debug-section">
-          <div className="debug-section-label">fire event</div>
-          <div className="debug-tool-grid">
-            {TOOL_BTNS.map(({ label, color, fn }) => (
-              <button
-                key={label}
-                className="debug-tool-btn"
-                style={{ '--tool-color': color } as React.CSSProperties}
-                onClick={fn}
-              >
-                {label}
-              </button>
+      <div className="debug-section">
+        <div className="debug-section-label">session</div>
+        <div className="debug-session-row">
+          <select
+            className="debug-select"
+            value={sessionId}
+            onChange={e => setSessionId(e.target.value)}
+          >
+            {knownIds.map(sid => (
+              <option key={sid} value={sid}>{sid.slice(0, 18)}</option>
             ))}
-          </div>
+          </select>
+          <button className="debug-new-btn" onClick={() => setSessionId(genId())}>+ new</button>
         </div>
       </div>
-    </>
+
+      <div className="debug-section">
+        <div className="debug-section-label">fire event</div>
+        <div className="debug-tool-grid">
+          {TOOL_BTNS.map(({ label, color, fn }) => (
+            <button
+              key={label}
+              className="debug-tool-btn"
+              style={{ '--tool-color': color } as React.CSSProperties}
+              onClick={fn}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
