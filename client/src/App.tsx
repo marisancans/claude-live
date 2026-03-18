@@ -219,7 +219,7 @@ export function App() {
         const event: RawEvent = parsed
         console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
         const prevSize = store.getSessions().size
-        store.addEvent(event)
+        store.addEvent(event, !replayDoneRef.current)
         const sessions = store.getSessions()
         if (sessions.size !== prevSize) layoutClusters(sessions)
         setClusters(new Map(sessions))

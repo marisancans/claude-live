@@ -314,7 +314,7 @@ export function createStore() {
     }
   }
 
-  function addEvent(event: RawEvent) {
+  function addEvent(event: RawEvent, skipAnimations: boolean = false) {
     buffer.push(event)
     if (buffer.length > BUFFER_SIZE) buffer.shift()
 
@@ -501,42 +501,44 @@ export function createStore() {
 
     // UserPromptSubmit: create PromptSnake objects with random splines
     if (event.hook_event_name === 'UserPromptSubmit') {
-      ;(cluster as any).coreAct = 1.0
-      const promptText = event.prompt || ''
+      if (!skipAnimations) {
+        ;(cluster as any).coreAct = 1.0
+        const promptText = event.prompt || ''
 
-      // Split prompt into words
-      const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)
+        // Split prompt into words
+        const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)
 
-      if (words.length > 0) {
-        // Generate random spawn angle (0-2π)
-        const spawnAngle = Math.random() * Math.PI * 2
+        if (words.length > 0) {
+          // Generate random spawn angle (0-2π)
+          const spawnAngle = Math.random() * Math.PI * 2
 
-        // Generate random spline from well outside viewport to cluster center
-        const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.8
-        const splinePath = generateRandomSpline(
-          cluster.centerX,
-          cluster.centerY,
-          spawnAngle,
-          maxDist
-        )
+          // Generate random spline from well outside viewport to cluster center
+          const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.8
+          const splinePath = generateRandomSpline(
+            cluster.centerX,
+            cluster.centerY,
+            spawnAngle,
+            maxDist
+          )
 
-        // Get color from event or use default
-        const color = (event as any).color || '#b0c8f0'
+          // Get color from event or use default
+          const color = (event as any).color || '#b0c8f0'
 
-        // Create snake object
-        const snake: PromptSnake = {
-          words,
-          color,
-          progress: 0,      // start at 0, will animate to 1
-          splinePath,
-          startAngle: spawnAngle
+          // Create snake object
+          const snake: PromptSnake = {
+            words,
+            color,
+            progress: 0,      // start at 0, will animate to 1
+            splinePath,
+            startAngle: spawnAngle
+          }
+
+          // Add to snakes array
+          cluster.promptSnakes.push(snake)
+
+          // Play audio chord
+          playChordForEvent(undefined, 'UserPromptSubmit')
         }
-
-        // Add to snakes array
-        cluster.promptSnakes.push(snake)
-
-        // Play audio chord
-        playChordForEvent(undefined, 'UserPromptSubmit')
       }
 
       // console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying, snakes: cluster.promptSnakes?.length || 0 })

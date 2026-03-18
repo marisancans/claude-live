@@ -92,10 +92,12 @@ export function createServer({ port = 43451 } = {}) {
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    // Don't replay any buffered events - only show new events after this connection
-    // This prevents old animations/prompts from flying in on page reload
-    // res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`) - skip this and go straight to live events
-
+    // Replay all events from all sessions
+    for (const session of sessionBuffers.values()) {
+      for (const event of session.events) {
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      }
+    }
     res.write(`data: ${JSON.stringify({ type: 'replay_done' })}\n\n`)
     clients.add(res)
     const heartbeat = setInterval(() => {
