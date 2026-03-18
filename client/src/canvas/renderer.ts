@@ -31,7 +31,7 @@ function drawSnake(
     const word = snake.words[i]
 
     // Stagger words along spline: head is ahead, tail lags behind
-    const wordT = Math.max(0, t - i * 0.12)
+    const wordT = Math.max(0, t - (snake.words.length - 1 - i) * 0.12)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
     // Tail fading: words fade faster if they're at tail (lower index)
