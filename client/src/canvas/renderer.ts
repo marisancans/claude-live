@@ -1,5 +1,8 @@
 import type { Cluster, GraphNode, Projectile } from '../types'
-import { ORBIT_RADII } from '../constants'
+
+// Atomic orbital structure: dynamically grows from 1 to 4 rings
+const RING_CAPACITIES = [2, 8, 18, 22]  // sum = 50 total slots per session
+const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
 
 function hexToRgb(hex: string): [number, number, number] {
   const c = hex.replace('#', '')
@@ -86,18 +89,12 @@ export function drawScene(
     const cx = cluster.centerX, cy = cluster.centerY
     const clusterPerm = (cluster as any).awaitingPermission as boolean
 
-    // ── Orbit rings — animated on first appearance ──
-    const rsp = (cluster as any).ringSpawnProgress as number[] | undefined
-    for (let ri = 0; ri < ORBIT_RADII.length; ri++) {
-      const progress = rsp ? rsp[ri] : 1
-      if (progress <= 0) continue
-      const targetR = ORBIT_RADII[ri]
-      const prevR = ri > 0 ? ORBIT_RADII[ri - 1] : 0
-      const animR = prevR + (targetR - prevR) * progress
-      const opacity = 0.045 * Math.min(1, progress * 3)
+    // ── Solid orbit rings (thin, subtle) — only draw rings that exist ──
+    const numRings = cluster.ringCounts.length
+    for (let ri = 0; ri < numRings && ri < ORBIT_RADII.length; ri++) {
       ctx.beginPath()
-      ctx.arc(cx, cy, animR, 0, Math.PI * 2)
-      ctx.strokeStyle = `rgba(255,255,255,${opacity})`
+      ctx.arc(cx, cy, ORBIT_RADII[ri], 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(255,255,255,0.045)'
       ctx.lineWidth = 0.6; ctx.stroke()
     }
 
@@ -294,11 +291,14 @@ export function drawScene(
     const compacting = (cluster as any).compacting as number || 0
     if (compacting > 0) {
       // 5 concentric rings collapse inward sequentially (staggered timing)
+      const maxOuterRadius = cluster.ringCounts.length > 0
+        ? ORBIT_RADII[Math.min(cluster.ringCounts.length - 1, ORBIT_RADII.length - 1)]
+        : ORBIT_RADII[0]
       for (let ri = 0; ri < 5; ri++) {
         const delay = ri * 0.15
         const localT = Math.max(0, Math.min(1, (1 - compacting - delay) / (1 - delay)))
         if (localT >= 1) continue
-        const maxR = ORBIT_RADII[2] * (0.4 + ri * 0.15)
+        const maxR = maxOuterRadius * (0.4 + ri * 0.15)
         const ringDist = maxR * (1 - localT)  // collapses from maxR → 0
         const ringAl = (1 - localT) * 0.45
         if (ringAl <= 0.01) continue
@@ -338,11 +338,14 @@ export function drawScene(
     const compacted = (cluster as any).compacted as number || 0
     if (compacted > 0) {
       const expand = 1 - compacted  // 0→1 as animation progresses
+      const maxOuterRadius = cluster.ringCounts.length > 0
+        ? ORBIT_RADII[Math.min(cluster.ringCounts.length - 1, ORBIT_RADII.length - 1)]
+        : ORBIT_RADII[0]
       // Radial light beams (8 beams, not rings)
       const BEAMS = 8
       for (let b = 0; b < BEAMS; b++) {
         const ang = (b / BEAMS) * Math.PI * 2
-        const beamLen = expand * ORBIT_RADII[2] * 1.2
+        const beamLen = expand * maxOuterRadius * 1.2
         const bx = cx + Math.cos(ang) * beamLen
         const by = cy + Math.sin(ang) * beamLen
         const bg = ctx.createLinearGradient(cx, cy, bx, by)
@@ -353,7 +356,7 @@ export function drawScene(
         ctx.strokeStyle = bg; ctx.lineWidth = 2.5 * compacted; ctx.stroke()
       }
       // Single thick shockwave ring
-      const waveR = expand * ORBIT_RADII[2] * 0.9
+      const waveR = expand * maxOuterRadius * 0.9
       ctx.beginPath(); ctx.arc(cx, cy, waveR, 0, Math.PI * 2)
       ctx.strokeStyle = `rgba(255,230,180,${compacted * 0.5})`
       ctx.lineWidth = 3 * compacted; ctx.stroke()
@@ -651,62 +654,6 @@ function _drawProjectile(
     ctx.fillStyle=`rgba(${r},${g},${b},0.9)`; ctx.fill()
     ctx.beginPath(); ctx.arc(whx,why,1,0,Math.PI*2)
     ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fill()
-
-  } else if (tool === 'UserPromptSubmit') {
-    // Comet streaking in from outer space — bright head with long fading tail
-    const trail = Math.max(0, e - 0.6)
-    const tx = from.x + (to.x - from.x) * trail
-    const ty = from.y + (to.y - from.y) * trail
-
-    // Wide soft glow trail
-    const tg = ctx.createLinearGradient(tx, ty, hx, hy)
-    tg.addColorStop(0, `rgba(${r},${g},${b},0)`)
-    tg.addColorStop(0.5, `rgba(${r},${g},${b},0.06)`)
-    tg.addColorStop(1, `rgba(${r},${g},${b},0.2)`)
-    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy)
-    ctx.strokeStyle = tg; ctx.lineWidth = 12; ctx.stroke()
-
-    // Narrow bright core trail
-    const tg2 = ctx.createLinearGradient(tx, ty, hx, hy)
-    tg2.addColorStop(0, `rgba(${r},${g},${b},0)`)
-    tg2.addColorStop(1, `rgba(${r},${g},${b},0.85)`)
-    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy)
-    ctx.strokeStyle = tg2; ctx.lineWidth = 2; ctx.stroke()
-
-    // Sparkling particles along the trail
-    for (let i = 0; i < 8; i++) {
-      const frac = trail + (e - trail) * (i / 8)
-      const px = from.x + (to.x - from.x) * frac
-      const py = from.y + (to.y - from.y) * frac
-      const wobble = Math.sin(t * 15 + i * 2.3) * 4
-      const wobble2 = Math.cos(t * 12 + i * 1.7) * 4
-      const pa = (1 - i / 8) * 0.5
-      ctx.beginPath(); ctx.arc(px + wobble, py + wobble2, 1 + Math.random() * 0.5, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(${r},${g},${b},${pa})`; ctx.fill()
-    }
-
-    // Bright comet head
-    const headGlow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 18)
-    headGlow.addColorStop(0, `rgba(255,255,255,0.9)`)
-    headGlow.addColorStop(0.3, `rgba(${r},${g},${b},0.6)`)
-    headGlow.addColorStop(1, `rgba(${r},${g},${b},0)`)
-    ctx.beginPath(); ctx.arc(hx, hy, 18, 0, Math.PI * 2)
-    ctx.fillStyle = headGlow; ctx.fill()
-
-    ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill()
-
-    // Arrival burst
-    if (progress > 0.85) {
-      const fl = (progress - 0.85) / 0.15
-      for (let i = 0; i < 3; i++) {
-        const rr = fl * (20 + i * 12)
-        const al = (1 - fl) * (0.6 - i * 0.15)
-        ctx.beginPath(); ctx.arc(to.x, to.y, rr, 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(${r},${g},${b},${al})`
-        ctx.lineWidth = 1.5 - i * 0.3; ctx.stroke()
-      }
-    }
 
   } else if (tool === 'Notification' || tool === 'Stop') {
     // Expanding rings from core — slow, wide, visible

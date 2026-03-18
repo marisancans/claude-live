@@ -6,7 +6,6 @@ import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
 import { SpeakerIcon } from './SpeakerIcon'
-import { AutofitIcon } from './AutofitIcon'
 
 const store = createStore()
 
@@ -218,9 +217,10 @@ export function App() {
         }
         const event: RawEvent = parsed
         console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
+        const prevSize = store.getSessions().size
         store.addEvent(event)
         const sessions = store.getSessions()
-        layoutClusters(sessions)
+        if (sessions.size !== prevSize) layoutClusters(sessions)
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
@@ -327,14 +327,6 @@ export function App() {
           aria-label={audioEnabled ? 'Mute audio' : 'Unmute audio'}
         >
           <SpeakerIcon enabled={audioEnabled} />
-        </button>
-        <button
-          className="autofit-toggle"
-          onClick={() => setAutofitEnabled(!autofitEnabled)}
-          title={autofitEnabled ? 'Disable auto-fit' : 'Enable auto-fit'}
-          aria-label={autofitEnabled ? 'Disable auto-fit' : 'Enable auto-fit'}
-        >
-          <AutofitIcon enabled={autofitEnabled} />
         </button>
       </div>
 
