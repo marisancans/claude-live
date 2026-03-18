@@ -1,4 +1,5 @@
 import type { Cluster, GraphNode, Projectile } from '../types'
+import { getAnimationOrigin } from '../store'
 
 // Atomic orbital structure: dynamically grows from 1 to 4 rings
 const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
@@ -444,7 +445,9 @@ export function drawScene(
   // ── Projectiles ──
   for (const p of projectiles) {
     const [r, g, b] = hexToRgb(p.colorHex)
-    const ox = p.cluster.centerX, oy = p.cluster.centerY
+    // Get origin: agent star if action from agent, otherwise core
+    const origin = getAnimationOrigin(p.cluster, p.agentId || null)
+    const ox = origin.x, oy = origin.y
     const nx = p.node.x, ny = p.node.y
     const from = p.inbound ? { x: nx, y: ny } : { x: ox, y: oy }
     const to   = p.inbound ? { x: ox, y: oy } : { x: nx, y: ny }
