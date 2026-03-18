@@ -4,7 +4,7 @@ import { createStore } from './store'
 import { PixiScene } from './canvas/PixiScene'
 import { layoutClusters } from './canvas/graph'
 import { DebugPanel } from './DebugPanel'
-import { initAudio, playChord, setAudioEnabled, isAudioEnabled } from './audio'
+import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
 import { SpeakerIcon } from './SpeakerIcon'
 
 const store = createStore()
@@ -175,7 +175,7 @@ export function App() {
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
-        if (replayDoneRef.current) playChord() // Play audio on event (only after replay completes)
+        if (replayDoneRef.current) playChordForEvent(event.tool_name, event.hook_event_name) // Play audio on event (only after replay completes)
 
         // Live event log (skip PostToolUse to avoid duplicate entries)
         if (event.hook_event_name !== 'PostToolUse') {

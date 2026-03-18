@@ -68,7 +68,7 @@ export function initAudio() {
   }
 }
 
-export function playChord() {
+export function playChordForEvent(toolName?: string, hookName?: string) {
   if (!state.enabled) return
 
   // Find first available audio element (not currently playing)
@@ -85,7 +85,22 @@ export function playChord() {
     return
   }
 
-  const chord = getRandomChord()
+  // Map event types to specific chords for consistent audio feedback
+  let chordIndex = 0
+  if (toolName === 'Read') chordIndex = 0
+  else if (toolName === 'Edit' || toolName === 'Write') chordIndex = 1
+  else if (toolName === 'Bash') chordIndex = 2
+  else if (toolName === 'Grep' || toolName === 'Glob') chordIndex = 3
+  else if (toolName === 'WebFetch') chordIndex = 4
+  else if (hookName === 'Notification' || hookName === 'PermissionRequest') chordIndex = 5
+  else if (hookName === 'SubagentStart') chordIndex = 6
+  else if (hookName === 'SubagentStop') chordIndex = 7
+  else if (hookName === 'UserPromptSubmit') chordIndex = 8
+  else if (hookName === 'SessionStart') chordIndex = 9
+  else if (hookName === 'SessionEnd') chordIndex = 10
+  else chordIndex = Math.floor(Math.random() * GUITAR_CHORDS.length) // fallback to random
+
+  const chord = `/chords/chord_${GUITAR_CHORDS[chordIndex]}.wav`
   selected.audio.src = chord
   selected.audio.currentTime = 0
   selected.isPlaying = true
@@ -99,6 +114,11 @@ export function playChord() {
     fadeOutAndStop(selected!.audio, selected!, 0)
     console.debug('[audio] playback failed:', err.message)
   })
+}
+
+// Legacy function for compatibility
+export function playChord() {
+  playChordForEvent()
 }
 
 export function setAudioEnabled(enabled: boolean) {
