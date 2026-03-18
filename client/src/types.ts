@@ -85,7 +85,7 @@ export interface Projectile {
 // Maps agent IDs to their current positions for animation routing
 // Key: agent ID from SubagentStart event (e.g., "abc123")
 // Value: {x, y} position of agent node in space
-export type AgentPositionMap = Map<string, {x: number, y: number}>
+export type AgentPositionMap = Map<string, Point>
 
 // A prompt snake: animated words flowing along a spline path
 export interface PromptSnake {
