@@ -61,7 +61,7 @@ export function initAudio() {
     // Track when audio finishes playing and fade out
     audio.addEventListener('ended', () => {
       const ctx = state.audioContexts.find(c => c.audio === audio)
-      if (ctx) fadeOutAndStop(audio, ctx)
+      if (ctx) fadeOutAndStop(audio, ctx, 800)
     })
 
     state.audioContexts.push({ audio, isPlaying: false })
@@ -112,9 +112,10 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   selected.isPlaying = true
 
   // Auto-fade out and mark as idle after audio duration + buffer (ensures 'ended' event isn't needed)
+  // Fade out over 1 second for a smooth natural cutoff
   setTimeout(() => {
-    fadeOutAndStop(selected!.audio, selected!, 300)
-  }, 2700)
+    fadeOutAndStop(selected!.audio, selected!, 1000)
+  }, 2200)
 
   selected.audio.play().catch((err) => {
     fadeOutAndStop(selected!.audio, selected!, 0)
