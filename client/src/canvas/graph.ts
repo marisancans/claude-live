@@ -64,6 +64,15 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       node.x = cluster.centerX + Math.cos(node.orbitAngle) * node.orbitRadius
       node.y = cluster.centerY + Math.sin(node.orbitAngle) * node.orbitRadius
 
+      // Sync agent position to animation routing map each frame
+      if (node.nodeType === 'agent') {
+        const agentId = node.key.replace('agent:', '')  // extract ID from key
+        cluster.agentPositionMap.set(agentId, {
+          x: node.x,
+          y: node.y
+        })
+      }
+
       // Stamp trail marks at uniform pixel intervals (skip agent satellites)
       if (node.orbitRing >= 0) {
         const spacing = MARK_PX_SPACING / node.orbitRadius // radians for constant px gap
