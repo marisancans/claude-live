@@ -84,6 +84,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const clustersRef = useRef(clusters)
   clustersRef.current = clusters
+  const autofitEnabledRef = useRef(autofitEnabled)
+  autofitEnabledRef.current = autofitEnabled
   const lastEventRef = useRef<RawEvent | null>(null)
   const projectilesRef = useRef<Projectile[]>([])
   const hoveredNodeRef = useRef<GraphNode | null>(null)
@@ -220,7 +222,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       }
 
       // Auto-fit camera if enabled
-      if (autofitEnabled && clustersRef.current.size > 0) {
+      if (autofitEnabledRef.current && clustersRef.current.size > 0) {
         const now = Date.now()
 
         // Update blend factor based on interaction
