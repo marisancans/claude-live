@@ -4,15 +4,17 @@
 
 **Goal:** Replace the static event log with a time-decay live feed showing 5 entries max, each visible for 5 seconds then fading out. Move operations and debug panels to the top bar as separate icon buttons.
 
+**Status:** SUPERSEDES 2026-03-18-event-log-redesign.md (the initial plan). This is a complete redesign.
+
 ---
 
 ## Architecture
 
 **Event log (bottom-left):**
-- Shows up to 5 most recent entries
+- Shows up to 5 most recent entries (age < 5 seconds)
 - Each entry displayed for 5 seconds, then fades out over 1 second (seconds 4-5)
-- When empty: displays only the history button
-- History button: always present, opens overlay showing all past entries (capped at 100)
+- History button: Always visible. When live entries exist, shows `history (N)` count. When no live entries, shows just `history`
+- History overlay: Shows all past entries (capped at 100), newest first
 
 **Top bar (near sound/autofit icons):**
 - Two new icon buttons added
@@ -41,39 +43,90 @@ interface Props {
 **Behavior:**
 - Calculate age of each entry: `now - entry.createdAt`
 - Show entries where age < 5000ms (5 seconds)
-- For entries age 4000-5000ms, apply fade: `opacity = 1 - ((age - 4000) / 1000)`
-- Remove from DOM once age >= 5000ms
-- Use `setInterval` or `requestAnimationFrame` to update `now` frequently (e.g., 60fps or every 100ms)
+- Opacity calculation (full range):
+  - age 0-4000ms: `opacity = 1.0` (fully visible)
+  - age 4000-5000ms: `opacity = 1.0 - ((age - 4000) / 1000)` (fade from 1.0 to 0.0)
+  - age >= 5000ms: remove from DOM
+- Update mechanism: `useEffect` with `requestAnimationFrame` loop (60fps) to recalculate opacity and remove expired entries on every frame
+
+**Architecture:**
+- `EventLog` owns the update loop via `useEffect` with `requestAnimationFrame`
+- Local state: `now` (current timestamp), `historyOpen` (boolean)
+- On every rAF tick: filter entries by age < 5000ms, calculate opacity for each, update DOM
+- `HistoryOverlay` is a sub-component (can be inline or separate file)
 
 **Structure:**
 ```tsx
-<div className="event-log-container">
-  {/* Live entries (age < 5s) */}
-  {liveEntries.length > 0 ? (
-    <div className="event-log">
-      {liveEntries.map(entry => (
-        <div key={entry.id} className="event-log-entry" style={{ opacity: calculateOpacity(entry) }}>
-          {/* existing entry rendering */}
+export function EventLog({ entries }: Props) {
+  const [now, setNow] = useState(Date.now())
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  // Update loop: run on every frame to recalculate ages and opacities
+  useEffect(() => {
+    let rafId: number
+    const update = () => {
+      setNow(Date.now())
+      rafId = requestAnimationFrame(update)
+    }
+    rafId = requestAnimationFrame(update)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
+  // Filter to live entries (age < 5000ms)
+  const liveEntries = entries.filter(e => (now - e.createdAt) < 5000)
+
+  return (
+    <div className="event-log-container">
+      {liveEntries.length > 0 && (
+        <div className="event-log">
+          {liveEntries.map(entry => {
+            const age = now - entry.createdAt
+            const opacity = age < 4000 ? 1.0 : 1.0 - ((age - 4000) / 1000)
+            return (
+              <div key={entry.id} className="event-log-entry" style={{ opacity, '--entry-color': entry.colorHex } as React.CSSProperties}>
+                {/* entry rendering: dot + tool + file + session */}
+              </div>
+            )
+          })}
         </div>
-      ))}
+      )}
+
+      {/* History button always visible */}
+      <button className="event-log-history-btn" onClick={() => setHistoryOpen(true)}>
+        {liveEntries.length > 0 ? `history (${entries.length})` : 'history'}
+      </button>
+
+      {/* History overlay (shows all 100 entries, newest first) */}
+      {historyOpen && (
+        <div className="event-log-history">
+          <button className="event-log-history-back" onClick={() => setHistoryOpen(false)}>← live</button>
+          {[...entries].reverse().map(entry => (
+            <div key={entry.id} className="event-log-entry event-log-entry--static" style={{ opacity: 0.7, '--entry-color': entry.colorHex } as React.CSSProperties}>
+              {/* entry rendering: same as live view */}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  ) : null}
-
-  {/* History button always visible */}
-  <button className="event-log-history-btn" onClick={() => setHistoryOpen(true)}>
-    {liveEntries.length > 0 ? `history (${entries.length})` : 'history'}
-  </button>
-
-  {/* History overlay */}
-  {historyOpen && <HistoryOverlay entries={entries} onClose={() => setHistoryOpen(false)} />}
-</div>
+  )
+}
 ```
+
+---
+
+## Existing Code Replacement
+
+**Help button conflict:**
+The existing `? operations` button in bottom-left (App.tsx line 382) opens a help overlay with node type legend. This is being **replaced** by the new Operations button in the top bar. Remove the old help button code.
+
+**DebugPanel conflict:**
+The existing DebugPanel in bottom-left (App.tsx line 396) has an internal toggle button. This is being **moved** to the top bar. Refactor DebugPanel to remove internal toggle logic and accept `isOpen` and `onClose` props instead.
 
 ---
 
 ## Top Bar Buttons
 
-**File:** `client/src/App.tsx` (add to HUD section)
+**File:** `client/src/App.tsx` (add to HUD section, replace existing help button)
 
 **Operations Button:**
 - Icon: `?` or similar help icon
@@ -190,7 +243,7 @@ Explain what each animation represents:
 
 ## Data Model
 
-**LogEntry** (unchanged):
+**LogEntry** (add createdAt field):
 ```typescript
 export interface LogEntry {
   id: string
@@ -199,12 +252,13 @@ export interface LogEntry {
   sessionLabel: string
   project: string
   colorHex: string
-  createdAt?: number  // NEW: timestamp for age calculation (ms since epoch)
+  createdAt: number  // REQUIRED: timestamp when entry was added (ms since epoch, from Date.now())
 }
 ```
 
 **Changes to App.tsx:**
-- When adding entries to `eventLog`, include `createdAt: Date.now()`
+- When adding entries to `eventLog` (lines 242-252), add `createdAt: Date.now()` to every entry
+- This is required for time-decay calculation in EventLog
 
 ---
 
