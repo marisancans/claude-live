@@ -20,13 +20,14 @@ Add a toggle button beside the audio control that, when enabled, continuously ad
 - **Visual:** Icon or text label indicating "auto-fit" or framing intent
 
 ### Camera Behavior (When Enabled)
-1. **Continuous fitting:** Every frame, calculate the bounding box of all cluster centers
-2. **Target computation:** Derive target `scale` and `viewOffset` to frame all clusters with ~120px padding
+1. **Continuous fitting:** Every frame, calculate the bounding box of all clusters, including their orbital node extents (±175px from center)
+2. **Target computation:** Derive target `scale` and `viewOffset` to frame all clusters with ~120px padding (in world coordinates, invariant to scale)
 3. **Smooth interpolation:** Lerp current camera toward target with a time constant of ~1.5 seconds (slow, glacial movement)
 4. **Blend during interaction:** When user drags or scrolls:
-   - Apply target with reduced influence (~10–20% blend)
+   - Apply target with reduced influence (~15% blend)
    - After drag ends, fade blend strength back to 100% over ~800ms
    - This allows the camera to gently pull back toward the fit frame without fighting the user
+5. **Debouncing:** If clusters are being laid out or positions change rapidly, wait for a brief settle period (~100ms) before recalculating to avoid jitter
 
 ### When Disabled
 - Normal pan/zoom behavior (no auto-fit influence)
@@ -48,22 +49,37 @@ Add a toggle button beside the audio control that, when enabled, continuously ad
 
 ### Camera Calculation (PixiScene.tsx)
 
+**State tracking (new variables at animation loop scope):**
+- `lastInteractionTime`: timestamp of last drag/wheel event (updated on mousedown/wheel)
+- `blendFactor`: value from 0 to 1, decays back to 1 after interaction stops
+- `lastBboxUpdate`: timestamp of last bounding box calc (debounce rapid layout changes)
+
 **Frame loop additions:**
-1. If `autofitEnabled`, calculate bounding box of all clusters:
-   - Iterate clusters: find min/max X and Y of `cluster.centerX` and `cluster.centerY`
-2. Compute target frame:
-   - Add padding (~120px on all sides)
-   - Calculate `targetScale` and `targetViewOffset` to fit that box
-3. Apply blending:
-   - Track user interaction state (dragging/wheel scroll)
-   - If interacting: `blendFactor = 0.15` (15% influence from target)
-   - If not: smoothly increase `blendFactor` toward 1.0 over ~800ms
-4. Interpolate:
-   - Use exponential smoothing with time constant ~1.5s:
-     - `scale += (targetScale - scale) * dt / 1.5`
-     - `viewOffset.x += (targetViewOffset.x - viewOffset.x) * dt / 1.5`
-     - `viewOffset.y += (targetViewOffset.y - viewOffset.y) * dt / 1.5`
-   - Apply `blendFactor` to the deltas before adding them
+1. **Update interaction state:**
+   - If user is currently dragging or a wheel event just fired, set `lastInteractionTime = now`
+   - Compute `timeSinceInteraction = now - lastInteractionTime`
+   - Decay blend factor: `blendFactor = Math.min(1, timeSinceInteraction / 800)` (fades to 1.0 over 800ms)
+   - While dragging: `blendFactor = 0.15`
+
+2. **Calculate bounding box (with debouncing):**
+   - If `now - lastBboxUpdate > 100ms`, recalculate:
+     - Iterate all clusters, include orbital extent (±175px from center)
+     - Find min/max X and Y: `{ minX, maxX, minY, maxY }`
+     - Add padding: `minX -= 120, maxX += 120, minY -= 120, maxY += 120` (world coords)
+     - Clamp target scale to existing bounds (0.2–4.0)
+     - Set `lastBboxUpdate = now`
+
+3. **Compute target camera frame:**
+   - Calculate `targetScale` to fit bounding box in viewport with padding
+   - Calculate `targetViewOffset` to center the bounding box
+   - Account for current scale and viewport dimensions
+
+4. **Interpolate with blending:**
+   - Effective target = `current + (targetValue - current) * blendFactor`
+   - Apply exponential smoothing (time constant ~1.5s):
+     - `scale += (effectiveTargetScale - scale) * (dt / 1500)`
+     - `viewOffset.x += (effectiveTargetOffsetX - viewOffset.x) * (dt / 1500)`
+     - `viewOffset.y += (effectiveTargetOffsetY - viewOffset.y) * (dt / 1500)`
 
 ### Data Flow
 
@@ -83,11 +99,14 @@ Updated scale / viewOffset (consumed by render pass)
 
 ## Edge Cases & Constraints
 
-1. **No clusters:** If `clusters.size === 0`, skip fitting (or fit to canvas center)
-2. **Single cluster:** Fit with same padding logic
-3. **New clusters appearing:** Bounding box updates automatically each frame; smooth transition to new frame
-4. **Scale limits:** Respect existing min/max scale bounds (0.2x – 4x) during target computation
-5. **Padding:** Use ~120px fixed padding for visual breathing room
+1. **Orbital extent:** Clusters have nodes orbiting up to ~175px from center. Bounding box calculation **must** include this extent to avoid clipping nodes at viewport edges. Use `ORBIT_RADII[2]` (175px) as max extent.
+2. **No clusters:** If `clusters.size === 0`, skip fitting entirely (hold current view)
+3. **Single cluster:** Fit with same padding logic as multiple
+4. **New clusters appearing:** Bounding box updates on next frame; smooth interpolation to new frame prevents jitter
+5. **Scale limits:** Clamp `targetScale` to existing bounds (0.2x – 4.0x) to prevent over/under-zoom
+6. **Padding:** Use ~120px fixed padding in **world coordinates** (scale-invariant) for consistent visual spacing
+7. **Rapid layout changes:** Debounce bounding box recalculation to ~100ms to prevent jitter during cluster spawn/layout phases
+8. **Interaction during fit:** Drag/wheel reduces blend factor to 0.15 so user input dominates; blend fades back over 800ms allowing gentle auto-fit pull
 
 ---
 
@@ -96,12 +115,16 @@ Updated scale / viewOffset (consumed by render pass)
 - [ ] Add autofit state to App.tsx (useState + localStorage)
 - [ ] Add autofit button to HUD (beside audio toggle)
 - [ ] Add `setAutofitEnabled` callback and onClick handler
-- [ ] Modify PixiScene.tsx animation loop to calculate camera target
-- [ ] Implement bounding box calculation for clusters
-- [ ] Implement smooth lerp with blending logic
+- [ ] Refactor PixiScene.tsx: move interaction state tracking to animation loop scope
+- [ ] Implement camera target calculation with bounding box (including orbit extent)
+- [ ] Implement debounced bbox update (~100ms settle)
+- [ ] Implement smooth lerp with interaction-based blend factor
 - [ ] Test with 0, 1, and multiple clusters
-- [ ] Test interaction blending (drag while enabled)
+- [ ] Test interaction blending (drag/wheel while enabled, verify gentle pull-back)
+- [ ] Test with scale at min/max bounds (0.2x–4.0x) to ensure target respects limits
+- [ ] Test rapid interaction (drag → wheel → drag) to verify blend decay is smooth
 - [ ] Test state persistence (reload page, check localStorage)
+- [ ] Test during layout phase (many clusters appearing rapidly)
 - [ ] Verify no performance regression (tight animation loop)
 
 ---
