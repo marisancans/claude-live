@@ -128,8 +128,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
         const c = cluster as any
         c.coreAct = Math.max(0, (c.coreAct || 0) - 0.014)
         if ((c.coreLabelFade || 0) > 0) c.coreLabelFade = Math.max(0, c.coreLabelFade - 0.003)
-        if ((c.compacting || 0) > 0) c.compacting = Math.max(0, c.compacting - 0.0015)  // ~11s
-        if ((c.compacted || 0) > 0) c.compacted = Math.max(0, c.compacted - 0.0025)  // ~6.5s
+        if ((c.compacting || 0) > 0) c.compacting = Math.max(0, c.compacting - 0.0003)  // ~55s
+        if ((c.compacted || 0) > 0) c.compacted = Math.max(0, c.compacted - 0.0005)  // ~32s
       }
 
       tickSimulation(clustersRef.current)
