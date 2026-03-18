@@ -75,7 +75,35 @@ git commit -m "feat: add AgentSessionInfo type and agentSessionMap to Cluster"
 
 Find the code that creates new Cluster instances. Look for where the empty Cluster object is created (around line 195-220 where clusters are first created).
 
-- [ ] **Step 2: Initialize agentPositionMap**
+- [ ] **Step 2: Find Projectile creation**
+
+Search for where Projectile objects are created (likely in PixiScene.tsx or store.ts around 340-360):
+
+```bash
+grep -n "Projectile" client/src/*.tsx | grep -v import
+```
+
+- [ ] **Step 2b: Extend Projectile interface**
+
+In `client/src/types.ts`, add to Projectile interface (after `tool: string;` line 80):
+
+```typescript
+  agentId?: string | null      // agent ID if action originated from agent session
+```
+
+- [ ] **Step 2c: Populate agentId when creating Projectiles**
+
+In projectile creation code, pass the agent_id from the hook event:
+
+```typescript
+// When creating a new Projectile from a tool hook
+const projectile: Projectile = {
+  // ... existing fields ...
+  agentId: event.agent_id || null  // Extract from hook event
+}
+```
+
+- [ ] **Step 3: Initialize agentPositionMap**
 
 In cluster creation, add:
 
@@ -85,7 +113,7 @@ agentPositionMap: new Map<string, {x: number, y: number}>()
 
 This creates an empty map that will be populated as agents spawn.
 
-- [ ] **Step 3: Add helper function**
+- [ ] **Step 4: Add helper function**
 
 Add this function to `store.ts` after helper functions like `hexToInt`, before the main event processing (around line 180):
 
@@ -107,7 +135,7 @@ export function getAnimationOrigin(
 }
 ```
 
-- [ ] **Step 4: Test compilation**
+- [ ] **Step 5: Test compilation**
 
 ```bash
 npm run build 2>&1 | head -20
@@ -115,11 +143,11 @@ npm run build 2>&1 | head -20
 
 Expected: No TypeScript errors.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add client/src/store.ts
-git commit -m "feat: initialize agentPositionMap and add getAnimationOrigin helper"
+git add client/src/types.ts client/src/store.ts
+git commit -m "feat: add agentId to Projectile, initialize agentPositionMap and helper"
 ```
 
 ---
@@ -251,11 +279,11 @@ To:
 
 ```typescript
 // Get origin: agent star if action from agent, otherwise core
-const origin = getAnimationOrigin(p.cluster, (p as any).agentId || null)
+const origin = getAnimationOrigin(p.cluster, p.agentId || null)
 const ox = origin.x, oy = origin.y
 ```
 
-The rest of the projectile loop stays the same.
+The rest of the projectile loop stays the same. Now `p.agentId` is properly typed since we extended the Projectile interface in Task 2.
 
 - [ ] **Step 4: Test visual rendering**
 
