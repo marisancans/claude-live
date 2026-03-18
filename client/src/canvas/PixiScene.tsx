@@ -218,8 +218,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect }: Props) {
     const target = cluster.nodes.get(key) ?? null
     if (!target) return
 
-    // Read/Grep/Glob: planet → core (inbound). Failures always outbound (show error on node)
-    const inbound = lastEvent.hook_event_name !== 'PostToolUseFailure' && ['Read', 'Grep', 'Glob'].includes(tool)
+    // Read/Grep/Glob/Bash: planet → core (inbound). Failures always outbound (show error on node)
+    const inbound = lastEvent.hook_event_name !== 'PostToolUseFailure' && ['Read', 'Grep', 'Glob', 'Bash'].includes(tool)
 
     projectilesRef.current.push({
       sessionId: lastEvent.session_id,
