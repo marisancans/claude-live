@@ -37,9 +37,14 @@ function fadeOutAndStop(audio: HTMLAudioElement, ctx: AudioContext, durationMs: 
 
     if (progress >= 1) {
       clearInterval(fadeInterval)
-      audio.pause()
-      audio.volume = startVolume
-      ctx.isPlaying = false
+      // Don't pause - let audio fade naturally to silence for smooth ending
+      audio.volume = 0
+      // Mark as idle so channel can be reused, but let audio finish naturally
+      setTimeout(() => {
+        audio.pause()
+        audio.volume = startVolume
+        ctx.isPlaying = false
+      }, 500) // Give audio time to fade out completely
     }
   }, 16) // ~60fps
 }
