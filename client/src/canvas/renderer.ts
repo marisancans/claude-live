@@ -1,5 +1,6 @@
-import type { Cluster, GraphNode, Projectile } from '../types'
+import type { Cluster, GraphNode, Projectile, PromptSnake } from '../types'
 import { getAnimationOrigin } from '../store'
+import { evaluateSpline } from '../utils/spline'
 
 // Atomic orbital structure: dynamically grows from 1 to 4 rings
 const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
@@ -8,6 +9,62 @@ const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
 function hexToRgb(hex: string): [number, number, number] {
   const c = hex.replace('#', '')
   return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)]
+}
+
+function drawSnake(
+  ctx: CanvasRenderingContext2D,
+  snake: PromptSnake,
+  clusterCx: number,
+  clusterCy: number
+) {
+  const [r, g, b] = hexToRgb(snake.color)
+  const progress = snake.progress
+
+  // Easing: quadratic ease-out
+  const eased = 1 - (1 - progress) * (1 - progress)
+
+  // Map progress to spline parameter (0 → 1)
+  const t = eased
+
+  // Draw each word vertically aligned but positioned along spline
+  for (let i = 0; i < snake.words.length; i++) {
+    const word = snake.words[i]
+
+    // Stagger words along spline: head is ahead, tail lags behind
+    const wordT = Math.max(0, t - i * 0.08)
+    const wordPos = evaluateSpline(snake.splinePath, wordT)
+
+    // Tail fading: words fade faster if they're at tail (lower index)
+    const tailFade = Math.pow(i / snake.words.length, 0.7)
+    const opacity = tailFade * Math.min(1, progress * 3)  // fade in quickly
+
+    // Scale grows during animation
+    const scale = 0.6 + progress * 0.4
+    const fontSize = 11 * scale
+
+    // Draw glow around word
+    const glowR = 20 * scale
+    const gg = ctx.createRadialGradient(wordPos.x, wordPos.y, 0, wordPos.x, wordPos.y, glowR)
+    gg.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.25})`)
+    gg.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.beginPath()
+    ctx.arc(wordPos.x, wordPos.y, glowR, 0, Math.PI * 2)
+    ctx.fillStyle = gg
+    ctx.fill()
+
+    // Draw word (vertical, no rotation)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 ${fontSize}px monospace`
+
+    // Shadow
+    ctx.fillStyle = `rgba(0,0,0,${opacity * 0.3})`
+    ctx.fillText(word, wordPos.x + 1, wordPos.y + 1)
+
+    // Main text
+    ctx.fillStyle = `rgba(${r},${g},${b},${opacity})`
+    ctx.fillText(word, wordPos.x, wordPos.y)
+  }
 }
 
 function drawImpact(
@@ -376,45 +433,9 @@ export function drawScene(
       _drawPermRing(ctx, cx, cy, coreR + 8, t)
     }
 
-    // User prompt flying in from outer space
-    const promptFlying = cluster.promptFlying
-    if (promptFlying > 0 && cluster.promptText) {
-      const [pr, pg, pb] = hexToRgb(cluster.promptColor)
-      // Easing: fast in, slow out (inverse quadratic)
-      const eased = 1 - (1 - promptFlying) * (1 - promptFlying)
-      const progress = 1 - eased  // 0 = start (far), 1 = end (center)
-
-      // Start from edge of screen, fly toward center
-      const maxDist = Math.max(W, H) * 0.6
-      const currentDist = maxDist * (1 - progress)
-      const angle = Math.atan2(cy - H/2, cx - W/2)
-      const startX = cx + Math.cos(angle) * currentDist
-      const startY = cy + Math.sin(angle) * currentDist
-
-      // Scaling and opacity
-      const scale = 0.6 + progress * 0.4  // grows from 0.6 → 1.0
-      const opacity = Math.min(1, promptFlying * 3)  // fade in quickly
-
-      // Draw glow
-      const glowR = 40 * scale
-      const gg = ctx.createRadialGradient(startX, startY, 0, startX, startY, glowR)
-      gg.addColorStop(0, `rgba(${pr},${pg},${pb},${opacity * 0.3})`)
-      gg.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.beginPath(); ctx.arc(startX, startY, glowR, 0, Math.PI * 2)
-      ctx.fillStyle = gg; ctx.fill()
-
-      // Draw text with shadow
-      const fontSize = 11 * scale
-      ctx.font = `700 ${fontSize}px monospace`
-      ctx.textAlign = 'center'
-
-      // Shadow
-      ctx.fillStyle = `rgba(0,0,0,${opacity * 0.4})`
-      ctx.fillText(cluster.promptText, startX + 1, startY + 1)
-
-      // Main text
-      ctx.fillStyle = `rgba(${pr},${pg},${pb},${opacity})`
-      ctx.fillText(cluster.promptText, startX, startY)
+    // Render snakes
+    for (const snake of cluster.promptSnakes) {
+      drawSnake(ctx, snake, cx, cy)
     }
 
     // Core label — appears when inbound animation (Read/Grep/Glob) arrives
