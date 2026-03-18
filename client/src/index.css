@@ -308,6 +308,52 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   margin-left: auto;
 }
 
+/* ── Event log: static modifier (suppresses animations in history) ── */
+.event-log-entry--static,
+.event-log-entry--static .event-log-dot,
+.event-log-entry--static .event-log-tool {
+  animation: none;
+}
+.event-log-entry--static::after { display: none; }
+
+/* ── Event log: history overlay ────────────────────────────────── */
+.event-log-history {
+  max-width: 250px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: rgba(2, 2, 9, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 6px;
+}
+.event-log-history-back {
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  color: #555;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0 0 4px 0;
+}
+.event-log-history-back:hover { color: #aaa; }
+
+/* ── Event log: history toggle button ──────────────────────────── */
+.event-log-history-btn {
+  font-family: 'Space Mono', monospace;
+  font-size: 7px;
+  color: #333;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 2px 0 0 10px;
+}
+.event-log-history-btn:hover { color: #777; }
+
 /* ── Help button ────────────────────────────────────────── */
 .help-btn {
   background: none;
