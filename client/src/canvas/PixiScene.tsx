@@ -352,7 +352,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       colorHex,
       tool,
       progress: 0,
-      duration: 3.5 + Math.random() * 0.8,
+      duration: tool === 'Read' ? 4.5 + Math.random() * 0.6 : 3.5 + Math.random() * 0.8,
       agentId: lastEvent.agent_id || null,
     })
   }, [lastEvent])

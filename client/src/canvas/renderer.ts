@@ -1,6 +1,6 @@
 import type { Cluster, GraphNode, Projectile, PromptSnake } from '../types'
 import { getAnimationOrigin } from '../store'
-import { evaluateSpline } from '../utils/spline'
+import { evaluateSpline, evaluateTangent } from '../utils/spline'
 
 // Atomic orbital structure: dynamically grows from 1 to 4 rings
 const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
@@ -23,26 +23,35 @@ function drawSnake(
   // Easing: quadratic ease-out
   const eased = 1 - (1 - progress) * (1 - progress)
 
-  // Map progress to spline parameter (0 → 1)
+  // Current position on spline (0 = start, 1 = center/head position)
   const t = eased
 
-  // Draw each word vertically aligned but positioned along spline
+  // All words move together, spaced backward from the head
+  const wordSpacing = 0.08  // space between consecutive words along curve
+  const fontSize = 11 * (0.6 + progress * 0.4)
+
   for (let i = 0; i < snake.words.length; i++) {
     const word = snake.words[i]
 
-    // Stagger words along spline: head is ahead, tail lags behind
-    const wordT = Math.max(0, t - (snake.words.length - 1 - i) * 0.12)
+    // Position word along curve: head is ahead, earlier words trail behind
+    // Head (last word, i = words.length - 1): positioned at `t`
+    // Earlier words: positioned at `t - spacing * (words.length - 1 - i)`
+    const distFromHead = snake.words.length - 1 - i
+    const wordT = Math.max(0, t - wordSpacing * distFromHead)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
-    // Tail fading: words fade faster if they're at tail (lower index)
-    const tailFade = Math.pow(i / snake.words.length, 0.7)
-    const opacity = tailFade * Math.min(1, progress * 3)  // fade in quickly
+    // Get tangent to rotate word perpendicular to curve
+    const tangent = evaluateTangent(snake.splinePath, wordT)
+    const angle = Math.atan2(tangent.y, tangent.x) + Math.PI / 2
 
-    // Scale grows during animation
-    const scale = 0.6 + progress * 0.4
-    const fontSize = 11 * scale
+    // Fade: words closer to head are more visible
+    // Exponential fade from head to tail
+    const visibilityFade = Math.pow(1 - distFromHead / snake.words.length, 0.7)
+    const fadeInFactor = Math.min(1, progress * 3)  // fade in quickly
+    const opacity = visibilityFade * fadeInFactor
 
     // Draw glow around word
+    const scale = 0.6 + progress * 0.4
     const glowR = 20 * scale
     const gg = ctx.createRadialGradient(wordPos.x, wordPos.y, 0, wordPos.x, wordPos.y, glowR)
     gg.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.25})`)
@@ -52,18 +61,24 @@ function drawSnake(
     ctx.fillStyle = gg
     ctx.fill()
 
-    // Draw word (vertical, no rotation)
+    // Draw word ROTATED along the curve
+    ctx.save()
+    ctx.translate(wordPos.x, wordPos.y)
+    ctx.rotate(angle)
+
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = `700 ${fontSize}px monospace`
 
     // Shadow
     ctx.fillStyle = `rgba(0,0,0,${opacity * 0.3})`
-    ctx.fillText(word, wordPos.x + 1, wordPos.y + 1)
+    ctx.fillText(word, 1, 1)
 
     // Main text
     ctx.fillStyle = `rgba(${r},${g},${b},${opacity})`
-    ctx.fillText(word, wordPos.x, wordPos.y)
+    ctx.fillText(word, 0, 0)
+
+    ctx.restore()
   }
 }
 
@@ -503,51 +518,66 @@ function _drawProjectile(
     const scanH = 18  // half-height of scan area
 
     if (progress < 0.45) {
-      // ── Phase 1: Laser scanner at node ──
+      // ── Phase 1: Laser scanner at node — line sweeps bottom to top ──
       const p1 = progress / 0.45
-      const fadeIn = Math.min(1, p1 * 4)  // quick fade in
+      const fadeIn = Math.min(1, p1 * 4)
 
-      // Scan line bounces up and down (3 full passes)
-      const bounce = Math.abs(Math.sin(p1 * Math.PI * 3))
-      const scanY = node.y - scanH + bounce * scanH * 2
+      // Line sweeps from bottom to top (single smooth pass)
+      const scanY = node.y + scanH - p1 * scanH * 2
 
-      // Scan boundary box (faint)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.15})`; ctx.lineWidth = 0.5
-      ctx.strokeRect(node.x - 12, node.y - scanH, 24, scanH * 2)
+      // Corner tick marks
+      const bw = 14, bh = scanH
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.18})`; ctx.lineWidth = 0.5
+      const cornerLen = 5
+      for (const [sx, sy] of [[-1,-1],[1,-1],[-1,1],[1,1]] as [number,number][]) {
+        ctx.beginPath()
+        ctx.moveTo(node.x + sx * bw, node.y + sy * bh)
+        ctx.lineTo(node.x + sx * bw, node.y + sy * bh - sy * cornerLen)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(node.x + sx * bw, node.y + sy * bh)
+        ctx.lineTo(node.x + sx * bw - sx * cornerLen, node.y + sy * bh)
+        ctx.stroke()
+      }
 
-      // Bright laser scan line
+      // Laser scan line
       ctx.beginPath()
-      ctx.moveTo(node.x - 13, scanY)
-      ctx.lineTo(node.x + 13, scanY)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.9})`
-      ctx.lineWidth = 1.5; ctx.stroke()
+      ctx.moveTo(node.x - bw, scanY); ctx.lineTo(node.x + bw, scanY)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.85})`
+      ctx.lineWidth = 1.2; ctx.stroke()
 
-      // Glow around scan line
+      // Soft glow around scan line
       ctx.beginPath()
-      ctx.moveTo(node.x - 13, scanY)
-      ctx.lineTo(node.x + 13, scanY)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.25})`
-      ctx.lineWidth = 5; ctx.stroke()
+      ctx.moveTo(node.x - bw, scanY); ctx.lineTo(node.x + bw, scanY)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${fadeIn * 0.12})`
+      ctx.lineWidth = 8; ctx.stroke()
 
-      // Trail fade behind the scan line (shows where it's been)
-      const trailAlpha = fadeIn * 0.12
-      const prevBounce = Math.abs(Math.sin(Math.max(0, p1 - 0.03) * Math.PI * 3))
-      const prevY = node.y - scanH + prevBounce * scanH * 2
-      ctx.beginPath()
-      ctx.moveTo(node.x - 10, prevY)
-      ctx.lineTo(node.x + 10, prevY)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${trailAlpha})`
-      ctx.lineWidth = 1; ctx.stroke()
+      // Scanned region fill (below scan line = already read)
+      ctx.fillStyle = `rgba(${r},${g},${b},${fadeIn * 0.035})`
+      ctx.fillRect(node.x - bw, scanY, bw * 2, (node.y + scanH) - scanY)
 
-      // Center dot
-      ctx.beginPath(); ctx.arc(node.x, node.y, 1.5, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(${r},${g},${b},${fadeIn * 0.5})`; ctx.fill()
+      // Text-like detail lines revealed behind scan line
+      const lineSpacing = 3.5
+      const numLines = Math.floor(scanH * 2 / lineSpacing)
+      for (let i = 0; i < numLines; i++) {
+        const ly = node.y - scanH + i * lineSpacing + 2
+        if (ly < scanY) continue  // only show lines already scanned (below line going up)
+        const dist = ly - scanY
+        if (dist > 14) continue
+        const lineAlpha = fadeIn * 0.22 * (1 - dist / 14)
+        const lineW = 4 + ((i * 7) % 5) * 2.5  // pseudo-random varying widths
+        const lineX = node.x - 8 + ((i * 3) % 5) * 1.5  // slight offset per line
+        ctx.beginPath()
+        ctx.moveTo(lineX - lineW * 0.5, ly); ctx.lineTo(lineX + lineW * 0.5, ly)
+        ctx.strokeStyle = `rgba(${r},${g},${b},${lineAlpha})`
+        ctx.lineWidth = 0.5; ctx.stroke()
+      }
 
       // Flash at end of scanning
-      if (p1 > 0.85) {
-        const flash = (p1 - 0.85) / 0.15
+      if (p1 > 0.88) {
+        const flash = (p1 - 0.88) / 0.12
         ctx.beginPath(); ctx.arc(node.x, node.y, flash * 16, 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - flash) * 0.5})`; ctx.lineWidth = 0.8; ctx.stroke()
+        ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - flash) * 0.4})`; ctx.lineWidth = 0.7; ctx.stroke()
       }
 
     } else {
