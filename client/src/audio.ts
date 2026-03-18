@@ -26,6 +26,24 @@ function getRandomChord(): string {
   return `/chords/chord_${chord}.wav`
 }
 
+function fadeOutAndStop(audio: HTMLAudioElement, ctx: AudioContext, durationMs: number = 300) {
+  const startVolume = audio.volume
+  const startTime = Date.now()
+
+  const fadeInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime
+    const progress = Math.min(elapsed / durationMs, 1)
+    audio.volume = startVolume * (1 - progress)
+
+    if (progress >= 1) {
+      clearInterval(fadeInterval)
+      audio.pause()
+      audio.volume = startVolume
+      ctx.isPlaying = false
+    }
+  }, 16) // ~60fps
+}
+
 export function initAudio() {
   // Load saved preference from localStorage
   const saved = localStorage.getItem('claude-live-audio-enabled')
@@ -40,10 +58,10 @@ export function initAudio() {
     audio.crossOrigin = 'anonymous'
     audio.volume = 0.4
 
-    // Track when audio finishes playing
+    // Track when audio finishes playing and fade out
     audio.addEventListener('ended', () => {
       const ctx = state.audioContexts.find(c => c.audio === audio)
-      if (ctx) ctx.isPlaying = false
+      if (ctx) fadeOutAndStop(audio, ctx)
     })
 
     state.audioContexts.push({ audio, isPlaying: false })
@@ -72,13 +90,13 @@ export function playChord() {
   selected.audio.currentTime = 0
   selected.isPlaying = true
 
-  // Auto-mark as idle after audio duration + buffer (ensures 'ended' event isn't needed)
+  // Auto-fade out and mark as idle after audio duration + buffer (ensures 'ended' event isn't needed)
   setTimeout(() => {
-    selected!.isPlaying = false
-  }, 3000)
+    fadeOutAndStop(selected!.audio, selected!, 300)
+  }, 2700)
 
   selected.audio.play().catch((err) => {
-    selected!.isPlaying = false
+    fadeOutAndStop(selected!.audio, selected!, 0)
     console.debug('[audio] playback failed:', err.message)
   })
 }
