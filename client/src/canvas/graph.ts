@@ -78,6 +78,18 @@ function computeClusterRadii(clusters: Map<string, Cluster>): void {
 }
 
 export function tickSimulation(clusters: Map<string, Cluster>) {
+  // Update cluster radii based on size relative to neighbors
+  computeClusterRadii(clusters)
+
+  // Update cluster center positions based on currentRadius and angle
+  const cx = CANVAS_W / 2
+  const cy = CANVAS_H / 2
+
+  for (const cluster of clusters.values()) {
+    cluster.centerX = cx + Math.cos(cluster.layoutAngle) * cluster.currentRadius
+    cluster.centerY = cy + Math.sin(cluster.layoutAngle) * cluster.currentRadius
+  }
+
   for (const cluster of clusters.values()) {
     // Decay animation states
     cluster.compacting = Math.max(0, cluster.compacting - 0.0003)
