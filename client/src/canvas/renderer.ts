@@ -573,36 +573,55 @@ function _drawProjectile(
     }
 
   } else if (tool === 'Bash') {
-    // Branching lightning
-    const seed = Math.floor(progress / 0.12)
-    function sr(s: number) { const x = Math.sin(s*127.1+311.7)*43758.5453; return x-Math.floor(x) }
-    function bolt(x0: number, y0: number, x1: number, y1: number, depth: number, alpha: number, s: number) {
-      if (depth === 0 || alpha < 0.05) {
-        ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1)
-        ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`
-        ctx.lineWidth = depth===0?0.5:1; ctx.stroke(); return
-      }
-      const mx = (x0+x1)/2+(sr(s*7.3+depth)-0.5)*28*(1/depth)
-      const my = (y0+y1)/2+(sr(s*13.1+depth)-0.5)*28*(1/depth)
-      bolt(x0,y0,mx,my,depth-1,alpha,s*2.1)
-      bolt(mx,my,x1,y1,depth-1,alpha,s*3.7)
-      if (depth===2 && sr(s*5.9)>0.4) {
-        const bx = mx+(sr(s*8.3)-0.5)*30, by = my+(sr(s*9.1)-0.5)*30
-        bolt(mx,my,bx,by,depth-2,alpha*0.45,s*4.3)
+    // Terminal window animation at destination
+    const termW = 50, termH = 50
+    const termX = to.x - termW / 2, termY = to.y - termH / 2
+
+    // Frame border
+    ctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.8})`
+    ctx.lineWidth = 1.2
+    ctx.strokeRect(termX, termY, termW, termH)
+
+    // Title bar
+    ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.3})`
+    ctx.fillRect(termX, termY, termW, 10)
+    ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, progress * 2) * 0.7})`
+    ctx.font = 'bold 6px monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('bash', termX + 2, termY + 8)
+
+    // Terminal commands cycling
+    const commands = ['ls', 'cd', 'cat', 'grep', 'find', 'git', 'npm', 'sh']
+    const cols = 2, rows = 4
+    const cycleTime = 0.15
+    const termProgress = progress < 0.3 ? progress / 0.3 : 1
+
+    for (let col = 0; col < cols; col++) {
+      for (let row = 0; row < rows; row++) {
+        const seed = col * rows + row + Math.floor(progress / cycleTime)
+        const command = commands[seed % commands.length]
+
+        const cellW = (termW - 2) / cols
+        const cellH = (termH - 10 - 2) / rows
+        const cx = termX + 1 + cellW * (col + 0.5)
+        const cy = termY + 10 + cellH * (row + 0.5) + 1
+
+        const cycleP = (progress / cycleTime) % 1
+        const cmdAlpha = cycleP < 0.5 ? cycleP * 2 : (1 - cycleP) * 2
+
+        ctx.fillStyle = `rgba(${r},${g},${b},${termProgress * cmdAlpha * 0.8})`
+        ctx.font = 'bold 6px monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText(command, cx, cy + 1)
       }
     }
-    ctx.beginPath(); ctx.moveTo(from.x,from.y); ctx.lineTo(hx,hy)
-    ctx.strokeStyle=`rgba(${r},${g},${b},0.07)`; ctx.lineWidth=8; ctx.stroke()
-    bolt(from.x,from.y,hx,hy,3,0.75,seed)
-    ctx.beginPath(); ctx.moveTo(from.x,from.y); ctx.lineTo(hx,hy)
-    ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=0.6; ctx.stroke()
-    ctx.beginPath(); ctx.arc(from.x,from.y,3+Math.sin(t*30)*1.5,0,Math.PI*2)
-    ctx.fillStyle=`rgba(${r},${g},${b},0.8)`; ctx.fill()
-    if (progress > 0.82) {
-      const fl = (progress-0.82)/0.18
-      ctx.beginPath(); ctx.arc(to.x,to.y,fl*18,0,Math.PI*2)
-      ctx.strokeStyle=`rgba(${r},${g},${b},${(1-fl)*0.8})`; ctx.lineWidth=1.2; ctx.stroke()
-    }
+
+    // Glow effect
+    const glowAlpha = Math.sin(progress * Math.PI * 0.5) * 0.1
+    ctx.fillStyle = `rgba(${r},${g},${b},${glowAlpha})`
+    ctx.beginPath()
+    ctx.arc(to.x, to.y, 25, 0, Math.PI * 2)
+    ctx.fill()
 
   } else if (tool === 'WebFetch') {
     // Sine wave beam

@@ -507,9 +507,8 @@ export function createStore() {
         }
       }
 
-      // Assign to least-populated ring (both file and ephemeral nodes share rings)
-      const minCount = Math.min(...cluster.ringCounts)
-      const orbitRing = cluster.ringCounts.indexOf(minCount)
+      // Bash nodes always go to outer orbit (ring 2), others to least-populated ring
+      const orbitRing = type === 'bash' ? 2 : cluster.ringCounts.indexOf(Math.min(...cluster.ringCounts))
       cluster.ringCounts[orbitRing]++
       // Use per-ring speed from cluster (all nodes on same ring share the same speed)
       const ringSpeeds = (cluster as any).ringSpeeds as number[] | undefined
