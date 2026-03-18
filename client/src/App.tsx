@@ -69,7 +69,12 @@ function fileLabel(event: RawEvent): string {
   }
   if (t === 'Read') {
     const fp = (input?.file_path || '') as string
-    return fp.split('/').pop() || ''
+    const limit = input?.limit
+    const offset = input?.offset
+    const name = fp.split('/').pop() || ''
+    if (offset) return `${name} @${offset}`
+    if (limit) return `${name} ${limit}L`
+    return name
   }
   if (['Grep', 'Glob'].includes(t || '')) {
     return input?.pattern || input?.file_path?.split('/').pop() || ''
@@ -82,6 +87,40 @@ function fileLabel(event: RawEvent): string {
   if (event.hook_event_name === 'SessionStart') return event.model || event.source || 'started'
   if (event.hook_event_name === 'InstructionsLoaded') return event.memory_type || 'instructions'
   return ''
+}
+
+function enrichedFileLabel(event: RawEvent): string {
+  const t = event.tool_name
+  const input = event.tool_input as Record<string, any> | null
+  const resp = event.tool_response as Record<string, any> | null
+
+  if (t === 'Read' && resp) {
+    const fp = (input?.file_path || '') as string
+    const name = fp.split('/').pop() || ''
+    const content = resp.content ?? resp.text ?? resp.output
+    if (typeof content === 'string') {
+      const lines = content.split('\n').length
+      return `${name} ${lines}L`
+    }
+    return name
+  }
+  if (t === 'Grep' && resp) {
+    const count = resp.count ?? resp.numMatches ?? resp.total
+    if (count !== undefined) return `${input?.pattern || ''} ${count} hits`
+    return input?.pattern || ''
+  }
+  if (t === 'Glob' && resp) {
+    const files = Array.isArray(resp) ? resp.length : (resp.files?.length ?? resp.count)
+    if (files !== undefined) return `${input?.pattern || ''} ${files} files`
+    return input?.pattern || ''
+  }
+  if (t === 'Bash' && resp) {
+    const code = resp.exitCode ?? resp.exit_code ?? resp.code
+    if (code !== undefined) return `$ ${(input?.command || '').split(/\s+/)[0]?.split('/').pop() || ''} ${code === 0 ? '✓' : `✗ ${code}`}`
+    return (input?.command || '').slice(0, 22)
+  }
+
+  return fileLabel(event)
 }
 
 const MAX_LOG = 10
@@ -136,6 +175,11 @@ export function App() {
     const saved = localStorage.getItem('claude-live-audio-enabled')
     return saved === 'true'
   })
+  const [autofitEnabled, setAutofitEnabledState] = useState(() => {
+    // Load from localStorage
+    const saved = localStorage.getItem('claude-live-autofit-enabled')
+    return saved === 'true'
+  })
   const [replayDone, setReplayDone] = useState(false)
   const replayDoneRef = useRef(false)
   const esRef = useRef<EventSource | null>(null)
@@ -145,6 +189,11 @@ export function App() {
     initAudio()
     setAudioEnabledState(isAudioEnabled())
   }, [])
+
+  // Sync autofit state to localStorage
+  useEffect(() => {
+    localStorage.setItem('claude-live-autofit-enabled', autofitEnabled ? 'true' : 'false')
+  }, [autofitEnabled])
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => { setMouseX(e.clientX); setMouseY(e.clientY) }
@@ -177,8 +226,11 @@ export function App() {
         setEventCount(c => c + 1)
         if (replayDoneRef.current) playChordForEvent(event.tool_name, event.hook_event_name) // Play audio on event (only after replay completes)
 
-        // Live event log (skip PostToolUse to avoid duplicate entries)
-        if (event.hook_event_name !== 'PostToolUse') {
+        // Live event log: show PostToolUse for tools with enriched data, skip others to avoid duplication
+        const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
+        const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
+
+        if (!skipDuplicate) {
           const cluster = sessions.get(event.session_id)
           let tool = event.tool_name || event.hook_event_name || '?'
           // Shorten MCP names: mcp__plugin_X__Y__action → action
@@ -190,7 +242,7 @@ export function App() {
             const entry: LogEntry = {
               id: event.id,
               tool,
-              file: fileLabel(event),
+              file: event.hook_event_name === 'PostToolUse' ? enrichedFileLabel(event) : fileLabel(event),
               sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
               project: projectName(event.cwd),
               colorHex: TOOL_COLORS[tool] ?? '#888',
@@ -215,32 +267,18 @@ export function App() {
             return next
           })
         }
-        // Clear when tool starts executing on a session with awaiting input
-        if (event.tool_name && permNotifications.has(event.session_id)) {
-          console.log('[perm] clearing notification on tool:', { session: event.session_id, tool: event.tool_name })
+        // Clear when user provides input or a tool starts executing
+        if (event.tool_name || event.hook_event_name === 'UserPromptSubmit') {
           setPermNotifications(prev => {
             if (!prev.has(event.session_id)) return prev
+            console.log('[perm] clearing notification:', { session: event.session_id, trigger: event.tool_name || 'UserPromptSubmit' })
             const next = new Map(prev)
             next.delete(event.session_id)
             return next
           })
         }
 
-        // Trigger compacting animation on PreCompact/PostCompact events
-        if (event.hook_event_name === 'PreCompact' || event.hook_event_name === 'PostCompact') {
-          const cluster = sessions.get(event.session_id)
-          if (cluster) {
-            if (event.hook_event_name === 'PreCompact') {
-              cluster.compacting = 1
-              cluster.compacted = 0
-            } else {
-              // PostCompact: transition to the post-compaction hold state
-              cluster.compacting = 0
-              cluster.compacted = 1
-            }
-            setClusters(new Map(sessions))
-          }
-        }
+        // Compacting animation handled by store.ts (with replayDone guard)
       } catch { /* ignore malformed */ }
     }
     es.onerror = (err) => console.warn('[claude-live] SSE error', err)
@@ -257,10 +295,13 @@ export function App() {
     setAudioEnabledState(newState)
     setAudioEnabled(newState)
   }
+  const setAutofitEnabled = (enabled: boolean) => {
+    setAutofitEnabledState(enabled)
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <PixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} />
+      <PixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
 
       {/* HUD */}
       <div className="hud">
