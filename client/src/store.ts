@@ -1,4 +1,5 @@
 import type { RawEvent, GraphNode, Cluster } from './types'
+import type { Point } from './utils/spline'
 
 function shortHash(s: string): string {
   let h = 5381
@@ -38,6 +39,22 @@ function desaturate(hex: string): string {
 
 function hexToInt(hex: string): number {
   return parseInt(hex.replace('#',''), 16)
+}
+
+/**
+ * Get the animation origin point for an action.
+ * If agentId exists and points to an active agent, returns agent position.
+ * Otherwise, returns cluster core position.
+ */
+export function getAnimationOrigin(
+  cluster: Cluster,
+  agentId: string | null
+): Point {
+  if (agentId && cluster.agentPositionMap.has(agentId)) {
+    return cluster.agentPositionMap.get(agentId)!
+  }
+  // Fallback to core position
+  return {x: cluster.centerX, y: cluster.centerY}
 }
 
 // Atomic orbital structure: each ring has progressively more slots
@@ -359,6 +376,7 @@ export function createStore() {
         promptFlying: 0,
         promptText: '',
         promptColor: '#38bdf8',
+        agentPositionMap: new Map<string, Point>(),
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)

@@ -313,6 +313,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
         tool: 'UserPromptSubmit',
         progress: 0,
         duration: 2.5 + Math.random() * 0.5,
+        agentId: lastEvent.agent_id || null,
       })
       return
     }
@@ -329,6 +330,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
         tool: 'Notification',
         progress: 0,
         duration: 4.5,
+        agentId: lastEvent.agent_id || null,
       })
       return
     }
@@ -351,6 +353,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       tool,
       progress: 0,
       duration: 3.5 + Math.random() * 0.8,
+      agentId: lastEvent.agent_id || null,
     })
   }, [lastEvent])
 

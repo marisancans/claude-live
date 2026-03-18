@@ -80,6 +80,7 @@ export interface Projectile {
   tool: string
   progress: number      // 0 → 1
   duration: number      // seconds
+  agentId?: string | null      // agent ID if action originated from agent session
 }
 
 // Maps agent IDs to their current positions for animation routing
