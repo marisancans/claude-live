@@ -89,13 +89,14 @@ export function drawScene(
     const cx = cluster.centerX, cy = cluster.centerY
     const clusterPerm = (cluster as any).awaitingPermission as boolean
 
-    // ── Solid orbit rings (thin, subtle) — only draw rings that exist ──
-    const numRings = cluster.ringCounts.length
-    for (let ri = 0; ri < numRings && ri < ORBIT_RADII.length; ri++) {
-      ctx.beginPath()
-      ctx.arc(cx, cy, ORBIT_RADII[ri], 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255,255,255,0.045)'
-      ctx.lineWidth = 0.6; ctx.stroke()
+    // ── Solid orbit rings (thin, subtle) — only draw rings with active nodes ──
+    for (let ri = 0; ri < cluster.ringCounts.length && ri < ORBIT_RADII.length; ri++) {
+      if (cluster.ringCounts[ri] > 0) {  // Only draw if ring has nodes
+        ctx.beginPath()
+        ctx.arc(cx, cy, ORBIT_RADII[ri], 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(255,255,255,0.045)'
+        ctx.lineWidth = 0.6; ctx.stroke()
+      }
     }
 
     // ── Trail stamps: fixed dashes left behind each node, smooth gradient ──

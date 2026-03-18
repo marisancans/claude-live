@@ -206,20 +206,38 @@ function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
   return 'tool'
 }
 
-// Minimum distance between cluster centers (outermost orbit ~340px radius each side)
-const MIN_CLUSTER_DIST = 720
+// Calculate actual outer radius of a cluster based on its current nodes
+function getClusterOuterRadius(cluster: Cluster): number {
+  if (cluster.ringCounts.length === 0) return ORBIT_RADII[0]
+  const lastRing = cluster.ringCounts.length - 1
+  return ORBIT_RADII[Math.min(lastRing, ORBIT_RADII.length - 1)]
+}
 
-function clusterPosition(index: number, existing: { centerX: number; centerY: number }[]): { x: number; y: number } {
+function clusterPosition(index: number, existing: Cluster[]): { x: number; y: number } {
+  // Calculate minimum distance based on actual cluster sizes
+  const getMinDist = (c1: Cluster, c2: Cluster) => {
+    const r1 = getClusterOuterRadius(c1)
+    const r2 = getClusterOuterRadius(c2)
+    return (r1 + r2) * 2 + 100  // 2x radius of each + 100px buffer
+  }
+
   // Try evenly-spaced angles first, then nudge if too close
   const candidates = 24 // angular candidates to try
   for (let attempt = 0; attempt < candidates; attempt++) {
     const angle = ((index + attempt / candidates) / Math.max(MAX_CLUSTERS, 1)) * Math.PI * 2
-    // Scale radius so clusters fit: for N clusters on a circle, chord = 2r*sin(π/N) >= MIN_DIST
-    const minR = (MIN_CLUSTER_DIST / 2) / Math.sin(Math.PI / Math.max(MAX_CLUSTERS, 2))
+    // Scale radius so clusters fit
+    const avgRadius = existing.length > 0
+      ? existing.reduce((sum, c) => sum + getClusterOuterRadius(c), 0) / existing.length
+      : ORBIT_RADII[0]
+    const minR = (avgRadius * 4) / Math.sin(Math.PI / Math.max(MAX_CLUSTERS, 2))
     const r = Math.max(minR, Math.min(CANVAS_W, CANVAS_H) * 0.38)
     const x = CANVAS_W / 2 + Math.cos(angle) * r
     const y = CANVAS_H / 2 + Math.sin(angle) * r
-    const tooClose = existing.some(c => Math.hypot(c.centerX - x, c.centerY - y) < MIN_CLUSTER_DIST)
+
+    const tooClose = existing.some(c => {
+      const minDist = getMinDist(c, { ringCounts: [] } as any)
+      return Math.hypot(c.centerX - x, c.centerY - y) < minDist
+    })
     if (!tooClose) return { x, y }
   }
   // Fallback: just use evenly spaced
