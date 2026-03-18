@@ -50,6 +50,36 @@ function calculateClusterBounds(clusters: Map<string, Cluster>) {
   }
 }
 
+function calculateCameraTarget(
+  bounds: ReturnType<typeof calculateClusterBounds>,
+  canvasWidth: number,
+  canvasHeight: number
+) {
+  const boundsWidth = bounds.maxX - bounds.minX
+  const boundsHeight = bounds.maxY - bounds.minY
+  const boundsAspect = boundsWidth / boundsHeight
+  const canvasAspect = canvasWidth / canvasHeight
+
+  // Calculate scale to fit bounds in canvas
+  let targetScale: number
+  if (boundsAspect > canvasAspect) {
+    targetScale = canvasWidth / boundsWidth
+  } else {
+    targetScale = canvasHeight / boundsHeight
+  }
+
+  // Clamp to valid scale range
+  targetScale = Math.max(0.2, Math.min(4.0, targetScale))
+
+  // Center the bounds on canvas
+  const centerX = (bounds.minX + bounds.maxX) / 2
+  const centerY = (bounds.minY + bounds.maxY) / 2
+  const targetOffsetX = canvasWidth / 2 - centerX * targetScale
+  const targetOffsetY = canvasHeight / 2 - centerY * targetScale
+
+  return { targetScale, targetOffsetX, targetOffsetY }
+}
+
 export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabled }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const clustersRef = useRef(clusters)
