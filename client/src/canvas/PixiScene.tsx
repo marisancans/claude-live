@@ -226,14 +226,14 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
         // Update blend factor based on interaction
         const timeSinceInteraction = now - lastInteractionTime
         if (dragging) {
-          blendFactor = 0.15 // Reduced influence while dragging
+          blendFactor = 0.1 // Minimal influence while dragging
         } else {
-          // Fade blend factor back to 1.0 over 800ms after interaction stops
-          blendFactor = Math.min(1.0, timeSinceInteraction / 800)
+          // Fade blend factor back to 1.0 over 300ms after interaction stops
+          blendFactor = Math.min(1.0, timeSinceInteraction / 300)
         }
 
-        // Debounce bounding box calculation (~100ms)
-        if (now - lastBboxUpdateTime > 100) {
+        // Debounce bounding box calculation (~33ms - every other frame)
+        if (now - lastBboxUpdateTime > 33) {
           const bounds = calculateClusterBounds(clustersRef.current)
           const target = calculateCameraTarget(bounds, W, H)
 
@@ -243,8 +243,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
           const targetOffsetY = target.targetOffsetY
 
           // Exponential smoothing with blend factor
-          // Time constant: 1500ms
-          const alpha = 1 - Math.exp(-0.016 / 1.5) // ~1.06% per 16ms frame
+          // Time constant: 600ms for snappy response
+          const alpha = 1 - Math.exp(-0.016 / 0.6) // ~2.65% per 16ms frame
           scale += (targetScale - scale) * alpha * blendFactor
           viewOffset.x += (targetOffsetX - viewOffset.x) * alpha * blendFactor
           viewOffset.y += (targetOffsetY - viewOffset.y) * alpha * blendFactor
