@@ -463,6 +463,12 @@ export function createStore() {
           actionFade: 0,
           marks: [],
         })
+        // Register agent position for animation routing
+        const agentNode = cluster.nodes.get(agentKey)!
+        cluster.agentPositionMap.set(agentId, {
+          x: agentNode.x,
+          y: agentNode.y
+        })
       }
       recomputeAges()
       return
