@@ -86,6 +86,7 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
 
   // If no idle channels, skip (don't play multiple per event)
   if (!selected) {
+    console.debug('[audio] no idle channels available')
     return
   }
 
@@ -105,6 +106,7 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   else chordIndex = Math.floor(Math.random() * GUITAR_CHORDS.length) // fallback to random
 
   const chord = `/chords/chord_${GUITAR_CHORDS[chordIndex]}.wav`
+  console.debug('[audio] loading chord:', chord, 'for', { toolName, hookName, chordIndex })
   selected.audio.src = chord
   selected.audio.currentTime = 0
   selected.isPlaying = true
