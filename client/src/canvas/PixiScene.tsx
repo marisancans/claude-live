@@ -239,17 +239,22 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
           const bounds = calculateClusterBounds(clustersRef.current)
           const target = calculateCameraTarget(bounds, W, H)
 
-          // Store target for interpolation
           const targetScale = target.targetScale
           const targetOffsetX = target.targetOffsetX
           const targetOffsetY = target.targetOffsetY
 
-          // Exponential smoothing with blend factor
-          // Time constant: 600ms for snappy response
-          const alpha = 1 - Math.exp(-0.016 / 0.6) // ~2.65% per 16ms frame
-          scale += (targetScale - scale) * alpha * blendFactor
-          viewOffset.x += (targetOffsetX - viewOffset.x) * alpha * blendFactor
-          viewOffset.y += (targetOffsetY - viewOffset.y) * alpha * blendFactor
+          if (lastBboxUpdateTime === 0) {
+            // First frame: snap immediately so clusters don't start off-screen
+            scale = targetScale
+            viewOffset.x = targetOffsetX
+            viewOffset.y = targetOffsetY
+          } else {
+            // Smooth follow — 8% per frame (~33 frames / ~0.5s to converge)
+            const alpha = 0.08
+            scale += (targetScale - scale) * alpha * blendFactor
+            viewOffset.x += (targetOffsetX - viewOffset.x) * alpha * blendFactor
+            viewOffset.y += (targetOffsetY - viewOffset.y) * alpha * blendFactor
+          }
 
           lastBboxUpdateTime = now
         }
