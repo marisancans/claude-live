@@ -27,7 +27,7 @@ function drawSnake(
   const t = eased
 
   // All words move together, spaced backward from the head
-  const wordSpacing = 0.08  // space between consecutive words along curve
+  const wordSpacing = 0.15  // space between consecutive words along curve
   const fontSize = 11 * (0.6 + progress * 0.4)
 
   for (let i = 0; i < snake.words.length; i++) {
@@ -35,12 +35,12 @@ function drawSnake(
 
     // All words converge to center together
     // Position relative to head: head at front, tail trails behind
-    // As t approaches 1, spacing compresses so entire snake reaches center
+    // Keep full spacing until very end, then compress into center
     const distFromHead = snake.words.length - 1 - i
     const baseOffset = wordSpacing * distFromHead
 
-    // Compress spacing as snake approaches center: full spacing at start, zero spacing at t=1
-    const spacingFactor = Math.max(0, 1 - t)
+    // Only compress spacing in final 20% of journey (t > 0.8)
+    const spacingFactor = Math.max(0, 1 - Math.max(0, (t - 0.8) / 0.2))
     const wordT = Math.max(0, t - baseOffset * spacingFactor)
     const wordPos = evaluateSpline(snake.splinePath, wordT)
 
