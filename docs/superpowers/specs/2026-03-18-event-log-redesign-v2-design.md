@@ -20,10 +20,11 @@
 - History button: Always visible. When live entries exist, shows `history (N)` count. When no live entries, shows just `history`
 - History overlay: Shows all past entries (capped at 100), newest first
 
-**Top bar (near sound/autofit icons):**
-- Two new icon buttons added
-- Operations button: opens panel with node types legend and animation style guide
-- Debug button: opens panel with current stats (event count, session count, last event)
+**Top bar button placement (near sound/autofit icons):**
+- Position: Right side of HUD, after autofit button
+- Two new icon buttons: `?` (operations) and `⚙` (debug)
+- Order: `[HUD title/stats] ... [sound button] [autofit button] [operations button ?] [debug button ⚙]`
+- Styling: Use existing `.audio-toggle` / `.autofit-toggle` CSS as template (same size, hover effects)
 
 **Data flow:**
 - `App.tsx` maintains `eventLog[]` as before (100 max entries)
@@ -150,50 +151,78 @@ The existing DebugPanel in bottom-left (App.tsx line 396) has an internal toggle
 
 ## OperationsPanel Component
 
-**File:** `client/src/OperationsPanel.tsx` (new)
+**File:** `client/src/OperationsPanel.tsx` (new, replaces help overlay from App.tsx)
 
-**Trigger:** Click operations button in top bar
+**Props:**
+```typescript
+interface Props {
+  isOpen: boolean       // controlled by top-bar operations button state
+  onClose: () => void   // handler to close the panel
+}
+```
 
 **Content:**
 
 **Section 1: Node Types**
-List all node types with their colors and visual representations:
-- File (green dot) - file on disk
-- Agent (cyan dot) - running subagent
-- Session (blue dot) - Claude Code session
-- Tool (various colors) - execution tools (Read, Edit, Bash, etc.)
-- (Any other types used in visualization)
+Display the existing LEGEND_ITEMS from App.tsx (lines 36-45):
+- Read (# badge, green) - file operations
+- Edit / Write (E badge, blue) - editing tools
+- Bash (B badge, orange) - shell commands
+- Grep / Glob (G badge, purple) - search tools
+- WebFetch (↗ badge, pink) - HTTP requests
+- Notification (! badge, teal) - notifications
+- Stop (✓ badge, gray) - tool completion
+- Subagent (⬡ badge, purple) - subagent execution
 
 **Section 2: Animation Styles**
-Explain what each animation represents:
-- **Slide-in bounce** (entry appears) - new event arrived
-- **Dot pop** - emphasized arrival
-- **Scan shimmer** (left-to-right) - execution/processing
-- **Fade with age** - passage of time
+Display what each animation means:
+```typescript
+const ANIMATIONS = [
+  { name: 'Slide-in bounce', meaning: 'New event arrives at top of log' },
+  { name: 'Dot pop', meaning: 'Emphasis animation on new entry (scale/rotate)' },
+  { name: 'Scan shimmer', meaning: 'Left-to-right scan effect (processing effect)' },
+  { name: 'Fade with time', meaning: 'Entry visibility decreases after 5 seconds' }
+]
+```
 
 **Layout:**
-- Modal overlay or slide-in panel from top-right
+- Modal overlay, slide-in from top-right (like DebugPanel)
 - Max-width ~400px, scrollable if needed
 - Close button (×) or click outside to dismiss
 - Dark theme matching existing UI
+- Shows only when `isOpen` is true
 
 ---
 
 ## DebugPanel Component
 
-**File:** `client/src/DebugPanel.tsx` (relocated from bottom-left)
+**File:** `client/src/DebugPanel.tsx` (refactored from bottom-left version)
 
-**Trigger:** Click debug button in top bar
+**Props:** (NEW — currently has internal toggle, will be externally controlled)
+```typescript
+interface Props {
+  sessionIds: string[]  // from App.tsx: [...clusters.keys()]
+  isOpen: boolean       // controlled by top-bar debug button state
+  onClose: () => void   // handler to close the panel
+}
+```
 
-**Content (unchanged from current):**
+**Changes from current:**
+- Remove internal `open` state and toggle button
+- Accept `isOpen` from parent (App.tsx)
+- Display full debug UI only when `isOpen` is true
+- Call `onClose()` when user clicks close button
+
+**Content (unchanged):**
 - Event count
 - Session count
 - Last event info
+- Existing debug UI elements (fire event tools, etc.)
 
 **Layout:**
 - Same modal/slide-in style as OperationsPanel
 - Max-width ~300px
-- Close button or click outside to dismiss
+- Shows only when `isOpen` is true
 
 ---
 
@@ -266,15 +295,31 @@ export interface LogEntry {
 
 ---
 
-## Integration Points
+## Integration Points & Code Removal
 
-| Component | Location | Change |
-|-----------|----------|--------|
-| `EventLog.tsx` | `client/src/` | Replace current (add time-decay, remove history toggle state if moving to separate component) |
-| `OperationsPanel.tsx` | `client/src/` | New presentational component |
-| `DebugPanel.tsx` | `client/src/` | Relocate from bottom-left to top-right, open via button |
-| `App.tsx` | Modify | Add operations/debug buttons to HUD, add `createdAt` to LogEntry creation, pass eventLog to EventLog |
-| `index.css` | Modify | Add `.hud-button` and `.panel-overlay` styles |
+**Files to create/modify:**
+
+| Component | Action | Details |
+|-----------|--------|---------|
+| `EventLog.tsx` | **Rewrite** | Replace entire file with time-decay implementation |
+| `OperationsPanel.tsx` | **Create** | New file, no dependencies except React |
+| `DebugPanel.tsx` | **Refactor** | Remove internal toggle, accept `isOpen`/`onClose` props |
+| `App.tsx` | **Modify** | Add state for panels, add buttons, update LogEntry creation, remove old code |
+| `index.css` | **Modify** | Add `.hud-button` and `.panel-overlay` styles |
+
+**Code to remove from App.tsx:**
+- Lines ~366: `<button className="help-btn" ... setShowHelp(true)` — entire help button
+- Lines ~383-404: Entire help-overlay div and conditional rendering
+- State variable `showHelp` (line ~173: `const [showHelp, setShowHelp] = useState(false)`)
+- Event handler `setShowHelp` calls
+
+**Code to add to App.tsx:**
+- State: `const [operationsOpen, setOperationsOpen] = useState(false)`
+- State: `const [debugOpen, setDebugOpen] = useState(false)`
+- Two new buttons in HUD section (after autofit button)
+- Modify LogEntry creation (lines ~242-251) to add `createdAt: Date.now()`
+- Pass `isOpen` and `onClose` props to `<DebugPanel>`
+- Render `<OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />` and `<DebugPanel ... isOpen={debugOpen} onClose={() => setDebugOpen(false)} />`
 
 ---
 
