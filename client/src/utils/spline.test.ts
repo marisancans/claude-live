@@ -1,4 +1,4 @@
-import { generateSpline, evaluateSpline, evaluateTangent } from './spline'
+import { generateSpline, evaluateSpline, evaluateTangent, generateRandomSpline } from './spline'
 
 describe('spline utilities', () => {
   it('generates spline with start, control, end points', () => {
@@ -42,5 +42,33 @@ describe('spline utilities', () => {
     const tangent = evaluateTangent(spline, 0.5)
     const mag = Math.sqrt(tangent.x ** 2 + tangent.y ** 2)
     expect(mag).toBeCloseTo(1, 2)  // ±0.01 tolerance
+  })
+
+  it('generates random spline from spawn to cluster center', () => {
+    const clusterCx = 100
+    const clusterCy = 100
+    const spawnAngle = 0  // spawn to the right
+    const maxDist = 200
+
+    const spline = generateRandomSpline(clusterCx, clusterCy, spawnAngle, maxDist)
+
+    // Verify start point is at expected distance
+    expect(spline.controlPoints[0].x).toBeCloseTo(clusterCx + maxDist, 1)
+    expect(spline.controlPoints[0].y).toBeCloseTo(clusterCy, 1)
+
+    // Verify end point is at cluster center
+    expect(spline.controlPoints[2].x).toBeCloseTo(clusterCx, 1)
+    expect(spline.controlPoints[2].y).toBeCloseTo(clusterCy, 1)
+
+    // Verify control point exists and is offset
+    expect(spline.controlPoints[1]).toBeDefined()
+    const midX = (spline.controlPoints[0].x + spline.controlPoints[2].x) / 2
+    const midY = (spline.controlPoints[0].y + spline.controlPoints[2].y) / 2
+    const distFromMid = Math.sqrt(
+      (spline.controlPoints[1].x - midX) ** 2 +
+      (spline.controlPoints[1].y - midY) ** 2
+    )
+    expect(distFromMid).toBeGreaterThanOrEqual(80)  // min offset
+    expect(distFromMid).toBeLessThanOrEqual(150)     // max offset
   })
 })
