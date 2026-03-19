@@ -30,63 +30,6 @@ export class CameraController {
   constructor(app: Application, worldLayer: Container) {
     this.app = app
     this.worldLayer = worldLayer
-    this.setupControls()
-  }
-
-  /**
-   * Set up keyboard and mouse controls.
-   */
-  private setupControls() {
-    // Keyboard: Arrow keys and WASD for pan
-    window.addEventListener('keydown', (e) => {
-      const panSpeed = 10 / this.manualZoom
-      switch (e.key.toLowerCase()) {
-        case 'arrowup':
-        case 'w':
-          this.manualPanY -= panSpeed
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-        case 'arrowdown':
-        case 's':
-          this.manualPanY += panSpeed
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-        case 'arrowleft':
-        case 'a':
-          this.manualPanX -= panSpeed
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-        case 'arrowright':
-        case 'd':
-          this.manualPanX += panSpeed
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-        case '+':
-        case '=':
-          this.manualZoom *= 1.1
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-        case '-':
-          this.manualZoom /= 1.1
-          this.autofitEnabled = false
-          this.idleTimer = 0
-          break
-      }
-    })
-
-    // Mouse wheel for zoom
-    this.app.canvas.addEventListener('wheel', (e) => {
-      e.preventDefault()
-      const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1
-      this.manualZoom *= zoomDelta
-      this.autofitEnabled = false
-      this.idleTimer = 0
-    })
   }
 
   /**
@@ -138,35 +81,21 @@ export class CameraController {
   }
 
   tick(dt: number, clusters: Map<string, Cluster>, autofitEnabledFromProps: boolean = true) {
-    // Check if we should re-enable autofit after idle
-    if (!this.autofitEnabled) {
-      this.idleTimer += dt
-      if (this.idleTimer > this.idleThreshold) {
-        this.autofitEnabled = true
-      }
-    }
+    if (!autofitEnabledFromProps || clusters.size === 0) return
 
-    // If manual controls are active, use them; otherwise use autofit
-    if (!this.autofitEnabled || clusters.size === 0) {
-      // Manual control mode
-      this.currentScale = this.manualZoom
-      this.currentCx = this.manualPanX
-      this.currentCy = this.manualPanY
-    } else if (autofitEnabledFromProps) {
-      // Autofit mode
-      const bounds = this.calculateBounds(clusters)
-      const { targetScale, centerX, centerY } = this.calculateTarget(bounds)
+    // Calculate bounds and target
+    const bounds = this.calculateBounds(clusters)
+    const { targetScale, centerX, centerY } = this.calculateTarget(bounds)
 
-      // Update targets
-      this.targetScale = targetScale
-      this.targetCx = centerX
-      this.targetCy = centerY
+    // Update targets
+    this.targetScale = targetScale
+    this.targetCx = centerX
+    this.targetCy = centerY
 
-      // Lerp to target
-      this.currentScale += (this.targetScale - this.currentScale) * this.lerpAlpha
-      this.currentCx += (this.targetCx - this.currentCx) * this.lerpAlpha
-      this.currentCy += (this.targetCy - this.currentCy) * this.lerpAlpha
-    }
+    // Lerp to target
+    this.currentScale += (this.targetScale - this.currentScale) * this.lerpAlpha
+    this.currentCx += (this.targetCx - this.currentCx) * this.lerpAlpha
+    this.currentCy += (this.targetCy - this.currentCy) * this.lerpAlpha
 
     // Apply transform to worldLayer
     this.worldLayer.pivot.set(this.currentCx, this.currentCy)
