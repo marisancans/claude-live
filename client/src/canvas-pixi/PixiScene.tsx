@@ -52,14 +52,28 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        display: 'block',
-        width: '100vw',
-        height: '100vh',
-        background: '#080808'
-      }}
-    />
+    <div>
+      <canvas
+        ref={canvasRef}
+        style={{
+          display: 'block',
+          width: '100vw',
+          height: '100vh',
+          background: '#080808'
+        }}
+      />
+      <div style={{
+        position: 'fixed',
+        top: 10,
+        left: 10,
+        color: '#fff',
+        fontSize: '12px',
+        background: 'rgba(0,0,0,0.7)',
+        padding: '5px 10px',
+        borderRadius: '3px'
+      }}>
+        PixiJS Renderer
+      </div>
+    </div>
   )
 }
