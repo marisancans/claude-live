@@ -4,8 +4,8 @@ import react from '@vitejs/plugin-react'
 // Backend port (default 43451, overridable with PORT env var)
 const backendPort = process.env.PORT || '43451'
 
-// Vite dev server port (default 5173, overridable with VITE_PORT env var)
-const vitePort = parseInt(process.env.VITE_PORT || '5173', 10)
+// Vite dev server port (hardcoded to 7979 to avoid conflicts)
+const vitePort = 7979
 
 export default defineConfig({
   plugins: [react()],
