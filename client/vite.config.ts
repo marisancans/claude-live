@@ -6,6 +6,10 @@ const port = process.env.PORT || '43451'
 export default defineConfig({
   plugins: [react()],
   server: {
+    watch: {
+      usePolling: true,
+      interval: 100,
+    },
     proxy: {
       '/events': `http://localhost:${port}`,
       '/hook': `http://localhost:${port}`,

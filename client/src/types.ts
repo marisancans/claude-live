@@ -40,8 +40,6 @@ export interface GraphNode {
   colorHex: string      // CSS hex string e.g. '#60a5fa'
   x: number
   y: number
-  vx: number
-  vy: number
   age: number
   lastEventIndex: number
   lastTool: string | null
@@ -107,9 +105,6 @@ export interface Cluster {
   label: string
   centerX: number
   centerY: number
-  // Size-aware positioning
-  targetRadius: number      // computed target orbit distance (px)
-  currentRadius: number     // smoothly interpolates to target
   nodes: Map<string, GraphNode>
   edges: Array<{ fromKey: string; toKey: string; color: number; colorHex: string; age: number }>
   stopping: boolean
@@ -137,8 +132,3 @@ export interface Cluster {
   agentPositionMap: AgentPositionMap
 }
 
-// Ripple (kept for compatibility, not used in solar renderer)
-export interface Ripple {
-  x: number; y: number; color: number; radius: number
-  maxRadius: number; alpha: number; startTime: number; duration: number
-}

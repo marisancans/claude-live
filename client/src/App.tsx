@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RawEvent, GraphNode, Cluster } from './types'
 import { createStore } from './store'
-import { PixiScene } from './canvas/PixiScene'
-import { layoutClusters } from './canvas/graph'
+import { PixiScene as OldPixiScene } from './canvas/PixiScene'
+import { PixiScene as NewPixiScene } from './canvas-pixi/PixiScene'
 import { DebugPanel } from './DebugPanel'
 import { OperationsPanel } from './OperationsPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
@@ -164,6 +164,10 @@ interface PermNotification {
 }
 
 export function App() {
+  // Feature flag: check URL param for renderer selection
+  const rendererParam = new URLSearchParams(location.search).get('renderer')
+  const useNewRenderer = rendererParam === 'pixi'
+
   const [clusters, setClusters] = useState(store.getSessions())
   const [lastEvent, setLastEvent] = useState<RawEvent | null>(null)
   const [eventCount, setEventCount] = useState(0)
@@ -215,7 +219,6 @@ export function App() {
         const parsed = JSON.parse(e.data)
         if (parsed.type === 'state_snapshot') {
           store.initFromSnapshot(parsed.sessions)
-          layoutClusters(store.getSessions())
           setClusters(new Map(store.getSessions()))
           replayDoneRef.current = true
           setReplayDone(true)
@@ -224,7 +227,6 @@ export function App() {
         // Legacy: old server sends replay_done after individual event replay
         if (parsed.type === 'replay_done') {
           store.markReplayDone()
-          layoutClusters(store.getSessions())
           setClusters(new Map(store.getSessions()))
           replayDoneRef.current = true
           setReplayDone(true)
@@ -235,7 +237,6 @@ export function App() {
         const prevSize = store.getSessions().size
         store.addEvent(event, !replayDoneRef.current)
         const sessions = store.getSessions()
-        if (sessions.size !== prevSize) layoutClusters(sessions)
         setClusters(new Map(sessions))
         setLastEvent(event)
         setEventCount(c => c + 1)
@@ -319,7 +320,11 @@ export function App() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <PixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      {useNewRenderer ? (
+        <NewPixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      ) : (
+        <OldPixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      )}
 
       {/* HUD */}
       <div className="hud">

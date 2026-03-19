@@ -12,11 +12,6 @@ function hexToRgb(hex: string): [number, number, number] {
   return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)]
 }
 
-// Get current node position (always use x/y directly - they're updated every frame)
-function getNodePosition(node: GraphNode): Point {
-  return { x: node.x, y: node.y }
-}
-
 function drawSnake(
   ctx: CanvasRenderingContext2D,
   snake: PromptSnake,
