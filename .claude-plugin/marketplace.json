@@ -4,15 +4,13 @@
     "name": "marisancans"
   },
   "metadata": {
-    "description": "Realtime solar system visualizer for Claude Code sessions",
-    "version": "0.4.1"
+    "description": "Realtime solar system visualizer for Claude Code sessions"
   },
   "plugins": [
     {
       "name": "claude-live",
       "source": "./",
       "description": "Watch your Claude Code sessions rendered as a living solar system. Files orbit as planets, operations fire directional lasers, parallel sessions glow as separate star clusters.",
-      "version": "0.4.1",
       "author": {
         "name": "marisancans"
       },
