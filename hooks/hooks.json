@@ -119,6 +119,48 @@
         "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
+    }],
+    "StopFailure": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "TeammateIdle": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "TaskCompleted": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "ConfigChange": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "Elicitation": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
+    }],
+    "ElicitationResult": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+        "async": true
+      }]
     }]
   }
 }
