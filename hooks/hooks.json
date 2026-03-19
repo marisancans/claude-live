@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
+          "command": "node \"$(npm root -g)/claude-live/bin/check-and-restart.js\" 2>/dev/null || node \"./node_modules/claude-live/bin/check-and-restart.js\" 2>/dev/null || true",
           "async": true
         },
         {
