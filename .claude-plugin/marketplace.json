@@ -12,7 +12,7 @@
       "name": "claude-live",
       "source": "./",
       "description": "Watch your Claude Code sessions rendered as a living solar system. Files orbit as planets, operations fire directional lasers, parallel sessions glow as separate star clusters.",
-      "version": "0.2.0",
+      "version": "0.4.1",
       "author": {
         "name": "marisancans"
       },
