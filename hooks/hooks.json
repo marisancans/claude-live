@@ -10,7 +10,7 @@
         },
         {
           "type": "command",
-          "command": "bin/send-hook.sh",
+          "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
           "async": true
         }
       ]
@@ -18,105 +18,105 @@
     "InstructionsLoaded": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "WorktreeCreate": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "WorktreeRemove": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PreToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PostToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "Notification": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PermissionRequest": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "SubagentStart": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "SubagentStop": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "SessionEnd": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PostToolUseFailure": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PreCompact": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }],
     "PostCompact": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "curl -sf -X POST 'http://localhost:43451/hook' -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
         "async": true
       }]
     }]
