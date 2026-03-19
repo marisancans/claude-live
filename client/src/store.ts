@@ -2,6 +2,7 @@ import type { RawEvent, GraphNode, Cluster, PromptSnake } from './types'
 import type { Point } from './utils/spline'
 import { generateRandomSpline } from './utils/spline'
 import { playChordForEvent } from './audio'
+import { EventProcessor } from './events/EventProcessor'
 
 // Small deterministic radial offset per node so trails on the same ring don't overlap
 function radialJitter(key: string): number {
@@ -726,6 +727,10 @@ export function createStore() {
     }
 
     recomputeAges()
+
+    // Emit domain events to EventBus for PixiJS animations
+    const affectedNode = cluster.nodes.get(nodeKeyFor(event)) ?? null
+    EventProcessor.process(event, cluster, affectedNode)
   }
 
   function markReplayDone() { replayDone = true }

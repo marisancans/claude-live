@@ -106,6 +106,9 @@ export class WorldLayer {
           clusterObj.nodeObjects.set(node.key, nodeObj)
         }
 
+        // Update orbital physics (advance orbit angle)
+        node.orbitAngle += node.orbitSpeed * dt * 60 // orbitSpeed is per-frame, convert to per-second
+
         nodeObj.tick(dt)
       }
 

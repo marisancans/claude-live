@@ -14,6 +14,11 @@ export class ClusterObject {
   orbitRingGraphics: Graphics[] = []
   nodeObjects: Map<string, any> = new Map() // Will hold NodeObjects
 
+  // Keep reference to cluster data for EdgeLayer
+  get cluster(): Cluster {
+    return this.data
+  }
+
   constructor(cluster: Cluster) {
     this.data = cluster
     this.container = new Container()

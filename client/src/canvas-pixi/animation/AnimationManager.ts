@@ -89,28 +89,46 @@ export class AnimationManager {
   }
 
   /**
-   * Spawn a snake (text animation) from prompt submission.
+   * Spawn a snake (text animation) from prompt submission or response.
    */
-  private spawnSnake(e: { sessionId: string; words: string[]; color: string }) {
+  private spawnSnake(e: { sessionId: string; words: string[]; color: string; isResponse?: boolean }) {
     const cluster = this.worldLayer.clusters?.get(e.sessionId)
     if (!cluster) return
 
-    // Create spline from cluster edge to cluster center
-    // Start at top-right, end at center, with curve control point
-    const angle = Math.PI / 4 // 45 degrees for top-right
-    const dist = 200
-    const startX = cluster.centerX + Math.cos(angle) * dist
-    const startY = cluster.centerY + Math.sin(angle) * dist
-    const controlX = (startX + cluster.centerX) / 2 + 80
-    const controlY = (startY + cluster.centerY) / 2
+    let splinePath
 
-    const splinePath = generateSpline(
-      { x: startX, y: startY },
-      { x: controlX, y: controlY },
-      { x: cluster.centerX, y: cluster.centerY }
-    )
+    if (e.isResponse) {
+      // Response snake: outbound from cluster center to edge
+      // Pick random angle, spawn at center, end at edge
+      const angle = Math.random() * Math.PI * 2
+      const dist = 200
+      const endX = cluster.centerX + Math.cos(angle) * dist
+      const endY = cluster.centerY + Math.sin(angle) * dist
+      const controlX = (cluster.centerX + endX) / 2 + (Math.random() - 0.5) * 100
+      const controlY = (cluster.centerY + endY) / 2 + (Math.random() - 0.5) * 100
 
-    const snake = new SnakeObject(splinePath, e.words, e.color, false)
+      splinePath = generateSpline(
+        { x: cluster.centerX, y: cluster.centerY },
+        { x: controlX, y: controlY },
+        { x: endX, y: endY }
+      )
+    } else {
+      // Prompt snake: inbound from edge to cluster center
+      const angle = Math.PI / 4 // 45 degrees for top-right
+      const dist = 200
+      const startX = cluster.centerX + Math.cos(angle) * dist
+      const startY = cluster.centerY + Math.sin(angle) * dist
+      const controlX = (startX + cluster.centerX) / 2 + 80
+      const controlY = (startY + cluster.centerY) / 2
+
+      splinePath = generateSpline(
+        { x: startX, y: startY },
+        { x: controlX, y: controlY },
+        { x: cluster.centerX, y: cluster.centerY }
+      )
+    }
+
+    const snake = new SnakeObject(splinePath, e.words, e.color, e.isResponse ?? false)
 
     // Add to world layer and track
     this.worldLayer.container.addChild(snake.container)
