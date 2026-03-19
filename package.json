@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "concurrently \"node server/index.js\" \"cd client && vite dev\"",
-    "build": "cd client && vite build",
+    "build": "cd client && vite build && npm run build:bin",
+    "build:bin": "bun build ./bin/claude-live.js --compile --outfile ./bin/claude-live",
     "start": "node server/index.js",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
@@ -22,6 +23,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "bun": "^1.0.0",
     "concurrently": "^8.2.0",
     "pixi.js": "^7.4.0",
     "react": "^18.2.0",
