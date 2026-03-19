@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Realtime solar system visualizer for Claude Code sessions",
-    "version": "0.2.0"
+    "version": "0.4.1"
   },
   "plugins": [
     {
