@@ -1,6 +1,6 @@
 {
   "name": "claude-live",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Realtime Claude Code activity visualizer",
   "bin": {
     "claude-live": "./bin/claude-live.js"
