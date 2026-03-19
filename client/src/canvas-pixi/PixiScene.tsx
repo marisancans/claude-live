@@ -17,36 +17,49 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   clustersRef.current = clusters
 
   useEffect(() => {
+    let rafId: number | null = null
+
     const initializeApp = async () => {
       const canvas = canvasRef.current
-      if (!canvas) return
-
-      // Initialize PixiJS app with clustersRef (live updates)
-      const app = new PixiApp(canvas, clustersRef)
-      await app.init()
-      pixiAppRef.current = app
-
-      // Start render loop
-      let rafId: number
-      const animate = () => {
-        app.tick(1 / 60) // 60 FPS
-        rafId = requestAnimationFrame(animate)
+      if (!canvas) {
+        console.error('Canvas ref not available')
+        return
       }
-      rafId = requestAnimationFrame(animate)
 
-      return () => {
-        cancelAnimationFrame(rafId)
+      try {
+        // Initialize PixiJS app with clustersRef (live updates)
+        console.log('Initializing PixiApp...')
+        const app = new PixiApp(canvas, clustersRef)
+        await app.init()
+        console.log('PixiApp initialized successfully')
+        pixiAppRef.current = app
+
+        // Start render loop
+        const animate = () => {
+          try {
+            app.tick(1 / 60) // 60 FPS
+          } catch (err) {
+            console.error('Error in tick:', err)
+          }
+          rafId = requestAnimationFrame(animate)
+        }
+        rafId = requestAnimationFrame(animate)
+      } catch (err) {
+        console.error('Failed to initialize PixiApp:', err)
       }
     }
 
-    let cleanup: (() => void) | undefined
-    initializeApp().then(c => { cleanup = c })
+    initializeApp()
 
     return () => {
-      cleanup?.()
+      // Cancel RAF loop
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
       // Cleanup when unmounting
       if (pixiAppRef.current) {
         pixiAppRef.current.destroy()
+        pixiAppRef.current = null
       }
     }
   }, [])
