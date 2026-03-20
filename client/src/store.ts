@@ -39,22 +39,6 @@ function hexToInt(hex: string): number {
 }
 
 
-/**
- * Get the animation origin point for an action.
- * If agentId exists and points to an active agent, returns agent position.
- * Otherwise, returns cluster core position.
- */
-export function getAnimationOrigin(
-  cluster: Cluster,
-  agentId: string | null
-): Point {
-  if (agentId && cluster.agentPositionMap.has(agentId)) {
-    return cluster.agentPositionMap.get(agentId)!
-  }
-  // Fallback to core position
-  return {x: cluster.centerX, y: cluster.centerY}
-}
-
 // Atomic orbital structure: each ring has progressively more slots
 // Ring capacities based on electron orbitals
 const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session

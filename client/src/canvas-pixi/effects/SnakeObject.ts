@@ -1,21 +1,26 @@
-import { Container, Text } from 'pixi.js'
+import { Container, Graphics, Text } from 'pixi.js'
 import type { SplinePath } from '../../utils/spline'
 import { evaluateSpline, evaluateTangent } from '../../utils/spline'
 
 /**
- * Snake animation: words flowing along a spline path toward cluster center.
- * Reuses SplinePath Bezier math from utils/spline.ts unchanged.
+ * Snake animation: words flowing along a curved spline path.
+ *
+ * Performance-optimized:
+ * - Text objects created once, never re-styled (no per-frame rasterization)
+ * - Single shared glow Graphics drawn once, faded via container alpha
+ * - No per-frame clear/redraw of Graphics
  */
 export class SnakeObject {
   container: Container
   words: string[]
-  color: string
   progress: number = 0
   splinePath: SplinePath
   isResponse: boolean
   onComplete: (() => void) | null = null
-  wordTexts: Text[] = []
-  duration: number = 3.0 // seconds
+  duration: number = 4.0
+
+  // One Text per word — positioned and rotated each tick, nothing else
+  private wordTexts: Text[] = []
 
   constructor(
     splinePath: SplinePath,
@@ -27,22 +32,32 @@ export class SnakeObject {
     this.container = new Container()
     this.splinePath = splinePath
     this.words = words
-    this.color = color
     this.isResponse = isResponse
     this.onComplete = onComplete || null
 
-    // Create text objects for each word
-    // PixiJS v8 Text constructor: new Text({ text, style: { ... } })
+    // Create one Text per word — styled once, never re-styled
+    const fontSize = isResponse ? 6 : 7
     for (const word of words) {
       const text = new Text({
         text: word,
         style: {
-          fontSize: 10,
+          fontSize,
           fontFamily: 'monospace',
+          fontWeight: '700',
           fill: color,
           align: 'center',
+          // Use dropShadow for the shadow — rendered by PixiJS natively, no extra objects
+          dropShadow: {
+            alpha: 0.3,
+            angle: Math.PI / 4,
+            blur: 0,
+            distance: 1,
+            color: 0x000000,
+          },
         },
       })
+      text.anchor.set(0.5, 0.5)
+      text.visible = false
       this.wordTexts.push(text)
       this.container.addChild(text)
     }
@@ -59,7 +74,6 @@ export class SnakeObject {
       const distFromHead = this.words.length - 1 - i
       const wordT = headT - wordSpacing * distFromHead
 
-      // Skip out-of-range words
       if (wordT < 0 || wordT > 1) {
         this.wordTexts[i].visible = false
         continue
@@ -70,17 +84,23 @@ export class SnakeObject {
       const tangent = evaluateTangent(this.splinePath, wordT)
       const angle = Math.atan2(tangent.y, tangent.x)
 
-      this.wordTexts[i].position.set(pos.x, pos.y)
-      this.wordTexts[i].rotation = angle
-      this.wordTexts[i].visible = true
-
       // Fade in/out
       const fadeIn = Math.min(1, wordT * 5)
       const fadeOut = Math.min(1, (1 - wordT) * 5)
-      this.wordTexts[i].alpha = fadeIn * fadeOut
+      const opacity = fadeIn * fadeOut
+
+      if (opacity <= 0.01) {
+        this.wordTexts[i].visible = false
+        continue
+      }
+
+      const text = this.wordTexts[i]
+      text.visible = true
+      text.position.set(pos.x, pos.y)
+      text.rotation = angle
+      text.alpha = opacity
     }
 
-    // Call completion callback
     if (this.progress >= 1 && this.onComplete) {
       this.onComplete()
     }
@@ -91,6 +111,6 @@ export class SnakeObject {
   }
 
   destroy() {
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }

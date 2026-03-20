@@ -52,6 +52,18 @@ export class EventProcessor {
       }
     }
 
+    // Response snake on Stop (final assistant message flowing outward)
+    if (event.hook_event_name === 'Stop' && event.last_assistant_message) {
+      const words = event.last_assistant_message.trim().split(/\s+/).filter((w: string) => w.length > 0).slice(0, 8)
+      if (words.length > 0) {
+        eventBus.emit('response:received', {
+          sessionId: event.session_id,
+          words,
+          color: '#aab8f0',
+        })
+      }
+    }
+
     // Cluster lifecycle events
     if (event.hook_event_name === 'SessionStart') {
       eventBus.emit('cluster:created', { cluster })
@@ -73,6 +85,37 @@ export class EventProcessor {
     // Permission request
     if (event.hook_event_name === 'PermissionRequest') {
       eventBus.emit('permission:request', { sessionId: event.session_id })
+    }
+
+    // Subagent spawn
+    if (event.hook_event_name === 'SubagentStart' && event.agent_id) {
+      eventBus.emit('subagent:start', {
+        sessionId: event.session_id,
+        agentId: event.agent_id,
+        agentType: event.agent_type || 'agent',
+      })
+    }
+
+    // Subagent despawn
+    if (event.hook_event_name === 'SubagentStop' && event.agent_id) {
+      eventBus.emit('subagent:stop', {
+        sessionId: event.session_id,
+        agentId: event.agent_id,
+      })
+    }
+
+    // Session end dissolution
+    if (event.hook_event_name === 'SessionEnd') {
+      eventBus.emit('session:end', { sessionId: event.session_id })
+    }
+
+    // Notification
+    if (event.hook_event_name === 'Notification' && affectedNode) {
+      eventBus.emit('notification', {
+        sessionId: event.session_id,
+        nodeKey: affectedNode.key,
+        title: event.title || 'notification',
+      })
     }
   }
 }

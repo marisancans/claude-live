@@ -15,6 +15,35 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   const pixiAppRef = useRef<PixiApp | null>(null)
   const clustersRef = useRef(clusters)
   clustersRef.current = clusters
+  const autofitRef = useRef(autofitEnabled)
+  autofitRef.current = autofitEnabled
+
+  // Refs for callbacks to avoid stale closures in event handlers
+  const onHoverRef = useRef(onHover)
+  onHoverRef.current = onHover
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
+
+  // Track currently hovered node to avoid redundant calls
+  const hoveredRef = useRef<string | null>(null)
+
+  const handleMouseMove = useRef((e: React.MouseEvent) => {
+    const app = pixiAppRef.current
+    if (!app) return
+    const hit = app.worldLayer.hitTest(e.clientX, e.clientY)
+    const hitKey = hit ? `${hit.cluster.sessionId}:${hit.node.key}` : null
+    if (hitKey !== hoveredRef.current) {
+      hoveredRef.current = hitKey
+      onHoverRef.current(hit?.node ?? null, hit?.cluster ?? null)
+    }
+  }).current
+
+  const handleClick = useRef((e: React.MouseEvent) => {
+    const app = pixiAppRef.current
+    if (!app) return
+    const hit = app.worldLayer.hitTest(e.clientX, e.clientY)
+    onSelectRef.current(hit?.node ?? null, hit?.cluster ?? null)
+  }).current
 
   useEffect(() => {
     let rafId: number | null = null
@@ -27,11 +56,8 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
       }
 
       try {
-        // Initialize PixiJS app with clustersRef (live updates)
-        console.log('Initializing PixiApp...')
-        const app = new PixiApp(canvas, clustersRef)
+        const app = new PixiApp(canvas, clustersRef, autofitRef)
         await app.init()
-        console.log('PixiApp initialized successfully')
         pixiAppRef.current = app
 
         // Start render loop
@@ -65,7 +91,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
   }, [])
 
   return (
-    <div>
+    <div onMouseMove={handleMouseMove} onClick={handleClick}>
       <canvas
         ref={canvasRef}
         style={{
@@ -75,18 +101,6 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
           background: '#080808'
         }}
       />
-      <div style={{
-        position: 'fixed',
-        top: 10,
-        left: 10,
-        color: '#fff',
-        fontSize: '12px',
-        background: 'rgba(0,0,0,0.7)',
-        padding: '5px 10px',
-        borderRadius: '3px'
-      }}>
-        PixiJS Renderer
-      </div>
     </div>
   )
 }

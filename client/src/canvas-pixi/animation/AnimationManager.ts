@@ -1,17 +1,33 @@
 import type { Application, Container } from 'pixi.js'
 import { eventBus } from '../../events/EventBus'
 import type { WorldLayer } from '../layers/WorldLayer'
-import { SnakeObject } from '../objects/SnakeObject'
-import { ReadProjectile } from '../objects/projectiles/ReadProjectile'
-import { GrepProjectile } from '../objects/projectiles/GrepProjectile'
-import { GlobProjectile } from '../objects/projectiles/GlobProjectile'
-import { EditProjectile } from '../objects/projectiles/EditProjectile'
-import { WriteProjectile } from '../objects/projectiles/WriteProjectile'
-import { BashProjectile } from '../objects/projectiles/BashProjectile'
-import { WebFetchProjectile } from '../objects/projectiles/WebFetchProjectile'
-import { DefaultProjectile } from '../objects/projectiles/DefaultProjectile'
-import type { ProjectileObject } from '../objects/projectiles/ProjectileObject'
+import { SnakeObject } from '../effects/SnakeObject'
+import { CompactionEffect } from '../effects/CompactionEffect'
+import { SubagentSpawnEffect } from '../effects/SubagentSpawnEffect'
+import { ClusterEntranceEffect } from '../effects/ClusterEntranceEffect'
+import { SessionEndEffect } from '../effects/SessionEndEffect'
+import { ReadProjectile } from '../effects/projectiles/ReadProjectile'
+import { GrepProjectile } from '../effects/projectiles/GrepProjectile'
+import { GlobProjectile } from '../effects/projectiles/GlobProjectile'
+import { EditProjectile } from '../effects/projectiles/EditProjectile'
+import { WriteProjectile } from '../effects/projectiles/WriteProjectile'
+import { BashProjectile } from '../effects/projectiles/BashProjectile'
+import { WebFetchProjectile } from '../effects/projectiles/WebFetchProjectile'
+import { DefaultProjectile } from '../effects/projectiles/DefaultProjectile'
+import type { ProjectileObject } from '../effects/projectiles/ProjectileObject'
 import { generateSpline } from '../../utils/spline'
+
+/** Map tool names to impact types for NodeObject.playImpact() */
+const TOOL_IMPACT_MAP: Record<string, 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | 'fail'> = {
+  Read: 'scan',
+  Grep: 'scan',
+  Glob: 'scan',
+  Edit: 'morph',
+  Write: 'morph',
+  Bash: 'spark',
+  Notification: 'ping',
+  Stop: 'fade',
+}
 
 /**
  * AnimationManager subscribes to EventBus domain events and creates/destroys animation objects.
@@ -23,6 +39,12 @@ export class AnimationManager {
   private worldLayer: WorldLayer
   private projectiles: ProjectileObject[] = []
   private snakes: SnakeObject[] = []
+  private compactions: CompactionEffect[] = []
+  private miscEffects: { container: any; tick: (dt: number) => void; isDone: () => boolean; destroy: () => void }[] = []
+  private impactTimers: ReturnType<typeof setTimeout>[] = []
+  private permissionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+  private lastResponseSnakeTime: Map<string, number> = new Map()
+  private static MAX_SNAKES = 6 // prevent GPU overload
 
   // Map tool names to projectile constructors
   private projectileMap: Record<string, new (...args: any[]) => ProjectileObject> = {
@@ -53,17 +75,77 @@ export class AnimationManager {
       this.spawnSnake(e)
     })
 
-    eventBus.on('cluster:created', (e) => {
-      // Optional: spawn cluster entrance animation
+    eventBus.on('response:received', (e) => {
+      // Rate-limit: max 1 response snake per 2s per session
+      const now = Date.now()
+      const last = this.lastResponseSnakeTime.get(e.sessionId) ?? 0
+      if (now - last < 2000) return
+      this.lastResponseSnakeTime.set(e.sessionId, now)
+      this.spawnSnake({ ...e, isResponse: true })
     })
 
-    eventBus.on('cluster:removed', (e) => {
-      // Optional: cleanup
+    eventBus.on('compact:pre', (e) => {
+      this.spawnCompaction(e.sessionId, 'implosion')
+    })
+
+    eventBus.on('compact:post', (e) => {
+      this.spawnCompaction(e.sessionId, 'rebirth')
+    })
+
+    eventBus.on('permission:request', (e) => {
+      const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
+      if (clusterObj) {
+        clusterObj.setPermission(true)
+        // Clear any existing timer for this session
+        const existing = this.permissionTimers.get(e.sessionId)
+        if (existing) clearTimeout(existing)
+        // Auto-clear after 5 seconds
+        const timer = setTimeout(() => {
+          clusterObj.setPermission(false)
+          this.permissionTimers.delete(e.sessionId)
+        }, 5000)
+        this.permissionTimers.set(e.sessionId, timer)
+      }
+    })
+
+    eventBus.on('cluster:created', (e) => {
+      this.spawnClusterEntrance(e.cluster.sessionId)
+    })
+
+    eventBus.on('cluster:removed', (_e) => {
+      // Cleanup handled by WorldLayer
+    })
+
+    eventBus.on('subagent:start', (e) => {
+      this.spawnSubagentEffect(e.sessionId, e.agentId)
+    })
+
+    eventBus.on('subagent:stop', (e) => {
+      // Agent fade-out is handled by store setting life=0.08
+      // Trigger activity pulse on the cluster core
+      const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
+      if (clusterObj) clusterObj.triggerActivity()
+    })
+
+    eventBus.on('session:end', (e) => {
+      this.spawnSessionEnd(e.sessionId)
+    })
+
+    eventBus.on('notification', (e) => {
+      // Trigger ping impact on the notification node
+      const nodeObj = this.worldLayer.getNodeObject(e.sessionId, e.nodeKey)
+      if (nodeObj) {
+        nodeObj.playImpact('ping')
+        nodeObj.showAction(e.title, 0x34d399)
+      }
+      // Pulse the cluster core
+      const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
+      if (clusterObj) clusterObj.triggerActivity()
     })
   }
 
   /**
-   * Spawn a projectile from tool use event.
+   * Spawn a projectile from tool use event, and schedule an impact on the target node.
    */
   private spawnProjectile(e: { sessionId: string; nodeKey: string; tool: string; colorHex: string; inbound: boolean }) {
     const cluster = this.worldLayer.clusters?.get(e.sessionId)
@@ -72,20 +154,70 @@ export class AnimationManager {
     const node = cluster.nodes.get(e.nodeKey)
     if (!node) return
 
-    // Cluster center is startPos, node position is endPos
-    const startPos = { x: cluster.centerX, y: cluster.centerY }
-    const endPos = { x: node.x, y: node.y }
+    const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
+    if (!clusterObj) return
 
-    // Determine color: use hex if provided, fallback to node color
+    // Compute node position relative to cluster center (0,0)
+    // Use the NodeObject's actual container position (already cluster-local)
+    const nodeObj = clusterObj.nodeObjects.get(e.nodeKey) as any
+    const nodeLocalX = nodeObj ? nodeObj.container.position.x : Math.cos(node.orbitAngle) * node.orbitRadius
+    const nodeLocalY = nodeObj ? nodeObj.container.position.y : Math.sin(node.orbitAngle) * node.orbitRadius
+    const corePos = { x: 0, y: 0 }
+    const nodePos = { x: nodeLocalX, y: nodeLocalY }
+
+    // Direction depends on tool type:
+    // Read/Grep/Glob = inbound (data flows node→core)
+    // Edit/Write/Bash = outbound (changes flow core→node)
+    const INBOUND_TOOLS = ['Read', 'Grep', 'Glob']
+    const inbound = INBOUND_TOOLS.includes(e.tool)
+    const startPos = inbound ? nodePos : corePos
+    const endPos = inbound ? corePos : nodePos
+
     const color = parseInt(e.colorHex.replace('#', ''), 16) ?? 0xffffff
 
-    // Get projectile class, default to DefaultProjectile
     const ProjectileClass = this.projectileMap[e.tool] ?? DefaultProjectile
-    const projectile = new ProjectileClass(startPos, endPos, color, e.inbound)
+    const projectile = new ProjectileClass(startPos, endPos, color, inbound)
 
-    // Add to world layer and track
-    this.worldLayer.container.addChild(projectile.container)
+    // Add to CLUSTER container so it moves with the cluster
+    clusterObj.container.addChild(projectile.container)
     this.projectiles.push(projectile)
+
+    // Schedule impact on the target node after the projectile completes
+    const duration = projectile.duration
+    const impactType = TOOL_IMPACT_MAP[e.tool] ?? 'ping'
+    const timer = setTimeout(() => {
+      const nodeObj = this.worldLayer.getNodeObject(e.sessionId, e.nodeKey)
+      if (nodeObj) {
+        nodeObj.playImpact(impactType)
+        nodeObj.showAction(e.tool, color)
+      }
+    }, duration * 1000)
+    this.impactTimers.push(timer)
+  }
+
+  /**
+   * Spawn a compaction effect (implosion or rebirth) on a cluster.
+   */
+  private spawnCompaction(sessionId: string, phase: 'implosion' | 'rebirth') {
+    const clusterObj = this.worldLayer.clusterObjects.get(sessionId)
+    if (!clusterObj) return
+
+    const isChild = clusterObj.data.isChild
+    const coreRadius = isChild ? 4.5 : 7
+
+    const effect = new CompactionEffect(phase, coreRadius)
+    clusterObj.container.addChild(effect.container)
+    this.compactions.push(effect)
+
+    // Trigger cluster activity pulse
+    clusterObj.triggerActivity()
+
+    // Screen shake: subtle rumble for implosion, big detonation for rebirth
+    if (phase === 'implosion') {
+      this.worldLayer.cameraController.shake(isChild ? 3 : 6)
+    } else {
+      this.worldLayer.cameraController.shake(isChild ? 8 : 15)
+    }
   }
 
   /**
@@ -95,44 +227,92 @@ export class AnimationManager {
     const cluster = this.worldLayer.clusters?.get(e.sessionId)
     if (!cluster) return
 
+    // Cap active snakes to prevent GPU overload
+    if (this.snakes.length >= AnimationManager.MAX_SNAKES) return
+
+    const words = e.words.slice(0, 8)
+    if (words.length === 0) return
+
+    const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
+    if (!clusterObj) return
+
+    // All coordinates relative to cluster center (0,0) since snake lives inside cluster container
     let splinePath
+    const angle = Math.random() * Math.PI * 2
+    const dist = 180 + Math.random() * 60
+    const edgeX = Math.cos(angle) * dist
+    const edgeY = Math.sin(angle) * dist
+
+    // Perpendicular offset for dramatic curvature
+    const perpAngle = angle + Math.PI / 2
+    const curveSign = Math.random() > 0.5 ? 1 : -1
+    const curvature = curveSign * (80 + Math.random() * 70)
+    const midX = edgeX / 2 + Math.cos(perpAngle) * curvature
+    const midY = edgeY / 2 + Math.sin(perpAngle) * curvature
 
     if (e.isResponse) {
-      // Response snake: outbound from cluster center to edge
-      // Pick random angle, spawn at center, end at edge
-      const angle = Math.random() * Math.PI * 2
-      const dist = 200
-      const endX = cluster.centerX + Math.cos(angle) * dist
-      const endY = cluster.centerY + Math.sin(angle) * dist
-      const controlX = (cluster.centerX + endX) / 2 + (Math.random() - 0.5) * 100
-      const controlY = (cluster.centerY + endY) / 2 + (Math.random() - 0.5) * 100
-
+      // Response snake: outbound from center (0,0) to edge
       splinePath = generateSpline(
-        { x: cluster.centerX, y: cluster.centerY },
-        { x: controlX, y: controlY },
-        { x: endX, y: endY }
+        { x: 0, y: 0 },
+        { x: midX, y: midY },
+        { x: edgeX, y: edgeY }
       )
     } else {
-      // Prompt snake: inbound from edge to cluster center
-      const angle = Math.PI / 4 // 45 degrees for top-right
-      const dist = 200
-      const startX = cluster.centerX + Math.cos(angle) * dist
-      const startY = cluster.centerY + Math.sin(angle) * dist
-      const controlX = (startX + cluster.centerX) / 2 + 80
-      const controlY = (startY + cluster.centerY) / 2
-
+      // Prompt snake: inbound from edge to center (0,0)
       splinePath = generateSpline(
-        { x: startX, y: startY },
-        { x: controlX, y: controlY },
-        { x: cluster.centerX, y: cluster.centerY }
+        { x: edgeX, y: edgeY },
+        { x: midX, y: midY },
+        { x: 0, y: 0 }
       )
     }
 
-    const snake = new SnakeObject(splinePath, e.words, e.color, e.isResponse ?? false)
+    const snake = new SnakeObject(splinePath, words, e.color, e.isResponse ?? false)
 
-    // Add to world layer and track
-    this.worldLayer.container.addChild(snake.container)
+    // Add to CLUSTER container so it moves with the cluster
+    clusterObj.container.addChild(snake.container)
     this.snakes.push(snake)
+  }
+
+  /**
+   * Spawn a warp-in effect when a new cluster appears.
+   */
+  private spawnClusterEntrance(sessionId: string) {
+    const clusterObj = this.worldLayer.clusterObjects.get(sessionId)
+    if (!clusterObj) return
+    const isChild = clusterObj.data.isChild
+    const effect = new ClusterEntranceEffect(isChild)
+    clusterObj.container.addChild(effect.container)
+    this.miscEffects.push(effect)
+  }
+
+  /**
+   * Spawn a flash effect when an agent satellite appears.
+   */
+  private spawnSubagentEffect(sessionId: string, agentId: string) {
+    const clusterObj = this.worldLayer.clusterObjects.get(sessionId)
+    if (!clusterObj) return
+
+    const agentKey = `agent:${agentId}`
+    const nodeObj = clusterObj.nodeObjects.get(agentKey) as any
+    if (!nodeObj) return
+
+    const effect = new SubagentSpawnEffect()
+    nodeObj.container.addChild(effect.container)
+    this.miscEffects.push(effect)
+
+    // Pulse the cluster core
+    clusterObj.triggerActivity()
+  }
+
+  /**
+   * Spawn a dissolution effect when a session ends.
+   */
+  private spawnSessionEnd(sessionId: string) {
+    const clusterObj = this.worldLayer.clusterObjects.get(sessionId)
+    if (!clusterObj) return
+    const effect = new SessionEndEffect()
+    clusterObj.container.addChild(effect.container)
+    this.miscEffects.push(effect)
   }
 
   tick(dt: number) {
@@ -141,7 +321,7 @@ export class AnimationManager {
       const proj = this.projectiles[i]
       proj.tick(dt)
       if (proj.isDone()) {
-        this.worldLayer.container.removeChild(proj.container)
+        proj.container.parent?.removeChild(proj.container)
         proj.destroy()
         this.projectiles.splice(i, 1)
       }
@@ -152,24 +332,66 @@ export class AnimationManager {
       const snake = this.snakes[i]
       snake.tick(dt)
       if (snake.isDone()) {
-        this.worldLayer.container.removeChild(snake.container)
+        snake.container.parent?.removeChild(snake.container)
         snake.destroy()
         this.snakes.splice(i, 1)
+      }
+    }
+
+    // Update all compaction effects
+    for (let i = this.compactions.length - 1; i >= 0; i--) {
+      const fx = this.compactions[i]
+      fx.tick(dt)
+      if (fx.isDone()) {
+        fx.container.parent?.removeChild(fx.container)
+        fx.destroy()
+        this.compactions.splice(i, 1)
+      }
+    }
+
+    // Update misc effects (entrance, spawn, dissolution)
+    for (let i = this.miscEffects.length - 1; i >= 0; i--) {
+      const fx = this.miscEffects[i]
+      fx.tick(dt)
+      if (fx.isDone()) {
+        fx.container.parent?.removeChild(fx.container)
+        fx.destroy()
+        this.miscEffects.splice(i, 1)
       }
     }
   }
 
   destroy() {
     eventBus.clear()
+    // Clear pending impact timers
+    for (const timer of this.impactTimers) {
+      clearTimeout(timer)
+    }
+    this.impactTimers = []
+    // Clear permission timers
+    for (const timer of this.permissionTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.permissionTimers.clear()
     for (const proj of this.projectiles) {
-      this.worldLayer.container.removeChild(proj.container)
+      proj.container.parent?.removeChild(proj.container)
       proj.destroy()
     }
     for (const snake of this.snakes) {
-      this.worldLayer.container.removeChild(snake.container)
+      snake.container.parent?.removeChild(snake.container)
       snake.destroy()
+    }
+    for (const fx of this.compactions) {
+      fx.container.parent?.removeChild(fx.container)
+      fx.destroy()
+    }
+    for (const fx of this.miscEffects) {
+      fx.container.parent?.removeChild(fx.container)
+      fx.destroy()
     }
     this.projectiles = []
     this.snakes = []
+    this.compactions = []
+    this.miscEffects = []
   }
 }

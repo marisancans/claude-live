@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RawEvent, GraphNode, Cluster } from './types'
 import { createStore } from './store'
-import { PixiScene as OldPixiScene } from './canvas/PixiScene'
-import { PixiScene as NewPixiScene } from './canvas-pixi/PixiScene'
+import { PixiScene } from './canvas-pixi/PixiScene'
 import { DebugPanel } from './DebugPanel'
 import { OperationsPanel } from './OperationsPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
@@ -164,10 +163,6 @@ interface PermNotification {
 }
 
 export function App() {
-  // Feature flag: check URL param for renderer selection
-  const rendererParam = new URLSearchParams(location.search).get('renderer')
-  const useNewRenderer = rendererParam === 'pixi'
-
   const [clusters, setClusters] = useState(store.getSessions())
   const [lastEvent, setLastEvent] = useState<RawEvent | null>(null)
   const [eventCount, setEventCount] = useState(0)
@@ -320,11 +315,7 @@ export function App() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {useNewRenderer ? (
-        <NewPixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
-      ) : (
-        <OldPixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
-      )}
+      <PixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
 
       {/* HUD */}
       <div className="hud">

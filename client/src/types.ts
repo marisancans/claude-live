@@ -68,19 +68,6 @@ export interface GraphNode {
   marks: number[]       // angle values, newest last
 }
 
-// A projectile flying from cluster center to a target node
-export interface Projectile {
-  sessionId: string
-  cluster: Cluster                    // live ref for core position
-  node: GraphNode                     // live ref for planet position
-  inbound: boolean                    // true = planet→core, false = core→planet
-  colorHex: string
-  tool: string
-  progress: number      // 0 → 1
-  duration: number      // seconds
-  agentId?: string | null      // agent ID if action originated from agent session
-}
-
 // Maps agent IDs to their current positions for animation routing
 // Key: agent ID from SubagentStart event (e.g., "abc123")
 // Value: {x, y} position of agent node in space

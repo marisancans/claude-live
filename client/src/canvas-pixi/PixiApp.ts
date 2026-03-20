@@ -13,15 +13,18 @@ export class PixiApp {
   app!: Application
   canvas: HTMLCanvasElement
   clustersRef: MutableRefObject<Map<string, Cluster>>
+  autofitRef: MutableRefObject<boolean>
   backgroundLayer!: BackgroundLayer
   worldLayer!: WorldLayer
-  animationManager!: AnimationManager
+  animationManager: AnimationManager | null = null
   uiLayer!: Container
   private rafId: number = 0
+  private _resizeHandler = () => this.onResize()
 
-  constructor(canvas: HTMLCanvasElement, clustersRef: MutableRefObject<Map<string, Cluster>>) {
+  constructor(canvas: HTMLCanvasElement, clustersRef: MutableRefObject<Map<string, Cluster>>, autofitRef: MutableRefObject<boolean>) {
     this.canvas = canvas
     this.clustersRef = clustersRef
+    this.autofitRef = autofitRef
   }
 
   /**
@@ -51,18 +54,22 @@ export class PixiApp {
 
     // World layer: camera container with clusters, nodes, edges, projectiles
     // Pass clustersRef so WorldLayer always reads fresh cluster data
-    this.worldLayer = new WorldLayer(this.app, this.clustersRef)
+    this.worldLayer = new WorldLayer(this.app, this.clustersRef, this.autofitRef)
     this.app.stage.addChild(this.worldLayer.container)
 
     // Animation manager: subscribes to events and creates projectiles/snakes
-    this.animationManager = new AnimationManager(this.app, this.worldLayer)
+    try {
+      this.animationManager = new AnimationManager(this.app, this.worldLayer)
+    } catch (err) {
+      console.error('Failed to create AnimationManager:', err)
+    }
 
     // UI layer: always on top (screen-space)
     this.uiLayer = new Container()
     this.app.stage.addChild(this.uiLayer)
 
     // Resize handler
-    window.addEventListener('resize', () => this.onResize())
+    window.addEventListener('resize', this._resizeHandler)
   }
 
   /**
@@ -74,7 +81,7 @@ export class PixiApp {
     // Update all layers
     this.backgroundLayer.tick(dt)
     this.worldLayer.tick(dt)
-    this.animationManager.tick(dt)
+    this.animationManager?.tick(dt)
 
     // Render
     this.app.render()
@@ -94,8 +101,24 @@ export class PixiApp {
    * Cleanup when unmounting.
    */
   destroy() {
-    window.removeEventListener('resize', () => this.onResize())
-    this.animationManager.destroy()
-    this.app.destroy()
+    window.removeEventListener('resize', this._resizeHandler)
+    this.animationManager?.destroy()
+
+    try {
+      this.app.destroy()
+    } catch (e) {
+      // Expected during HMR teardown
+    }
+
+    // Force-release the WebGL context
+    try {
+      const gl = this.canvas.getContext('webgl2') || this.canvas.getContext('webgl')
+      if (gl) {
+        const ext = gl.getExtension('WEBGL_lose_context')
+        if (ext) ext.loseContext()
+      }
+    } catch (e) {
+      // Best-effort cleanup
+    }
   }
 }
