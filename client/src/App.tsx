@@ -187,7 +187,7 @@ export function App() {
   })
   const [replayDone, setReplayDone] = useState(false)
   const replayDoneRef = useRef(false)
-  const esRef = useRef<EventSource | null>(null)
+
 
   // Initialize audio on mount
   useEffect(() => {
@@ -207,94 +207,123 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const es = new EventSource('/events')
-    esRef.current = es
-    es.onmessage = (e) => {
-      try {
-        const parsed = JSON.parse(e.data)
-        if (parsed.type === 'state_snapshot') {
-          store.initFromSnapshot(parsed.sessions)
-          setClusters(new Map(store.getSessions()))
-          replayDoneRef.current = true
-          setReplayDone(true)
-          return
-        }
-        // Legacy: old server sends replay_done after individual event replay
-        if (parsed.type === 'replay_done') {
-          store.markReplayDone()
-          setClusters(new Map(store.getSessions()))
-          replayDoneRef.current = true
-          setReplayDone(true)
-          return
-        }
-        const event: RawEvent = parsed
-        console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
-        const prevSize = store.getSessions().size
-        store.addEvent(event, !replayDoneRef.current)
-        const sessions = store.getSessions()
-        setClusters(new Map(sessions))
-        setLastEvent(event)
-        setEventCount(c => c + 1)
-        if (replayDoneRef.current) playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined) // Play audio on event (only after replay completes)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/ws`
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let reconnectDelay = 1000
 
-        // Live event log: show PostToolUse for tools with enriched data, skip others to avoid duplication
-        const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
-        const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
+    function connect() {
+      ws = new WebSocket(wsUrl)
 
-        if (!skipDuplicate && replayDoneRef.current) {
-          const cluster = sessions.get(event.session_id)
-          let tool = event.tool_name || event.hook_event_name || '?'
-          // Shorten MCP names: mcp__plugin_X__Y__action → action
-          if (tool.startsWith('mcp_')) {
-            const parts = tool.split('__')
-            tool = parts[parts.length - 1].replace(/_/g, ' ')
+      ws.onopen = () => {
+        console.log('[claude-live] WebSocket connected')
+        reconnectDelay = 1000 // reset on successful connect
+      }
+
+      ws.onmessage = (e) => {
+        try {
+          const parsed = JSON.parse(e.data)
+
+          if (parsed.type === 'snapshot') {
+            store.initFromSnapshot(parsed.sessions)
+            setClusters(new Map(store.getSessions()))
+            replayDoneRef.current = true
+            setReplayDone(true)
+            return
           }
-          setEventLog(prev => {
-            const entry: LogEntry = {
-              id: event.id,
-              tool,
-              file: event.hook_event_name === 'PostToolUse' ? enrichedFileLabel(event) : fileLabel(event),
-              sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
-              project: projectName(event.cwd),
-              colorHex: TOOL_COLORS[tool] ?? '#888',
-              createdAt: Date.now(),
+
+          if (parsed.type === 'heartbeat') return
+
+          if (parsed.type === 'version_available') {
+            // TODO: show update badge
+            console.log('[claude-live] Update available:', parsed.version)
+            return
+          }
+
+          if (parsed.type === 'event') {
+            const event: RawEvent = parsed.data
+            console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
+            const prevSize = store.getSessions().size
+            store.addEvent(event, !replayDoneRef.current)
+            const sessions = store.getSessions()
+            setClusters(new Map(sessions))
+            setLastEvent(event)
+            setEventCount(c => c + 1)
+            if (replayDoneRef.current) playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
+
+            // Live event log (same logic as before)
+            const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
+            const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
+
+            if (!skipDuplicate && replayDoneRef.current) {
+              const cluster = sessions.get(event.session_id)
+              let tool = event.tool_name || event.hook_event_name || '?'
+              if (tool.startsWith('mcp_')) {
+                const parts = tool.split('__')
+                tool = parts[parts.length - 1].replace(/_/g, ' ')
+              }
+              setEventLog(prev => {
+                const entry: LogEntry = {
+                  id: event.id,
+                  tool,
+                  file: event.hook_event_name === 'PostToolUse' ? enrichedFileLabel(event) : fileLabel(event),
+                  sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
+                  project: projectName(event.cwd),
+                  colorHex: TOOL_COLORS[tool] ?? '#888',
+                  createdAt: Date.now(),
+                }
+                return [...prev, entry].slice(-MAX_LOG)
+              })
             }
-            return [...prev, entry].slice(-MAX_LOG)
-          })
-        }
 
-        // Track permission requests via Notification events
-        if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
-          const cluster = sessions.get(event.session_id)
-          const msg = (event.tool_input as Record<string, string> | null)?.message ?? 'awaiting input'
-          console.log('[perm] showing notification:', { session: event.session_id, msg })
-          setPermNotifications(prev => {
-            const next = new Map(prev)
-            next.set(event.session_id, {
-              sessionId: event.session_id,
-              sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
-              message: msg,
-              timestamp: event.timestamp,
-            })
-            return next
-          })
-        }
-        // Clear when user provides input or a tool starts executing
-        if (event.tool_name || event.hook_event_name === 'UserPromptSubmit') {
-          setPermNotifications(prev => {
-            if (!prev.has(event.session_id)) return prev
-            console.log('[perm] clearing notification:', { session: event.session_id, trigger: event.tool_name || 'UserPromptSubmit' })
-            const next = new Map(prev)
-            next.delete(event.session_id)
-            return next
-          })
-        }
+            // Permission notifications
+            if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
+              const cluster = sessions.get(event.session_id)
+              const msg = (event.tool_input as Record<string, string> | null)?.message ?? 'awaiting input'
+              setPermNotifications(prev => {
+                const next = new Map(prev)
+                next.set(event.session_id, {
+                  sessionId: event.session_id,
+                  sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
+                  message: msg,
+                  timestamp: event.timestamp,
+                })
+                return next
+              })
+            }
+            if (event.tool_name || event.hook_event_name === 'UserPromptSubmit') {
+              setPermNotifications(prev => {
+                if (!prev.has(event.session_id)) return prev
+                const next = new Map(prev)
+                next.delete(event.session_id)
+                return next
+              })
+            }
+          }
+        } catch { /* ignore malformed */ }
+      }
 
-        // Compacting animation handled by store.ts (with replayDone guard)
-      } catch { /* ignore malformed */ }
+      ws.onclose = () => {
+        console.warn('[claude-live] WebSocket closed, reconnecting in', reconnectDelay, 'ms')
+        reconnectTimer = setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000)
+          connect()
+        }, reconnectDelay)
+      }
+
+      ws.onerror = (err) => {
+        console.warn('[claude-live] WebSocket error', err)
+        ws?.close()
+      }
     }
-    es.onerror = (err) => console.warn('[claude-live] SSE error', err)
-    return () => es.close()
+
+    connect()
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      ws?.close()
+    }
   }, [])
 
   const handleHover = (node: GraphNode | null, _cluster: Cluster | null) => setHoveredNode(node)
