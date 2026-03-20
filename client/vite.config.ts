@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Backend port (default 43451, overridable with PORT env var)
@@ -7,13 +7,32 @@ const backendPort = process.env.PORT || '43451'
 // Vite dev server port (hardcoded to 7979 to avoid conflicts)
 const vitePort = 7979
 
+// WebGL contexts are incompatible with HMR — force full page reload
+// for any file in canvas-pixi/ instead of attempting hot-swap
+function pixiFullReload(): Plugin {
+  return {
+    name: 'pixi-full-reload',
+    handleHotUpdate({ file, server }) {
+      if (file.includes('/canvas-pixi/')) {
+        server.ws.send({ type: 'full-reload' })
+        return []
+      }
+    }
+  }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), pixiFullReload()],
   server: {
     port: vitePort,
+    watch: {
+      usePolling: true,
+      interval: 100,
+    },
     proxy: {
-      '/events': `http://localhost:${backendPort}`,
+      '/ws': { target: `ws://localhost:${backendPort}`, ws: true },
       '/hook': `http://localhost:${backendPort}`,
+      '/api': `http://localhost:${backendPort}`,
       '/buffer': `http://localhost:${backendPort}`,
     }
   },

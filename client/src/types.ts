@@ -40,8 +40,6 @@ export interface GraphNode {
   colorHex: string      // CSS hex string e.g. '#60a5fa'
   x: number
   y: number
-  vx: number
-  vy: number
   age: number
   lastEventIndex: number
   lastTool: string | null
@@ -70,19 +68,6 @@ export interface GraphNode {
   marks: number[]       // angle values, newest last
 }
 
-// A projectile flying from cluster center to a target node
-export interface Projectile {
-  sessionId: string
-  cluster: Cluster                    // live ref for core position
-  node: GraphNode                     // live ref for planet position
-  inbound: boolean                    // true = planet→core, false = core→planet
-  colorHex: string
-  tool: string
-  progress: number      // 0 → 1
-  duration: number      // seconds
-  agentId?: string | null      // agent ID if action originated from agent session
-}
-
 // Maps agent IDs to their current positions for animation routing
 // Key: agent ID from SubagentStart event (e.g., "abc123")
 // Value: {x, y} position of agent node in space
@@ -107,9 +92,6 @@ export interface Cluster {
   label: string
   centerX: number
   centerY: number
-  // Size-aware positioning
-  targetRadius: number      // computed target orbit distance (px)
-  currentRadius: number     // smoothly interpolates to target
   nodes: Map<string, GraphNode>
   edges: Array<{ fromKey: string; toKey: string; color: number; colorHex: string; age: number }>
   stopping: boolean
@@ -137,8 +119,3 @@ export interface Cluster {
   agentPositionMap: AgentPositionMap
 }
 
-// Ripple (kept for compatibility, not used in solar renderer)
-export interface Ripple {
-  x: number; y: number; color: number; radius: number
-  maxRadius: number; alpha: number; startTime: number; duration: number
-}

@@ -7,37 +7,14 @@ const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
 const MARK_PX_SPACING = 5   // pixels between stamp centers (uniform across all rings)
 const MARK_MAX = 12         // half trail length
 
-// Get actual radii based on how many rings exist in cluster
-function getOrbitRadii(cluster: any): number[] {
-  const numRings = Math.max(1, Math.ceil(cluster.nodes.size / 10))
-  return ORBIT_RADII.slice(0, Math.min(numRings, RING_CAPACITIES.length))
-}
-
-const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
-const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
-
-
-// Physics-based layout: clusters positioned by Matter.js in PixiScene
-// This is now a no-op since PixiScene handles all cluster positioning via physics
-export function layoutClusters(clusters: Map<string, Cluster>) {
-  // No-op: PixiScene handles positioning via Matter.js physics engine
-}
-
-/**
- * Cluster radius animation is now handled by physics engine in PixiScene.
- * This is a no-op but kept for compatibility.
- */
-function computeClusterRadii(clusters: Map<string, Cluster>): void {
-  // No-op: PixiScene physics handles all positioning
-}
-
 export function tickSimulation(clusters: Map<string, Cluster>) {
   // Cluster positions are managed by physics in PixiScene — do not overwrite here
 
   for (const cluster of clusters.values()) {
-    // Decay animation states
-    cluster.compacting = Math.max(0, cluster.compacting - 0.0003)
-    cluster.compacted = Math.max(0, cluster.compacted - 0.0005)
+    // Decay animation states — slow decay to sustain the dramatic compaction visuals
+    // Implosion lasts ~3.5s (210 frames @ 60fps), rebirth ~2.5s (150 frames)
+    cluster.compacting = Math.max(0, cluster.compacting - 0.005)
+    cluster.compacted = Math.max(0, cluster.compacted - 0.007)
 
     for (const node of cluster.nodes.values()) {
       // Smooth transition to target angle (if being redistributed)

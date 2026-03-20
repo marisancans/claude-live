@@ -1,0 +1,44 @@
+[package]
+name = "claude-live"
+version = "1.0.0"
+edition = "2021"
+description = "Realtime Claude Code activity visualizer"
+license = "MIT"
+repository = "https://github.com/marisancans/claude-live"
+
+[[bin]]
+name = "claude-live"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rust-embed = { version = "8", features = ["compression"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+rusqlite = { version = "0.32", features = ["bundled"] }
+ureq = "2"
+url = "2"
+open = "5"
+chrono = { version = "0.4", features = ["serde"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+reqwest = { version = "0.12", features = ["json"] }
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

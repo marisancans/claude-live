@@ -2,12 +2,7 @@ import type { RawEvent, GraphNode, Cluster, PromptSnake } from './types'
 import type { Point } from './utils/spline'
 import { generateRandomSpline } from './utils/spline'
 import { playChordForEvent } from './audio'
-
-function shortHash(s: string): string {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i)
-  return (h >>> 0).toString(16).slice(0, 8)
-}
+import { EventProcessor } from './events/EventProcessor'
 
 // Small deterministic radial offset per node so trails on the same ring don't overlap
 function radialJitter(key: string): number {
@@ -43,117 +38,6 @@ function hexToInt(hex: string): number {
   return parseInt(hex.replace('#',''), 16)
 }
 
-/**
- * Extract words from tool response/input for ResponseSnake animation.
- * Handles different tools and limits to approximately fifteen words for readability in the visualization.
- */
-function extractWords(event: RawEvent): string[] {
-  const tool = event.tool_name || ''
-  const resp = event.tool_response as Record<string, any> | null
-  const input = event.tool_input as Record<string, any> | null
-  const MAX = 15
-
-  if (tool === 'Read') {
-    // Read response: { type, file: { filePath, content } }
-    const text: string = resp?.file?.content ?? resp?.content ?? resp?.text ?? resp?.output ?? ''
-    return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
-  }
-  if (tool === 'Write') {
-    const text: string = input?.content ?? ''
-    return text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
-  }
-  if (tool === 'Bash') {
-    // Bash response: { stdout, stderr, interrupted, isImage, noOutputExpected }
-    const output: string = resp?.stdout ?? resp?.output ?? ''
-    const cmd = (input?.command ?? '').split(/\s+/)[0] || '$'
-    // Extract words from stdout
-    if (output.trim()) {
-      const words = output.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
-      return words
-    }
-    return [cmd, '✓']
-  }
-  if (tool === 'Grep') {
-    const n = resp?.count ?? resp?.numMatches ?? resp?.total
-    return n != null ? [`${n} matches`] : []
-  }
-  if (tool === 'Glob') {
-    const files: string[] = resp?.files ?? (Array.isArray(resp) ? resp : [])
-    return files.length > 0 ? [`${files.length} files`] : []
-  }
-  if (tool === 'WebFetch') {
-    const status = resp?.status ?? resp?.statusCode ?? '?'
-    const host = (() => {
-      try {
-        return new URL((input?.url ?? '') as string).hostname
-      } catch {
-        return 'web'
-      }
-    })()
-    return [host, String(status)]
-  }
-  return []
-}
-
-/**
- * Extract individual letters from tool response/input for ResponseSnake animation.
- * Converts text to individual characters for better curving along spline paths.
- * Preserves word boundaries as spaces for visual separation.
- */
-function extractLetters(event: RawEvent): string[] {
-  const tool = event.tool_name || ''
-  const resp = event.tool_response as Record<string, any> | null
-  const input = event.tool_input as Record<string, any> | null
-  const MAX = 50
-
-  let text = ''
-
-  if (tool === 'Read') {
-    text = resp?.file?.content ?? resp?.content ?? resp?.text ?? resp?.output ?? ''
-  } else if (tool === 'Write') {
-    text = input?.content ?? ''
-  } else if (tool === 'Bash') {
-    text = resp?.stdout ?? resp?.output ?? ''
-  }
-
-  if (!text.trim()) return []
-
-  // Split into words, then into letters, preserving word boundaries as spaces
-  const words = text.trim().split(/\s+/).filter(Boolean)
-  const letters: string[] = []
-
-  for (let i = 0; i < words.length && letters.length < MAX; i++) {
-    const word = words[i]
-    // Add each letter of the word
-    for (const char of word) {
-      if (letters.length < MAX) {
-        letters.push(char)
-      }
-    }
-    // Add space after word (except last word) to create separation
-    if (i < words.length - 1 && letters.length < MAX) {
-      letters.push(' ')
-    }
-  }
-
-  return letters
-}
-
-/**
- * Get the animation origin point for an action.
- * If agentId exists and points to an active agent, returns agent position.
- * Otherwise, returns cluster core position.
- */
-export function getAnimationOrigin(
-  cluster: Cluster,
-  agentId: string | null
-): Point {
-  if (agentId && cluster.agentPositionMap.has(agentId)) {
-    return cluster.agentPositionMap.get(agentId)!
-  }
-  // Fallback to core position
-  return {x: cluster.centerX, y: cluster.centerY}
-}
 
 // Atomic orbital structure: each ring has progressively more slots
 // Ring capacities based on electron orbitals
@@ -460,8 +344,6 @@ export function createStore() {
         label,
         centerX: pos.x,
         centerY: pos.y,
-        targetRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
-        currentRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
         nodes: new Map(),
         edges: [],
         stopping: false,
@@ -542,7 +424,6 @@ export function createStore() {
           colorHex: '#c084fc',
           x: cluster.centerX + Math.cos(angle) * 32,
           y: cluster.centerY + Math.sin(angle) * 32,
-          vx: 0, vy: 0,
           age: 0,
           lastEventIndex: buffer.length - 1,
           lastTool: null,
@@ -797,13 +678,6 @@ export function createStore() {
         if (enriched !== tool) {
           node.actionLabel = enriched
         }
-        // TODO: ResponseSnakes disabled for performance - re-enable after optimization
-        // Spawn ResponseSnake with tool output letters
-        // const words = extractLetters(event)
-        // if (tool === 'Write' || tool === 'Bash') {
-        //   console.log(`[Snake] ${tool}: letters=${words.length}, skipAnimations=${skipAnimations}`, words)
-        // }
-        // if (!skipAnimations && words.length > 0) { ... }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
@@ -837,6 +711,10 @@ export function createStore() {
     }
 
     recomputeAges()
+
+    // Emit domain events to EventBus for PixiJS animations
+    const affectedNode = cluster.nodes.get(nodeKeyFor(event)) ?? null
+    EventProcessor.process(event, cluster, affectedNode)
   }
 
   function markReplayDone() { replayDone = true }
@@ -860,8 +738,6 @@ export function createStore() {
         label: snap.label,
         centerX: pos.x,
         centerY: pos.y,
-        targetRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
-        currentRadius: Math.min(CANVAS_W, CANVAS_H) * 0.32,
         nodes: new Map(),
         edges: [],
         stopping: snap.stopping,
@@ -899,7 +775,6 @@ export function createStore() {
           colorHex,
           x: pos.x + Math.cos(orbitAngle) * orbitRadius,
           y: pos.y + Math.sin(orbitAngle) * orbitRadius,
-          vx: 0, vy: 0,
           age: 0,
           lastEventIndex: 0,
           lastTool: null,
