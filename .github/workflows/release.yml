@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   build-frontend:
@@ -93,6 +95,14 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+
+  deploy-demo:
+    needs: release
+    uses: ./.github/workflows/demo.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
   publish-crate:
     needs: build-frontend
