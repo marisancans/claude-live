@@ -18,3 +18,13 @@ fn test_unknown_subcommand() {
         .assert()
         .failure();
 }
+
+#[test]
+fn test_status_when_not_running() {
+    // status should fail gracefully when no server is running
+    Command::cargo_bin("claude-live")
+        .unwrap()
+        .args(["status", "--port", "19999"])
+        .assert()
+        .failure();
+}
