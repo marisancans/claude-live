@@ -188,12 +188,16 @@ async fn main() {
             println!("Injected {} events", events.len());
         }
         Some(Commands::Update) => {
-            eprintln!("Self-update not yet implemented");
-            std::process::exit(1);
+            match claude_live::update::self_update() {
+                Ok(()) => {}
+                Err(e) => { eprintln!("Update failed: {e}"); std::process::exit(1); }
+            }
         }
-        Some(Commands::Share { port: _ }) => {
-            eprintln!("Share not yet implemented");
-            std::process::exit(1);
+        Some(Commands::Share { port }) => {
+            if let Err(e) = claude_live::share::start_tunnel(port) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
         }
         Some(Commands::Record { .. }) | Some(Commands::Replay { .. }) | Some(Commands::Logs { .. }) => {
             eprintln!("Not yet implemented");
