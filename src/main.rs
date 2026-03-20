@@ -199,9 +199,67 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Some(Commands::Record { .. }) | Some(Commands::Replay { .. }) | Some(Commands::Logs { .. }) => {
-            eprintln!("Not yet implemented");
-            std::process::exit(1);
+        Some(Commands::Record { output, port }) => {
+            use std::io::Write;
+            let protocol = "ws";
+            let url = format!("{protocol}://127.0.0.1:{port}/ws");
+            println!("Recording events to {output} (Ctrl+C to stop)...");
+
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                let (mut ws, _) = tokio_tungstenite::connect_async(&url).await
+                    .unwrap_or_else(|e| { eprintln!("Cannot connect: {e}"); std::process::exit(1); });
+                let mut file = std::fs::File::create(&output)
+                    .unwrap_or_else(|e| { eprintln!("Cannot create {output}: {e}"); std::process::exit(1); });
+                file.write_all(b"[\n").unwrap();
+                let mut first = true;
+
+                use futures_util::StreamExt;
+                while let Some(Ok(msg)) = ws.next().await {
+                    if let Ok(text) = msg.into_text() {
+                        let parsed: serde_json::Value = match serde_json::from_str(&text) {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        if parsed.get("type").and_then(|v| v.as_str()) == Some("event") {
+                            if !first { file.write_all(b",\n").unwrap(); }
+                            first = false;
+                            file.write_all(parsed["data"].to_string().as_bytes()).unwrap();
+                        }
+                    }
+                }
+                file.write_all(b"\n]\n").unwrap();
+            });
+        }
+        Some(Commands::Replay { file, speed, port }) => {
+            let content = std::fs::read_to_string(&file)
+                .unwrap_or_else(|e| { eprintln!("Cannot read {file}: {e}"); std::process::exit(1); });
+            let events: Vec<serde_json::Value> = serde_json::from_str(&content)
+                .unwrap_or_else(|e| { eprintln!("Invalid JSON: {e}"); std::process::exit(1); });
+
+            println!("Replaying {} events at {speed}x speed...", events.len());
+            let mut last_ts: Option<u64> = None;
+            for event in &events {
+                let ts = event.get("timestamp").and_then(|v| v.as_u64());
+                if let (Some(current), Some(prev)) = (ts, last_ts) {
+                    if current > prev {
+                        let delay_ms = ((current - prev) as f64 / speed) as u64;
+                        std::thread::sleep(std::time::Duration::from_millis(delay_ms.min(5000)));
+                    }
+                }
+                last_ts = ts;
+                let body = serde_json::to_string(event).unwrap();
+                if let Err(e) = api_post(port, "/hook", Some(&body)) {
+                    eprintln!("Failed: {e}");
+                }
+            }
+            println!("Replay complete");
+        }
+        Some(Commands::Logs { follow, port: _ }) => {
+            eprintln!("Logs are printed to the server's stdout. Use `claude-live start` in foreground mode to see them.");
+            if follow {
+                eprintln!("Hint: start the server with RUST_LOG=claude_live=debug for verbose output");
+            }
         }
     }
 }
