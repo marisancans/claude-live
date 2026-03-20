@@ -1,9 +1,6 @@
 import type { Cluster } from '../types'
 import { redistributeRing } from '../store'
-
-// Atomic orbital structure: dynamically grows from 1 to 4 rings
-const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
-const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
+import { ORBIT_RADII, RING_CAPACITIES } from '../constants'
 const MARK_PX_SPACING = 5   // pixels between stamp centers (uniform across all rings)
 const MARK_MAX = 12         // half trail length
 
@@ -23,7 +20,7 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
         // Normalize difference to -π to π range
         const normalizedDiff = Math.atan2(Math.sin(diff), Math.cos(diff))
         // Smoothly interpolate toward target with easing
-        node.orbitAngle += normalizedDiff * 0.015 // 1.5% per frame = ~3-4s transition
+        node.orbitAngle += normalizedDiff * 0.05 // 5% per frame = ~1s smooth glide
         // Clear stale trail stamps during transition
         if (Math.abs(normalizedDiff) > 0.01) {
           node.marks = []
@@ -64,10 +61,6 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
       node.actionFade = Math.max(0, node.actionFade - 0.003)
       node.entry = Math.min(1, node.entry + 0.01) // Slower entry: ~3.2 seconds instead of 1.2
 
-      // Ephemerals only decay when evicted from buffer (store sets life < 0.15)
-      if (node.nodeType !== 'file' && node.life < 0.15) {
-        node.life = Math.max(0, node.life - 0.004)
-      }
     }
 
     // Update snake animations
@@ -80,18 +73,5 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
 
     // Remove completed snakes (progress >= 1)
     cluster.promptSnakes = cluster.promptSnakes.filter(s => s.progress < 1)
-
-    // Remove dead ephemerals and redistribute remaining nodes on affected rings
-    const removedRings = new Set<number>()
-    for (const [key, node] of cluster.nodes) {
-      if (node.nodeType !== 'file' && node.life <= 0) {
-        if (node.orbitRing >= 0 && node.orbitRing < cluster.ringCounts.length) {
-          removedRings.add(node.orbitRing)
-          cluster.ringCounts[node.orbitRing] = Math.max(0, cluster.ringCounts[node.orbitRing] - 1)
-        }
-        cluster.nodes.delete(key)
-      }
-    }
-    for (const ring of removedRings) redistributeRing(cluster, ring)
   }
 }

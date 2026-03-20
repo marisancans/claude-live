@@ -37,7 +37,7 @@ export class BashProjectile extends ProjectileObject {
   monoStyle: TextStyle
   outputStyle: TextStyle
 
-  constructor(startPos: Point, endPos: Point, color: number, _inbound: boolean = false, duration: number = 0.6) {
+  constructor(startPos: Point, endPos: Point, color: number, _inbound: boolean = false, duration: number = 2.5) {
     super(startPos, endPos, duration)
     this.color = color
 

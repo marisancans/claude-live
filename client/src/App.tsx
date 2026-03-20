@@ -8,6 +8,7 @@ import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from '.
 import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
 import { EventLog } from './EventLog'
+import { isDemoMode, createDemoSimulator } from './demo'
 
 const store = createStore()
 
@@ -207,6 +208,48 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    // Demo mode: simulate events without a real server
+    if (isDemoMode()) {
+      replayDoneRef.current = true
+      setReplayDone(true)
+
+      const stopDemo = createDemoSimulator((parsed) => {
+        if (parsed.type === 'event') {
+          const event: RawEvent = parsed.data
+          store.addEvent(event, false)
+          setClusters(new Map(store.getSessions()))
+          setLastEvent(event)
+          setEventCount(c => c + 1)
+          playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
+
+          const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
+          const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
+          if (!skipDuplicate) {
+            const cluster = store.getSessions().get(event.session_id)
+            let tool = event.tool_name || event.hook_event_name || '?'
+            if (tool.startsWith('mcp_')) {
+              const parts = tool.split('__')
+              tool = parts[parts.length - 1].replace(/_/g, ' ')
+            }
+            setEventLog(prev => {
+              const entry: LogEntry = {
+                id: event.id,
+                tool,
+                file: event.hook_event_name === 'PostToolUse' ? enrichedFileLabel(event) : fileLabel(event),
+                sessionLabel: cluster?.label ?? event.session_id.slice(0, 8),
+                project: projectName(event.cwd),
+                colorHex: TOOL_COLORS[tool] ?? '#888',
+                createdAt: Date.now(),
+              }
+              return [...prev, entry].slice(-MAX_LOG)
+            })
+          }
+        }
+      })
+
+      return () => stopDemo()
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/ws`
     let ws: WebSocket | null = null

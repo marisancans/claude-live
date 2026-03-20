@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Cluster, GraphNode, RawEvent } from '../types'
 import { PixiApp } from './PixiApp'
 
@@ -63,7 +63,7 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
         // Start render loop
         const animate = () => {
           try {
-            app.tick(1 / 60) // 60 FPS
+            app.tick(1 / 120) // Half-speed animations
           } catch (err) {
             console.error('Error in tick:', err)
           }
@@ -90,8 +90,20 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
     }
   }, [])
 
+  const empty = clusters.size === 0
+  const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    if (!empty) {
+      // Delay hiding so fade-out animation plays
+      const t = setTimeout(() => setVisible(false), 800)
+      return () => clearTimeout(t)
+    }
+    setVisible(true)
+  }, [empty])
+
   return (
-    <div onMouseMove={handleMouseMove} onClick={handleClick}>
+    <div onMouseMove={handleMouseMove} onClick={handleClick} style={{ position: 'relative' }}>
       <canvas
         ref={canvasRef}
         style={{
@@ -101,6 +113,40 @@ export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabl
           background: '#080808'
         }}
       />
+      {visible && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          opacity: empty ? 1 : 0,
+          transition: 'opacity 0.8s ease-out',
+        }}>
+          <div style={{
+            fontSize: 13,
+            fontFamily: 'monospace',
+            color: '#444',
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            marginBottom: 12,
+          }}>
+            claude-live
+          </div>
+          <div style={{
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: '#333',
+            textAlign: 'center',
+            lineHeight: 1.7,
+          }}>
+            waiting for sessions<span style={{ animation: 'blink 1.5s step-end infinite' }}>_</span>
+          </div>
+          <style>{`@keyframes blink { 50% { opacity: 0 } }`}</style>
+        </div>
+      )}
     </div>
   )
 }

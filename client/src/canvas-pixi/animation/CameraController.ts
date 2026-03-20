@@ -1,5 +1,6 @@
 import type { Application, Container } from 'pixi.js'
 import type { Cluster } from '../../types'
+import { ORBIT_RADII, NODE_VISUAL_RADIUS } from '../../constants'
 
 /**
  * Camera controller for PixiJS world layer.
@@ -106,11 +107,9 @@ export class CameraController {
     let minY = Infinity, maxY = -Infinity
 
     for (const cluster of clusters.values()) {
-      // Use actual footprint based on active rings, not fixed 225
-      const radii = [55, 90, 125, 160, 195]
-      let ext = radii[0]
-      for (let i = cluster.ringCounts.length - 1; i >= 0; i--) {
-        if (cluster.ringCounts[i] > 0) { ext = radii[i] ?? 195; break }
+      let ext = ORBIT_RADII[0] + NODE_VISUAL_RADIUS
+      for (let i = Math.min(cluster.ringCounts.length, ORBIT_RADII.length) - 1; i >= 0; i--) {
+        if (cluster.ringCounts[i] > 0) { ext = ORBIT_RADII[i] + NODE_VISUAL_RADIUS; break }
       }
 
       minX = Math.min(minX, cluster.centerX - ext)
@@ -119,7 +118,7 @@ export class CameraController {
       maxY = Math.max(maxY, cluster.centerY + ext)
     }
 
-    const padding = 80
+    const padding = 60
     return {
       minX: minX - padding,
       maxX: maxX + padding,
@@ -144,7 +143,7 @@ export class CameraController {
       targetScale = this.app.renderer.height / boundsHeight
     }
 
-    targetScale = Math.max(0.3, Math.min(4.0, targetScale * 1.0))
+    targetScale = Math.max(0.3, Math.min(3.0, targetScale * 0.92))
 
     const centerX = (bounds.minX + bounds.maxX) / 2
     const centerY = (bounds.minY + bounds.maxY) / 2

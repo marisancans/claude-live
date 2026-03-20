@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js'
 import type { GraphNode } from '../../types'
+import { ORBIT_RADII } from '../../constants'
 
 /**
  * Visual representation of a node (file, tool, etc.) in the solar system.
@@ -19,7 +20,7 @@ export class NodeObject {
 
   // Orbital/animation state
   private entryProgress: number = 0 // 0 -> 1 for entry fade/scale
-  private orbitRadii = [70, 120, 175, 225] // Match ClusterObject ORBIT_RADII
+  private orbitRadii = ORBIT_RADII
   private time: number = 0
 
   // Interaction state
@@ -66,15 +67,15 @@ export class NodeObject {
     this.nodeLabel = new Text({
       text: this.data.label,
       style: {
-        fontSize: 9,
+        fontSize: 7,
         fontFamily: 'monospace',
         fill: this.data.color,
         align: 'center',
       },
     })
-    this.nodeLabel.anchor.set(0.5, 1) // Anchor at bottom-center
-    this.nodeLabel.position.set(0, -(this.data.baseRadius + 5)) // Position ABOVE the node
-    this.nodeLabel.alpha = 0.85
+    this.nodeLabel.anchor.set(0.5, 0)
+    this.nodeLabel.position.set(0, this.baseRadius + 3)
+    this.nodeLabel.alpha = 1.0
     this.container.addChild(this.nodeLabel)
   }
 
@@ -289,11 +290,11 @@ export class NodeObject {
     // Redraw node graphics (glow, body, agent effects)
     this.redrawNode()
 
-    // Update action label: float upward and fade out
+    // Animate action label: float upward and fade out
     if (this.actionLabel && this.actionFade > 0) {
-      this.actionFade -= 0.003
-      this.actionLabel.alpha = this.actionFade
-      this.actionLabel.position.y -= (1 - this.actionFade) * 10 * dt
+      this.actionFade -= dt * 0.25 // ~4s visible
+      this.actionLabel.alpha = Math.max(0, this.actionFade * 0.9)
+      this.actionLabel.position.y -= dt * 3 // slow float up
       if (this.actionFade <= 0) {
         this.container.removeChild(this.actionLabel)
         this.actionLabel.destroy()
@@ -336,11 +337,7 @@ export class NodeObject {
    */
   setHovered(hovered: boolean) {
     this.isHovered = hovered
-    if (hovered) {
-      this.nodeLabel?.scale.set(1.1)
-    } else {
-      this.nodeLabel?.scale.set(1.0)
-    }
+    // No label to scale — tooltip handles hover info
   }
 
   /**
@@ -348,11 +345,7 @@ export class NodeObject {
    */
   setSelected(selected: boolean) {
     this.isSelected = selected
-    if (selected) {
-      this.nodeLabel?.scale.set(1.2)
-    } else {
-      this.nodeLabel?.scale.set(1.0)
-    }
+    // No label to scale — sidebar handles selection info
   }
 
   /**
@@ -360,25 +353,24 @@ export class NodeObject {
    * The label floats upward and fades out over time.
    */
   showAction(label: string, color: number) {
-    // Remove existing action label if present
+    // Remove any existing action label
     if (this.actionLabel) {
       this.container.removeChild(this.actionLabel)
       this.actionLabel.destroy()
-      this.actionLabel = null
     }
 
     this.actionLabel = new Text({
       text: label,
       style: {
-        fontSize: 8,
+        fontSize: 7,
         fontFamily: 'monospace',
-        fontWeight: '700' as any,
         fill: color,
         align: 'center',
       },
     })
-    this.actionLabel.anchor.set(0.5, 0) // Top-center anchor
-    this.actionLabel.position.set(0, this.baseRadius + 8) // Below node
+    this.actionLabel.anchor.set(0.5, 1)
+    this.actionLabel.position.set(0, -(this.baseRadius + 8))
+    this.actionLabel.alpha = 0.9
     this.actionFade = 1.0
     this.container.addChild(this.actionLabel)
   }

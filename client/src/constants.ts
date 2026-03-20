@@ -1,7 +1,8 @@
-// Orbital geometry constants for the solar system visualization
-export const ORBIT_RADII = [55, 90, 125, 160, 195]
-export const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004, 0.00025]
-export const RING_CAPACITY = [999, 999, 999, 999, 999]
+// Orbital geometry constants — SINGLE SOURCE OF TRUTH
+export const ORBIT_RADII = [70, 120, 175, 225]       // px distance from cluster center per ring
+export const RING_CAPACITIES = [4, 8, 18, 20]        // max nodes per ring (sum = 50)
+export const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
+export const NODE_VISUAL_RADIUS = 15                  // approximate px radius of a rendered node
 
 // Canvas dimensions
 export const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280

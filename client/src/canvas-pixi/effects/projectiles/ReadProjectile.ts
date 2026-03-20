@@ -23,8 +23,9 @@ export class ReadProjectile extends ProjectileObject {
     this.inbound = inbound
 
     this.graphics = new Graphics()
-    // Phase 1 starts at endPos (the node)
-    this.container.position.set(endPos.x, endPos.y)
+    // For Read (inbound): startPos = node, endPos = core
+    // Phase 1 scans at the node (startPos)
+    this.container.position.set(startPos.x, startPos.y)
     this.container.addChild(this.graphics)
   }
 
@@ -34,9 +35,9 @@ export class ReadProjectile extends ProjectileObject {
     g.clear()
 
     const c = this.color
-    // For Read: startPos = core, endPos = node (see AnimationManager)
-    const core = this.startPos
-    const node = this.endPos
+    // For Read (inbound): startPos = node, endPos = core
+    const node = this.startPos
+    const core = this.endPos
 
     if (this.progress < 0.45) {
       // ── Phase 1: Scanner at node ──

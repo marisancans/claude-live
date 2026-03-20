@@ -1,5 +1,6 @@
 import { Container, Text, Graphics } from 'pixi.js'
 import type { Cluster } from '../../types'
+import { ORBIT_RADII } from '../../constants'
 
 /**
  * Visual representation of a cluster (session).
@@ -125,7 +126,6 @@ export class ClusterObject {
     this.orbitRingGraphics = []
 
     // Draw new rings based on ringCounts
-    const ORBIT_RADII = [70, 120, 175, 225]
     for (let i = 0; i < this.data.ringCounts.length; i++) {
       if (this.data.ringCounts[i] > 0) {
         const g = new Graphics()

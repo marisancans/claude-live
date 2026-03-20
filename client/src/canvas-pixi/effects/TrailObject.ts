@@ -1,7 +1,6 @@
 import { Container, Graphics } from 'pixi.js'
 import type { Cluster } from '../../types'
-
-const ORBIT_RADII = [70, 120, 175, 225]
+import { ORBIT_RADII } from '../../constants'
 const DASH_PX = 3
 
 /**

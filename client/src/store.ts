@@ -3,6 +3,7 @@ import type { Point } from './utils/spline'
 import { generateRandomSpline } from './utils/spline'
 import { playChordForEvent } from './audio'
 import { EventProcessor } from './events/EventProcessor'
+import { ORBIT_RADII, RING_CAPACITIES } from './constants'
 
 // Small deterministic radial offset per node so trails on the same ring don't overlap
 function radialJitter(key: string): number {
@@ -39,45 +40,89 @@ function hexToInt(hex: string): number {
 }
 
 
-// Atomic orbital structure: each ring has progressively more slots
-// Ring capacities based on electron orbitals
-const RING_CAPACITIES = [4, 8, 18, 20]  // sum = 50 total slots per session
-const ORBIT_RADII = [70, 120, 175, 225] // distances for each ring
+// Re-export for legacy imports
 const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
 
 const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
-// Find which ring to assign a new node to, respecting per-ring capacities
-// Only spawns next ring when current ring is full
+// Find which ring to assign a new node to, respecting per-ring capacities.
+// FIFO: if all rings are full, evict the oldest node to make room.
 function assignRing(cluster: Cluster): number {
   // Find the first ring that isn't full yet
   for (let i = 0; i < RING_CAPACITIES.length; i++) {
-    // Initialize ring if needed
     if (i >= cluster.ringCounts.length) {
       cluster.ringCounts[i] = 0
     }
-    // If this ring has space, use it
     if (cluster.ringCounts[i] < RING_CAPACITIES[i]) {
       return i
     }
   }
 
-  // All rings full (shouldn't happen with 50 cap), use last ring
+  // All rings full — evict oldest node (FIFO)
+  let oldestKey: string | null = null
+  let oldestTs = Infinity
+  for (const [key, node] of cluster.nodes) {
+    if (node.lastTimestamp < oldestTs) {
+      oldestTs = node.lastTimestamp
+      oldestKey = key
+    }
+  }
+  if (oldestKey) {
+    const evicted = cluster.nodes.get(oldestKey)!
+    const ring = evicted.orbitRing
+    cluster.nodes.delete(oldestKey)
+    if (ring >= 0 && ring < cluster.ringCounts.length) {
+      cluster.ringCounts[ring] = Math.max(0, cluster.ringCounts[ring] - 1)
+    }
+    // Remove edges referencing evicted node
+    cluster.edges = cluster.edges.filter(
+      e => e.fromKey !== oldestKey && e.toKey !== oldestKey
+    )
+    return ring // reuse the freed slot on same ring
+  }
+
   return RING_CAPACITIES.length - 1
 }
 
 export function redistributeRing(cluster: Cluster, ring: number) {
   const nodes = [...cluster.nodes.values()]
     .filter(n => n.orbitRing === ring)
-    .sort((a, b) => a.orbitAngle - b.orbitAngle)
   const n = nodes.length
   if (n === 0) return
-  const base = nodes[0].orbitAngle
-  nodes.forEach((node, i) => {
-    const newAngle = base + (i / n) * Math.PI * 2
-    // Set target for smooth interpolation instead of snapping
-    node.targetOrbitAngle = newAngle
+
+  // For a single node, just let it keep its angle
+  if (n === 1) return
+
+  // Sort existing nodes by their effective angle (use targetOrbitAngle if mid-transition)
+  const sorted = nodes.sort((a, b) => {
+    const aa = a.targetOrbitAngle ?? a.orbitAngle
+    const bb = b.targetOrbitAngle ?? b.orbitAngle
+    return aa - bb
+  })
+
+  // Compute the ideal even spacing
+  const spacing = (Math.PI * 2) / n
+
+  // Anchor the layout to the centroid of existing angles so nodes barely move
+  let sumSin = 0, sumCos = 0
+  for (const nd of sorted) {
+    const a = nd.targetOrbitAngle ?? nd.orbitAngle
+    sumSin += Math.sin(a)
+    sumCos += Math.cos(a)
+  }
+  const centroid = Math.atan2(sumSin / n, sumCos / n)
+  // Start layout offset so centroid stays roughly in the middle of the group
+  const base = centroid - spacing * (n - 1) / 2
+
+  sorted.forEach((node, i) => {
+    const newAngle = base + i * spacing
+    const current = node.targetOrbitAngle ?? node.orbitAngle
+    const diff = Math.atan2(Math.sin(newAngle - current), Math.cos(newAngle - current))
+    // Only set target if the node actually needs to move significantly
+    if (Math.abs(diff) > 0.05) {
+      node.targetOrbitAngle = newAngle
+    }
   })
 }
 
@@ -262,32 +307,13 @@ export function createStore() {
     }
     for (const [sid, cluster] of sessions) {
       const sMap = lastIndex.get(sid)
-      const nodesToDelete: string[] = []
       for (const [key, node] of cluster.nodes) {
-        if (!sMap?.has(key)) {
-          if (node.nodeType === 'file') {
-            // File nodes are removed when pushed out of buffer
-            nodesToDelete.push(key)
-            if (node.orbitRing >= 0 && node.orbitRing < cluster.ringCounts.length) {
-              cluster.ringCounts[node.orbitRing] = Math.max(0, cluster.ringCounts[node.orbitRing] - 1)
-            }
-          } else {
-            node.life = Math.min(node.life, 0.15) // start fade-out
-          }
-          continue
-        }
+        if (!sMap?.has(key)) continue // not in buffer — keep node, FIFO eviction handles removal
         const idx = sMap.get(key)!
         const newAge = buffer.length - 1 - idx
         node.age = cluster.stopping && node.age >= 80 ? node.age : newAge
         node.lastEventIndex = idx
       }
-      // Delete nodes that were pushed out of buffer
-      for (const key of nodesToDelete) {
-        cluster.nodes.delete(key)
-      }
-      cluster.edges = cluster.edges.filter(
-        e => cluster.nodes.has(e.fromKey) && cluster.nodes.has(e.toKey)
-      )
       if (cluster.stopping && cluster.nodes.size === 0) {
         sessions.delete(sid)
       }
@@ -593,8 +619,21 @@ export function createStore() {
       const orbitSpeed = ringSpeeds ? ringSpeeds[orbitRing] : ORBIT_SPEEDS[orbitRing]
       const orbitRadius = ORBIT_RADII[orbitRing]
 
-      // Assign angle as a placeholder — will be redistributed below
-      const orbitAngle = 0
+      // Place new node in the largest angular gap on this ring
+      const ringNodes = [...cluster.nodes.values()].filter(n => n.orbitRing === orbitRing)
+      let orbitAngle = Math.random() * Math.PI * 2
+      if (ringNodes.length > 0) {
+        const angles = ringNodes
+          .map(n => n.targetOrbitAngle ?? n.orbitAngle)
+          .sort((a, b) => a - b)
+        let bestGap = 0, bestMid = 0
+        for (let i = 0; i < angles.length; i++) {
+          const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
+          const gap = next - angles[i]
+          if (gap > bestGap) { bestGap = gap; bestMid = angles[i] + gap / 2 }
+        }
+        orbitAngle = bestMid
+      }
 
       cluster.nodes.set(key, {
         key,

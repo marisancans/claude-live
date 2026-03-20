@@ -2,7 +2,7 @@ import type { RawEvent, GraphNode, Cluster } from '../types'
 import {
   ORBIT_RADII,
   ORBIT_SPEEDS,
-  RING_CAPACITY,
+  RING_CAPACITIES,
   MAX_CLUSTERS,
   TOOL_COLOR_HEX,
   DEFAULT_HEX,
@@ -378,7 +378,7 @@ export function createStore() {
       // Assign orbit ring (all node types use same logic)
       let orbitRing = 0
       for (let ri = 0; ri < 5; ri++) {
-        if (cluster.ringSpawnProgress[ri] > 0 && cluster.ringCounts[ri] < RING_CAPACITY[ri]) {
+        if (cluster.ringSpawnProgress[ri] > 0 && cluster.ringCounts[ri] < RING_CAPACITIES[ri]) {
           orbitRing = ri
           break
         }
@@ -389,7 +389,7 @@ export function createStore() {
       }
       // If this ring will now be full, preemptively activate next ring
       const nextRing = orbitRing + 1
-      if (nextRing < 5 && cluster.ringCounts[orbitRing] + 1 >= RING_CAPACITY[orbitRing]) {
+      if (nextRing < 5 && cluster.ringCounts[orbitRing] + 1 >= RING_CAPACITIES[orbitRing]) {
         if (cluster.ringSpawnProgress[nextRing] === 0) {
           cluster.ringSpawnProgress[nextRing] = 0.001
         }
@@ -591,7 +591,7 @@ export function createStore() {
         // Assign ring using same logic as live addEvent (RING_CAPACITY=999 so always ring 0)
         let orbitRing = 0
         for (let ri = 0; ri < 5; ri++) {
-          if (ca.ringSpawnProgress[ri] > 0 && ca.ringCounts[ri] < RING_CAPACITY[ri]) {
+          if (ca.ringSpawnProgress[ri] > 0 && ca.ringCounts[ri] < RING_CAPACITIES[ri]) {
             orbitRing = ri; break
           }
         }

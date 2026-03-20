@@ -136,7 +136,7 @@ export class AnimationManager {
       const nodeObj = this.worldLayer.getNodeObject(e.sessionId, e.nodeKey)
       if (nodeObj) {
         nodeObj.playImpact('ping')
-        nodeObj.showAction(e.title, 0x34d399)
+        nodeObj.showAction(e.title || 'notification', 0x34d399)
       }
       // Pulse the cluster core
       const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
@@ -178,6 +178,12 @@ export class AnimationManager {
     const ProjectileClass = this.projectileMap[e.tool] ?? DefaultProjectile
     const projectile = new ProjectileClass(startPos, endPos, color, inbound)
 
+    // Track live node position so projectile follows orbiting node
+    if (nodeObj) {
+      projectile.trackTarget = nodeObj.container
+      projectile.trackIsStart = inbound // inbound: node is startPos; outbound: node is endPos
+    }
+
     // Add to CLUSTER container so it moves with the cluster
     clusterObj.container.addChild(projectile.container)
     this.projectiles.push(projectile)
@@ -189,7 +195,9 @@ export class AnimationManager {
       const nodeObj = this.worldLayer.getNodeObject(e.sessionId, e.nodeKey)
       if (nodeObj) {
         nodeObj.playImpact(impactType)
-        nodeObj.showAction(e.tool, color)
+        // Use enriched label from store data if available (e.g. "Read 234L", "$ cargo ✓ 1.2s")
+        const enriched = nodeObj.data.actionLabel
+        nodeObj.showAction(enriched || e.tool, color)
       }
     }, duration * 1000)
     this.impactTimers.push(timer)
@@ -237,28 +245,34 @@ export class AnimationManager {
     if (!clusterObj) return
 
     // All coordinates relative to cluster center (0,0) since snake lives inside cluster container
+    // Use viewport-relative distance so snakes fly in from / out to off-screen
+    const screenW = this.app.renderer.width
+    const screenH = this.app.renderer.height
+    const scale = this.worldLayer.container.scale.x || 1
+    // Distance in world-space that guarantees off-screen (diagonal / 2 / scale + margin)
+    const viewDiag = Math.sqrt(screenW * screenW + screenH * screenH) / 2 / scale + 100
+
     let splinePath
     const angle = Math.random() * Math.PI * 2
-    const dist = 180 + Math.random() * 60
-    const edgeX = Math.cos(angle) * dist
-    const edgeY = Math.sin(angle) * dist
+    const edgeX = Math.cos(angle) * viewDiag
+    const edgeY = Math.sin(angle) * viewDiag
 
     // Perpendicular offset for dramatic curvature
     const perpAngle = angle + Math.PI / 2
     const curveSign = Math.random() > 0.5 ? 1 : -1
-    const curvature = curveSign * (80 + Math.random() * 70)
+    const curvature = curveSign * (120 + Math.random() * 100)
     const midX = edgeX / 2 + Math.cos(perpAngle) * curvature
     const midY = edgeY / 2 + Math.sin(perpAngle) * curvature
 
     if (e.isResponse) {
-      // Response snake: outbound from center (0,0) to edge
+      // Response snake: outbound from center (0,0) to far off-screen
       splinePath = generateSpline(
         { x: 0, y: 0 },
         { x: midX, y: midY },
         { x: edgeX, y: edgeY }
       )
     } else {
-      // Prompt snake: inbound from edge to center (0,0)
+      // Prompt snake: inbound from far off-screen to center (0,0)
       splinePath = generateSpline(
         { x: edgeX, y: edgeY },
         { x: midX, y: midY },
@@ -319,6 +333,7 @@ export class AnimationManager {
     // Update all projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i]
+      proj.syncTarget()
       proj.tick(dt)
       if (proj.isDone()) {
         proj.container.parent?.removeChild(proj.container)

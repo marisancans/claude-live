@@ -11,12 +11,25 @@ export abstract class ProjectileObject {
   duration: number = 1 // seconds
   startPos: Point
   endPos: Point
+  /** Optional live-tracking container — position updates each tick */
+  trackTarget: Container | null = null
+  /** If true, trackTarget updates startPos; if false, updates endPos */
+  trackIsStart: boolean = false
 
   constructor(startPos: Point, endPos: Point, duration: number = 1) {
     this.container = new Container()
     this.startPos = startPos
     this.endPos = endPos
     this.duration = duration
+  }
+
+  /** Update startPos or endPos from tracked target container position */
+  syncTarget() {
+    if (this.trackTarget) {
+      const pos = { x: this.trackTarget.position.x, y: this.trackTarget.position.y }
+      if (this.trackIsStart) this.startPos = pos
+      else this.endPos = pos
+    }
   }
 
   /**

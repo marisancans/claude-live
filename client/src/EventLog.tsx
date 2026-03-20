@@ -43,7 +43,7 @@ export function EventLog({ entries }: Props) {
 
   // Memoize live entries filtering
   const liveEntries = useMemo(
-    () => entries.filter(e => (now - e.createdAt) < MAX_LIVE_AGE),
+    () => entries.filter(e => (now - e.createdAt) < MAX_LIVE_AGE).slice(-5),
     [entries, now]
   )
 
