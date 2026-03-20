@@ -1,6 +1,5 @@
 use crate::normalize::NormalizedEvent;
 use serde::Serialize;
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 const RECENT_N: usize = 15;
@@ -157,10 +156,10 @@ pub fn compute_session_snapshot(session_id: &str, events: &[NormalizedEvent]) ->
 
     let mut file_nodes: HashMap<String, SnapshotNode> = HashMap::new();
 
-    for (i, event) in events.iter().enumerate() {
+    for event in events.iter() {
         if let Some(ref c) = event.cwd {
             cwd = Some(c.clone());
-            if label.is_none() || label.as_ref().map_or(true, |l| l.len() <= 8) {
+            if label.is_none() || label.as_ref().is_none_or(|l| l.len() <= 8) {
                 if let Some(last) = c.split('/').filter(|p| !p.is_empty()).last() {
                     label = Some(last.to_string());
                 }
