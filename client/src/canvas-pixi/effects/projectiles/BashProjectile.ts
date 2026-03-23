@@ -21,11 +21,11 @@ const TERMINAL_LINES = [
   '/home/user/app',
 ]
 
-const VISIBLE_LINES = 6
-const TERM_W = 60
-const TERM_H = 50
-const TITLE_BAR_H = 8
-const LINE_H = 6
+const VISIBLE_LINES = 4
+const TERM_W = 42
+const TERM_H = 30
+const TITLE_BAR_H = 6
+const LINE_H = 5
 
 /**
  * Bash tool projectile: mini scrolling terminal window (shell command execution).
@@ -47,12 +47,12 @@ export class BashProjectile extends ProjectileObject {
     // Pre-create text objects for visible lines
     this.monoStyle = new TextStyle({
       fontFamily: 'monospace',
-      fontSize: 5,
+      fontSize: 4,
       fill: color,
     })
     this.outputStyle = new TextStyle({
       fontFamily: 'monospace',
-      fontSize: 5,
+      fontSize: 4,
       fill: 0x888888,
     })
 
@@ -93,11 +93,11 @@ export class BashProjectile extends ProjectileObject {
 
     // Title bar dots
     const dotY = bgY + TITLE_BAR_H / 2
-    const dotR = 1.5
-    const dotStartX = bgX + 5
+    const dotR = 1
+    const dotStartX = bgX + 4
     this.graphics.circle(dotStartX, dotY, dotR).fill({ color: 0xff5f56, alpha })
-    this.graphics.circle(dotStartX + 5, dotY, dotR).fill({ color: 0xffbd2e, alpha })
-    this.graphics.circle(dotStartX + 10, dotY, dotR).fill({ color: 0x27c93f, alpha })
+    this.graphics.circle(dotStartX + 4, dotY, dotR).fill({ color: 0xffbd2e, alpha })
+    this.graphics.circle(dotStartX + 8, dotY, dotR).fill({ color: 0x27c93f, alpha })
 
     // Scanline overlay
     for (let sy = bgY + TITLE_BAR_H; sy < bgY + TERM_H; sy += 2) {

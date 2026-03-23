@@ -25,30 +25,12 @@ pub async fn start_server(
     bind: &str,
     port: u16,
     token: Option<String>,
-    buffer_size: usize,
-    session_timeout_secs: u64,
 ) -> (u16, tokio::task::JoinHandle<()>) {
     let state = Arc::new(AppState {
-        session_manager: SessionManager::new(buffer_size, session_timeout_secs),
+        session_manager: SessionManager::new(),
         broadcaster: Broadcaster::new(),
         token,
         start_time: std::time::Instant::now(),
-    });
-
-    // Spawn cleanup task
-    let cleanup_state = state.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-            let removed = cleanup_state.session_manager.cleanup_stale();
-            for sid in removed {
-                let msg = serde_json::json!({
-                    "type": "session_expired",
-                    "session_id": sid,
-                }).to_string();
-                cleanup_state.broadcaster.send(msg);
-            }
-        }
     });
 
     let app = Router::new()
@@ -105,7 +87,9 @@ async fn api_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 async fn api_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    axum::Json(state.session_manager.session_info())
+    axum::Json(serde_json::json!({
+        "sessions": state.session_manager.session_ids(),
+    }))
 }
 
 async fn api_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {

@@ -16,16 +16,6 @@ pub async fn ws_handler(
 async fn handle_ws(socket: axum::extract::ws::WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
 
-    // Send initial snapshot
-    let snapshots = state.session_manager.snapshots();
-    let snapshot_msg = serde_json::json!({
-        "type": "snapshot",
-        "sessions": snapshots,
-    }).to_string();
-    if sender.send(Message::Text(snapshot_msg.into())).await.is_err() {
-        return;
-    }
-
     // Subscribe to broadcaster
     let mut rx = state.broadcaster.subscribe();
 

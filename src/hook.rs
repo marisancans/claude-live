@@ -26,7 +26,7 @@ pub async fn hook_handler(
     }
 
     let event = normalize_event(&raw, "127.0.0.1");
-    let event = state.session_manager.add_event(event);
+    let event = state.session_manager.track(event);
 
     // Broadcast to all WebSocket clients
     let msg = serde_json::json!({ "type": "event", "data": event }).to_string();

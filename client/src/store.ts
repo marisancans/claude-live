@@ -294,8 +294,6 @@ export function createStore() {
   const buffer: RawEvent[] = []
   const sessions = new Map<string, Cluster>()
   const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
-  let replayDone = false
-
   function recomputeAges() {
     const lastIndex = new Map<string, Map<string, number>>()
     for (let i = 0; i < buffer.length; i++) {
@@ -320,7 +318,7 @@ export function createStore() {
     }
   }
 
-  function addEvent(event: RawEvent, skipAnimations: boolean = false) {
+  function addEvent(event: RawEvent) {
     buffer.push(event)
     if (buffer.length > BUFFER_SIZE) buffer.shift()
 
@@ -477,6 +475,7 @@ export function createStore() {
         console.log(`[Store] Agent ${agentId} registered at (${agentNode.x.toFixed(0)}, ${agentNode.y.toFixed(0)})`)
       }
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -493,61 +492,22 @@ export function createStore() {
         cluster.agentPositionMap.delete(agentId)
       }
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
-    // SessionEnd: dissolve the cluster
+    // SessionEnd: completely remove the cluster
     if (event.hook_event_name === 'SessionEnd') {
-      cluster.stopping = true
-      for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
-      recomputeAges()
+      sessions.delete(event.session_id)
+      EventProcessor.process(event, cluster, null)
       return
     }
 
-    // UserPromptSubmit: create PromptSnake objects with random splines
+    // UserPromptSubmit: pulse core, let EventProcessor trigger the snake animation
     if (event.hook_event_name === 'UserPromptSubmit') {
-      if (!skipAnimations) {
-        ;(cluster as any).coreAct = 1.0
-        const promptText = event.prompt || ''
-
-        // Split prompt into words
-        const words = promptText.trim().split(/\s+/).filter(w => w.length > 0)
-
-        if (words.length > 0) {
-          // Generate random spawn angle (0-2π)
-          const spawnAngle = Math.random() * Math.PI * 2
-
-          // Generate random spline from well outside viewport to cluster center
-          const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.8
-          const splinePath = generateRandomSpline(
-            cluster.centerX,
-            cluster.centerY,
-            spawnAngle,
-            maxDist
-          )
-
-          // Get color from event or use default
-          const color = (event as any).color || '#b0c8f0'
-
-          // Create snake object
-          const snake: PromptSnake = {
-            words,
-            color,
-            progress: 0,      // start at 0, will animate to 1
-            splinePath,
-            startAngle: spawnAngle
-          }
-
-          // Add to snakes array
-          cluster.promptSnakes.push(snake)
-
-          // Play audio chord
-          playChordForEvent(undefined, 'UserPromptSubmit')
-        }
-      }
-
-      // console.log('[prompt-flying] triggered:', { promptText: cluster.promptText, flying: cluster.promptFlying, snakes: cluster.promptSnakes?.length || 0 })
+      ;(cluster as any).coreAct = 1.0
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -557,27 +517,26 @@ export function createStore() {
       if (event.source) (cluster as any).source = event.source
       ;(cluster as any).coreAct = 1.0
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
-    // PreCompact: implosion animation (skip during replay)
+    // PreCompact: implosion animation
     if (event.hook_event_name === 'PreCompact') {
-      if (replayDone) {
-        ;(cluster as any).coreAct = 1.0
-        ;(cluster as any).compacting = 1.0
-      }
+      ;(cluster as any).coreAct = 1.0
+      ;(cluster as any).compacting = 1.0
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
-    // PostCompact: rebirth burst + reset context counter (skip during replay)
+    // PostCompact: rebirth burst + reset context counter
     if (event.hook_event_name === 'PostCompact') {
-      if (replayDone) {
-        ;(cluster as any).coreAct = 1.0
-        ;(cluster as any).compacted = 1.0
-      }
+      ;(cluster as any).coreAct = 1.0
+      ;(cluster as any).compacted = 1.0
       ;(cluster as any).eventCount = Math.floor(((cluster as any).eventCount || 0) * 0.25)
       recomputeAges()
+      EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -605,12 +564,6 @@ export function createStore() {
     }
 
     if (!cluster.nodes.has(key)) {
-      // Skip ephemeral node creation during replay — only show live ephemerals
-      if (!isFile && !replayDone) {
-        recomputeAges()
-        return
-      }
-
       // Assign to ring based on capacity (atomic orbital structure)
       const orbitRing = assignRing(cluster)
       cluster.ringCounts[orbitRing]++
@@ -756,98 +709,8 @@ export function createStore() {
     EventProcessor.process(event, cluster, affectedNode)
   }
 
-  function markReplayDone() { replayDone = true }
-
-  // Initialize cluster state directly from a server snapshot — no event replay, no animations
-  function initFromSnapshot(snapshotSessions: Array<{
-    session_id: string
-    label: string
-    cwd: string | null
-    stopping: boolean
-    eventCount: number
-    nodes: Array<{ key: string; nodeType: string; label: string; colorHex: string; baseRadius: number }>
-  }>) {
-    for (const snap of snapshotSessions) {
-      const sid = snap.session_id
-      const pos = clusterPosition(sessions.size, [...sessions.values()])
-      const rj = radialJitter(sid)
-
-      const c = {
-        sessionId: sid,
-        label: snap.label,
-        centerX: pos.x,
-        centerY: pos.y,
-        nodes: new Map(),
-        edges: [],
-        stopping: snap.stopping,
-        lastFileKey: null,
-        parentSessionId: null,
-        ringCounts: [] as number[],
-        layoutAngle: 0,
-        isChild: false,
-        childIndex: 0,
-        compacting: 0,
-        compacted: 0,
-        promptSnakes: [] as PromptSnake[],
-        agentPositionMap: new Map<string, Point>(),
-      }
-      ;(c as any).ringSpeeds = ORBIT_SPEEDS.map((speed, i) =>
-        speed * (1 + (rj + (i * 2 - 1)) / 7 * 0.2)
-      )
-      ;(c as any).eventCount = snap.eventCount
-
-      for (const nodeSnap of snap.nodes) {
-        const orbitRing = assignRing(c as Cluster)
-        c.ringCounts[orbitRing] = (c.ringCounts[orbitRing] || 0) + 1
-        const ringSpeeds = (c as any).ringSpeeds as number[]
-        const orbitSpeed = ringSpeeds[orbitRing] ?? ORBIT_SPEEDS[orbitRing]
-        const orbitRadius = ORBIT_RADII[orbitRing]
-        const orbitAngle = 0
-
-        const colorHex = desaturate(nodeSnap.colorHex)
-        c.nodes.set(nodeSnap.key, {
-          key: nodeSnap.key,
-          label: nodeSnap.label,
-          nodeType: nodeSnap.nodeType as any,
-          baseRadius: nodeSnap.baseRadius,
-          color: hexToInt(colorHex),
-          colorHex,
-          x: pos.x + Math.cos(orbitAngle) * orbitRadius,
-          y: pos.y + Math.sin(orbitAngle) * orbitRadius,
-          age: 0,
-          lastEventIndex: 0,
-          lastTool: null,
-          lastTimestamp: Date.now(),
-          eventCount: 1,
-          awaitingPermission: false,
-          orbitRing,
-          orbitAngle,
-          orbitSpeed,
-          orbitRadius,
-          life: 1.0,
-          entry: 1.0,  // already arrived, skip entry animation
-          impactType: null,
-          impactTime: 0,
-          actionLabel: null,
-          actionFade: 0,
-          marks: [],
-        })
-      }
-
-      // Spread all nodes evenly per ring
-      const usedRings = new Set(c.ringCounts.map((_, i) => i).filter(i => c.ringCounts[i] > 0))
-      for (const ring of usedRings) redistributeRing(c as Cluster, ring)
-
-      sessions.set(sid, c as Cluster)
-    }
-
-    replayDone = true
-  }
-
   return {
     addEvent,
-    markReplayDone,
-    initFromSnapshot,
     getBuffer: () => [...buffer],
     getSessions: () => sessions,
   }

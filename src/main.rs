@@ -19,10 +19,6 @@ enum Commands {
         token: Option<String>,
         #[arg(long)]
         daemon: bool,
-        #[arg(long, default_value = "50")]
-        buffer_size: usize,
-        #[arg(long, default_value = "660")]
-        session_timeout: u64,
     },
     /// Stop the running server
     Stop {
@@ -121,7 +117,7 @@ async fn main() {
                 std::env::consts::ARCH
             );
         }
-        Some(Commands::Start { port, bind, token, daemon, buffer_size, session_timeout }) => {
+        Some(Commands::Start { port, bind, token, daemon }) => {
             tracing_subscriber::fmt()
                 .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
                     .add_directive("claude_live=info".parse().unwrap()))
@@ -132,7 +128,7 @@ async fn main() {
             }
 
             let (actual_port, handle) = claude_live::server::start_server(
-                &bind, port, token, buffer_size, session_timeout
+                &bind, port, token
             ).await;
 
             println!("claude-live running at http://{bind}:{actual_port}");

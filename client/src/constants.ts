@@ -4,6 +4,9 @@ export const RING_CAPACITIES = [4, 8, 18, 20]        // max nodes per ring (sum 
 export const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
 export const NODE_VISUAL_RADIUS = 15                  // approximate px radius of a rendered node
 
+// Render quality — multiplier on top of devicePixelRatio (e.g. 2 = 2× supersampling)
+export const RENDER_SCALE = 2
+
 // Canvas dimensions
 export const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 export const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800

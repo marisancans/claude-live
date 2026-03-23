@@ -19,7 +19,7 @@ export class NodeObject {
   private gfx: Graphics
 
   // Orbital/animation state
-  private entryProgress: number = 0 // 0 -> 1 for entry fade/scale
+  private entryProgress: number = 1 // instant display, no fade-in
   private orbitRadii = ORBIT_RADII
   private time: number = 0
 
@@ -42,7 +42,7 @@ export class NodeObject {
   constructor(node: GraphNode) {
     this.data = node
     this.container = new Container()
-    this.entryProgress = node.entry ?? 0
+    this.entryProgress = 1
     this.baseRadius = Math.max(2, node.baseRadius)
     this.life = node.life ?? 1.0
     this.impactTime = node.impactTime ?? 0
@@ -264,11 +264,6 @@ export class NodeObject {
     // Advance animation time
     this.time += dt
 
-    // Update entry animation
-    if (this.entryProgress < 1.0) {
-      this.entryProgress = Math.min(1.0, this.entryProgress + dt * 0.6) // ~1.7s entry
-      this.data.entry = this.entryProgress
-    }
 
     // Decay impact time (~750ms total at 60fps: 1.0 / 0.022 ~= 45 frames)
     if (this.impactTime > 0) {
@@ -303,18 +298,16 @@ export class NodeObject {
       }
     }
 
-    // Apply entry animation (fade in + scale)
-    let alpha = this.entryProgress * this.life // Fade in, then fade out with life decay
+    let alpha = this.life
     // Compaction: dim during implosion, brighten during rebirth
     if (this.compacting > 0.1) {
-      alpha *= (1 - this.compacting * 0.6) // Fade toward darkness
+      alpha *= (1 - this.compacting * 0.6)
     } else if (this.compacted > 0.1) {
-      alpha = Math.min(1, alpha * (1 + this.compacted * 0.3)) // Flash brighter
+      alpha = Math.min(1, alpha * (1 + this.compacted * 0.3))
     }
     this.container.alpha = alpha
 
-    let scale = 0.5 + this.entryProgress * 0.5 // 0.5 -> 1.0 scale
-    scale *= this.life // Scale down as life depletes
+    let scale = this.life
     // Compaction: shrink during implosion, pulse bigger during rebirth
     if (this.compacting > 0.1) {
       scale *= (1 - this.compacting * 0.3)

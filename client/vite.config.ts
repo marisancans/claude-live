@@ -6,6 +6,7 @@ const backendPort = process.env.PORT || '43451'
 
 // Vite dev server port (hardcoded to 7979 to avoid conflicts)
 const vitePort = 7979
+const strictPort = true  // fail if port is in use instead of incrementing
 
 // WebGL contexts are incompatible with HMR — force full page reload
 // for any file in canvas-pixi/ instead of attempting hot-swap
@@ -25,6 +26,7 @@ export default defineConfig({
   plugins: [react(), pixiFullReload()],
   server: {
     port: vitePort,
+    strictPort,
     watch: {
       usePolling: true,
       interval: 100,

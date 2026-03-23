@@ -176,6 +176,7 @@ export function App() {
   const [eventLog, setEventLog] = useState<LogEntry[]>([])
   const [operationsOpen, setOperationsOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
+  const [wsStatus, setWsStatus] = useState('connecting')
   const [audioEnabled, setAudioEnabledState] = useState(() => {
     // Load from localStorage
     const saved = localStorage.getItem('claude-live-audio-enabled')
@@ -186,8 +187,6 @@ export function App() {
     const saved = localStorage.getItem('claude-live-autofit-enabled')
     return saved === 'true'
   })
-  const [replayDone, setReplayDone] = useState(false)
-  const replayDoneRef = useRef(false)
 
 
   // Initialize audio on mount
@@ -210,13 +209,10 @@ export function App() {
   useEffect(() => {
     // Demo mode: simulate events without a real server
     if (isDemoMode()) {
-      replayDoneRef.current = true
-      setReplayDone(true)
-
       const stopDemo = createDemoSimulator((parsed) => {
         if (parsed.type === 'event') {
           const event: RawEvent = parsed.data
-          store.addEvent(event, false)
+          store.addEvent(event)
           setClusters(new Map(store.getSessions()))
           setLastEvent(event)
           setEventCount(c => c + 1)
@@ -255,26 +251,21 @@ export function App() {
     let ws: WebSocket | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let reconnectDelay = 1000
+    let cancelled = false
 
     function connect() {
+      if (cancelled) return
       ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
         console.log('[claude-live] WebSocket connected')
+        setWsStatus('connected')
         reconnectDelay = 1000 // reset on successful connect
       }
 
       ws.onmessage = (e) => {
         try {
           const parsed = JSON.parse(e.data)
-
-          if (parsed.type === 'snapshot') {
-            store.initFromSnapshot(parsed.sessions)
-            setClusters(new Map(store.getSessions()))
-            replayDoneRef.current = true
-            setReplayDone(true)
-            return
-          }
 
           if (parsed.type === 'heartbeat') return
 
@@ -283,33 +274,22 @@ export function App() {
             return
           }
 
-          if (parsed.type === 'session_expired') {
-            const sessions = store.getSessions()
-            const cluster = sessions.get(parsed.session_id)
-            if (cluster) {
-              cluster.stopping = true
-              for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
-            }
-            setClusters(new Map(sessions))
-            return
-          }
-
           if (parsed.type === 'event') {
             const event: RawEvent = parsed.data
             console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
             const prevSize = store.getSessions().size
-            store.addEvent(event, !replayDoneRef.current)
+            store.addEvent(event)
             const sessions = store.getSessions()
             setClusters(new Map(sessions))
             setLastEvent(event)
             setEventCount(c => c + 1)
-            if (replayDoneRef.current) playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
+            playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
 
             // Live event log (same logic as before)
             const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
             const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
 
-            if (!skipDuplicate && replayDoneRef.current) {
+            if (!skipDuplicate) {
               const cluster = sessions.get(event.session_id)
               let tool = event.tool_name || event.hook_event_name || '?'
               if (tool.startsWith('mcp_')) {
@@ -359,14 +339,17 @@ export function App() {
 
       ws.onclose = () => {
         console.warn('[claude-live] WebSocket closed, reconnecting in', reconnectDelay, 'ms')
+        setWsStatus('disconnected')
         reconnectTimer = setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 30000)
+          setWsStatus('connecting')
           connect()
         }, reconnectDelay)
       }
 
       ws.onerror = (err) => {
         console.warn('[claude-live] WebSocket error', err)
+        setWsStatus('error')
         ws?.close()
       }
     }
@@ -374,6 +357,7 @@ export function App() {
     connect()
 
     return () => {
+      cancelled = true
       if (reconnectTimer) clearTimeout(reconnectTimer)
       ws?.close()
     }
@@ -402,6 +386,12 @@ export function App() {
       {/* HUD */}
       <div className="hud">
         <div className="hud-title">claude<span>live</span></div>
+        <div className="hud-stat">
+          <span className="hud-label">ws</span>
+          <span className="hud-value" style={{ color: wsStatus === 'connected' ? '#4ade80' : wsStatus === 'error' ? '#f87171' : '#fbbf24' }}>
+            {wsStatus}
+          </span>
+        </div>
         <div className="hud-stat">
           <span className="hud-label">events</span>
           <span className="hud-value">{eventCount}</span>

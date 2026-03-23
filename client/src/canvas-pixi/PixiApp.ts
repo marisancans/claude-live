@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react'
 import { BackgroundLayer } from './layers/BackgroundLayer'
 import { WorldLayer } from './layers/WorldLayer'
 import { AnimationManager } from './animation/AnimationManager'
+import { RENDER_SCALE } from '../constants'
 
 /**
  * Main PixiJS application for the visualizer.
@@ -42,7 +43,8 @@ export class PixiApp {
       width: window.innerWidth,
       height: window.innerHeight,
       antialias: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: (window.devicePixelRatio || 1) * RENDER_SCALE,
+      autoDensity: true,
       backgroundColor: 0x080808,
       autoStart: false,
     })

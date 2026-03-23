@@ -231,9 +231,12 @@ export class AnimationManager {
   /**
    * Spawn a snake (text animation) from prompt submission or response.
    */
-  private spawnSnake(e: { sessionId: string; words: string[]; color: string; isResponse?: boolean }) {
+  private spawnSnake(e: { sessionId: string; words: string[]; color: string; isResponse?: boolean }, retries = 3) {
     const cluster = this.worldLayer.clusters?.get(e.sessionId)
-    if (!cluster) return
+    if (!cluster) {
+      if (retries > 0) { requestAnimationFrame(() => this.spawnSnake(e, retries - 1)) }
+      return
+    }
 
     // Cap active snakes to prevent GPU overload
     if (this.snakes.length >= AnimationManager.MAX_SNAKES) return
@@ -242,7 +245,10 @@ export class AnimationManager {
     if (words.length === 0) return
 
     const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)
-    if (!clusterObj) return
+    if (!clusterObj) {
+      if (retries > 0) { requestAnimationFrame(() => this.spawnSnake(e, retries - 1)) }
+      return
+    }
 
     // All coordinates relative to cluster center (0,0) since snake lives inside cluster container
     // Use viewport-relative distance so snakes fly in from / out to off-screen
