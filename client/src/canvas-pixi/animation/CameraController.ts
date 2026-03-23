@@ -37,6 +37,9 @@ export class CameraController {
   private shakeIntensity: number = 0
   private shakeDecay: number = 0.92
 
+  // Temporary pinned world positions included in bounds (e.g. explosion sites)
+  private pinnedPoints: { x: number; y: number; ttl: number }[] = []
+
   // Stored handler refs for cleanup
   private onWheel: (e: WheelEvent) => void
   private onPointerDown: (e: PointerEvent) => void
@@ -100,7 +103,15 @@ export class CameraController {
   }
 
   /**
-   * Calculate bounding box of all clusters.
+   * Pin a world-space point in the camera bounds for a given duration (seconds).
+   * Used to keep explosion sites visible after the cluster is removed.
+   */
+  pinPoint(x: number, y: number, duration: number) {
+    this.pinnedPoints.push({ x, y, ttl: duration })
+  }
+
+  /**
+   * Calculate bounding box of all clusters (plus any pinned points).
    */
   private calculateBounds(clusters: Map<string, Cluster>) {
     let minX = Infinity, maxX = -Infinity
@@ -116,6 +127,14 @@ export class CameraController {
       maxX = Math.max(maxX, cluster.centerX + ext)
       minY = Math.min(minY, cluster.centerY - ext)
       maxY = Math.max(maxY, cluster.centerY + ext)
+    }
+
+    // Include pinned points (e.g. explosion sites after session removal)
+    for (const pt of this.pinnedPoints) {
+      minX = Math.min(minX, pt.x)
+      maxX = Math.max(maxX, pt.x)
+      minY = Math.min(minY, pt.y)
+      maxY = Math.max(maxY, pt.y)
     }
 
     const padding = 60
@@ -152,6 +171,12 @@ export class CameraController {
   }
 
   tick(dt: number, clusters: Map<string, Cluster>, autofitEnabledFromProps: boolean = true) {
+    // Tick down pinned points regardless of autofit state
+    for (let i = this.pinnedPoints.length - 1; i >= 0; i--) {
+      this.pinnedPoints[i].ttl -= dt
+      if (this.pinnedPoints[i].ttl <= 0) this.pinnedPoints.splice(i, 1)
+    }
+
     if (!autofitEnabledFromProps || clusters.size === 0) return
 
     // Increment idle timer when not actively interacting

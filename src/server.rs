@@ -1,6 +1,5 @@
 use crate::assets::{StaticAssets, mime_for_path};
 use crate::broadcast::Broadcaster;
-use crate::session::SessionManager;
 use crate::hook::hook_handler;
 use crate::websocket::ws_handler;
 use axum::{
@@ -15,7 +14,6 @@ use tokio::net::TcpListener;
 use tracing::info;
 
 pub struct AppState {
-    pub session_manager: SessionManager,
     pub broadcaster: Broadcaster,
     pub token: Option<String>,
     pub start_time: std::time::Instant,
@@ -27,7 +25,6 @@ pub async fn start_server(
     token: Option<String>,
 ) -> (u16, tokio::task::JoinHandle<()>) {
     let state = Arc::new(AppState {
-        session_manager: SessionManager::new(),
         broadcaster: Broadcaster::new(),
         token,
         start_time: std::time::Instant::now(),
@@ -37,10 +34,8 @@ pub async fn start_server(
         .route("/hook", post(hook_handler))
         .route("/ws", get(ws_handler))
         .route("/api/status", get(api_status))
-        .route("/api/sessions", get(api_sessions))
         .route("/api/health", get(api_health))
         .route("/api/stop", post(api_stop))
-        .route("/api/reset", post(api_reset))
         .fallback(static_handler)
         .with_state(state);
 
@@ -81,21 +76,13 @@ async fn api_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     axum::Json(serde_json::json!({
         "running": true,
         "uptime_secs": uptime,
-        "sessions": state.session_manager.session_count(),
         "ws_clients": state.broadcaster.client_count(),
-    }))
-}
-
-async fn api_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    axum::Json(serde_json::json!({
-        "sessions": state.session_manager.session_ids(),
     }))
 }
 
 async fn api_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     axum::Json(serde_json::json!({
         "uptime_secs": state.start_time.elapsed().as_secs(),
-        "sessions": state.session_manager.session_count(),
         "ws_clients": state.broadcaster.client_count(),
     }))
 }
@@ -105,10 +92,5 @@ async fn api_stop() -> impl IntoResponse {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         std::process::exit(0);
     });
-    axum::Json(serde_json::json!({ "ok": true }))
-}
-
-async fn api_reset(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    state.session_manager.reset();
     axum::Json(serde_json::json!({ "ok": true }))
 }

@@ -30,18 +30,8 @@ enum Commands {
         #[arg(long, default_value = "43451")]
         port: u16,
     },
-    /// List active sessions
-    Sessions {
-        #[arg(long, default_value = "43451")]
-        port: u16,
-    },
     /// Server health diagnostics
     Health {
-        #[arg(long, default_value = "43451")]
-        port: u16,
-    },
-    /// Clear all session buffers
-    Reset {
         #[arg(long, default_value = "43451")]
         port: u16,
     },
@@ -152,21 +142,9 @@ async fn main() {
                 Err(e) => { eprintln!("{e}"); std::process::exit(1); }
             }
         }
-        Some(Commands::Sessions { port }) => {
-            match api_get(port, "/api/sessions") {
-                Ok(body) => println!("{body}"),
-                Err(e) => { eprintln!("{e}"); std::process::exit(1); }
-            }
-        }
         Some(Commands::Health { port }) => {
             match api_get(port, "/api/health") {
                 Ok(body) => println!("{body}"),
-                Err(e) => { eprintln!("{e}"); std::process::exit(1); }
-            }
-        }
-        Some(Commands::Reset { port }) => {
-            match api_post(port, "/api/reset", None) {
-                Ok(_) => println!("All sessions cleared"),
                 Err(e) => { eprintln!("{e}"); std::process::exit(1); }
             }
         }

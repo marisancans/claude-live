@@ -179,9 +179,23 @@ export class AnimationManager {
     const projectile = new ProjectileClass(startPos, endPos, color, inbound)
 
     // Track live node position so projectile follows orbiting node
+    projectile.trackIsStart = inbound // inbound: node is startPos; outbound: node is endPos
     if (nodeObj) {
       projectile.trackTarget = nodeObj.container
-      projectile.trackIsStart = inbound // inbound: node is startPos; outbound: node is endPos
+    } else {
+      // NodeObject doesn't exist yet (created this frame) — set up deferred lookup
+      const sessionId = e.sessionId
+      const nodeKey = e.nodeKey
+      const wl = this.worldLayer
+      projectile.trackLookup = {
+        sessionId,
+        nodeKey,
+        resolve: () => {
+          const co = wl.clusterObjects.get(sessionId)
+          const no = co?.nodeObjects.get(nodeKey)
+          return no ? no.container : null
+        },
+      }
     }
 
     // Add to CLUSTER container so it moves with the cluster
@@ -325,14 +339,25 @@ export class AnimationManager {
   }
 
   /**
-   * Spawn a dissolution effect when a session ends.
+   * Spawn a nova collapse effect when a session ends.
+   * Attached to the world container at the cluster's world position so it
+   * survives the cluster being destroyed from the scene.
    */
   private spawnSessionEnd(sessionId: string) {
     const clusterObj = this.worldLayer.clusterObjects.get(sessionId)
     if (!clusterObj) return
+
+    // Capture world position before the cluster is removed
+    const worldX = clusterObj.container.position.x
+    const worldY = clusterObj.container.position.y
+
     const effect = new SessionEndEffect()
-    clusterObj.container.addChild(effect.container)
+    effect.container.position.set(worldX, worldY)
+    this.worldLayer.container.addChild(effect.container)
     this.miscEffects.push(effect)
+
+    // Keep camera looking at the explosion site for the effect duration
+    this.worldLayer.cameraController.pinPoint(worldX, worldY, 2.5)
   }
 
   tick(dt: number) {
