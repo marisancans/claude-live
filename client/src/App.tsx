@@ -279,8 +279,18 @@ export function App() {
           if (parsed.type === 'heartbeat') return
 
           if (parsed.type === 'version_available') {
-            // TODO: show update badge
             console.log('[claude-live] Update available:', parsed.version)
+            return
+          }
+
+          if (parsed.type === 'session_expired') {
+            const sessions = store.getSessions()
+            const cluster = sessions.get(parsed.session_id)
+            if (cluster) {
+              cluster.stopping = true
+              for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
+            }
+            setClusters(new Map(sessions))
             return
           }
 

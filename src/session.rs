@@ -52,9 +52,18 @@ impl SessionManager {
         self.buffers.lock().unwrap().clear();
     }
 
-    pub fn cleanup_stale(&self) {
+    pub fn cleanup_stale(&self) -> Vec<String> {
         let mut buffers = self.buffers.lock().unwrap();
-        buffers.retain(|_, session| session.last_event_time.elapsed() < self.session_timeout);
+        let mut removed = Vec::new();
+        buffers.retain(|sid, session| {
+            if session.last_event_time.elapsed() < self.session_timeout {
+                true
+            } else {
+                removed.push(sid.clone());
+                false
+            }
+        });
+        removed
     }
 
     pub fn snapshots(&self) -> Vec<SessionSnapshot> {
