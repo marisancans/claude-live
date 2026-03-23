@@ -16,6 +16,30 @@ pub async fn ws_handler(
 async fn handle_ws(socket: axum::extract::ws::WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
 
+    // Send snapshot of active sessions so late-joining clients get model/cwd info
+    let sessions = state.session_manager.all_sessions();
+    for (sid, meta) in sessions {
+        let mut obj = serde_json::json!({
+            "type": "event",
+            "data": {
+                "id": format!("snapshot-{}", sid),
+                "session_id": sid,
+                "timestamp": 0,
+                "hook_event_name": "SessionStart",
+            }
+        });
+        if let Some(ref m) = meta.model {
+            obj["data"]["model"] = serde_json::Value::String(m.clone());
+        }
+        if let Some(ref c) = meta.cwd {
+            obj["data"]["cwd"] = serde_json::Value::String(c.clone());
+        }
+        if let Some(ref s) = meta.source {
+            obj["data"]["source"] = serde_json::Value::String(s.clone());
+        }
+        let _ = sender.send(Message::Text(obj.to_string().into())).await;
+    }
+
     // Subscribe to broadcaster
     let mut rx = state.broadcaster.subscribe();
 

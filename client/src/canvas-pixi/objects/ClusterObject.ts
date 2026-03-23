@@ -1,6 +1,7 @@
-import { Container, Text, Graphics } from 'pixi.js'
+import { Container, Text, Graphics, Sprite } from 'pixi.js'
 import type { Cluster } from '../../types'
-import { ORBIT_RADII } from '../../constants'
+import { ORBIT_RADII, parseModelFamily, MODEL_COLORS } from '../../constants'
+import { PlasmaCore } from '../shaders/PlasmaCore'
 
 /**
  * Visual representation of a cluster (session).
@@ -25,6 +26,11 @@ export class ClusterObject {
   private ringGfx: Graphics   // animated thin ring
   private seed: number = 0
 
+  // Plasma core renderer
+  private plasmaCore: PlasmaCore | null = null
+  private plasmaSprite: Sprite | null = null
+  private modelFamily: string = 'unknown'
+
   // Keep reference to cluster data for EdgeLayer
   get cluster(): Cluster {
     return this.data
@@ -42,10 +48,28 @@ export class ClusterObject {
     }
     this.seed = ((h >>> 0) % 10000) / 10000
 
+    // Determine model family for color
+    this.modelFamily = parseModelFamily((cluster as any).model || '')
+
     // Graphics objects that redraw every frame
     this.coreGfx = new Graphics()
     this.ringGfx = new Graphics()
     this.permGfx = new Graphics()
+
+    // Plasma core: CPU-rendered into offscreen canvas, displayed as sprite
+    try {
+      this.plasmaCore = new PlasmaCore(48)
+      this.plasmaSprite = new Sprite(this.plasmaCore.texture)
+      this.plasmaSprite.anchor.set(0.5)
+      const visualSize = cluster.isChild ? 22 : 32
+      this.plasmaSprite.width = visualSize
+      this.plasmaSprite.height = visualSize
+      this.container.addChild(this.plasmaSprite)
+    } catch (e) {
+      console.warn('PlasmaCore failed, falling back to Graphics core:', e)
+      this.plasmaCore = null
+      this.plasmaSprite = null
+    }
 
     this.container.addChild(this.coreGfx)
     this.container.addChild(this.ringGfx)
@@ -62,12 +86,13 @@ export class ClusterObject {
   private createCoreLabel() {
     const isChild = this.data.isChild
     const prefix = isChild ? 'agent' : 'session'
+    const colors = MODEL_COLORS[this.modelFamily] || MODEL_COLORS.unknown
     this.coreLabel = new Text({
       text: `${prefix}:${this.data.label}`,
       style: {
         fontSize: 11,
         fontFamily: 'monospace',
-        fill: isChild ? 0xDCBE78 : 0xBECDEB,
+        fill: colors.brightHex,
         align: 'center',
       },
     })
@@ -86,13 +111,19 @@ export class ClusterObject {
     const model = (this.data as any).model as string | undefined
     if (!model) return
 
-    const displayModel = model.replace('claude-', '')
+    // Show just the family name: "opus 4", "sonnet 4.5", etc.
+    const family = parseModelFamily(model)
+    // Extract version: "claude-sonnet-4-5-20250514" → "4.5"
+    const vMatch = model.match(/(\d+)[-.](\d+)/)
+    const ver = vMatch ? `${vMatch[1]}.${vMatch[2]}` : ''
+    const displayModel = ver ? `${family} ${ver}` : family
+    const colors = MODEL_COLORS[family] || MODEL_COLORS.unknown
     this.modelLabel = new Text({
       text: displayModel,
       style: {
         fontSize: 7,
         fontFamily: 'monospace',
-        fill: 0x888888,
+        fill: colors.brightHex,
         align: 'center',
       },
     })
@@ -183,9 +214,19 @@ export class ClusterObject {
       }
     }
 
-    // Update model label if it appeared later
-    if (!this.modelLabel && (this.data as any).model) {
-      this.createModelLabel()
+    // Update model label if it appeared or changed
+    const currentModel = (this.data as any).model as string | undefined
+    if (currentModel) {
+      const currentFamily = parseModelFamily(currentModel)
+      if (!this.modelLabel) {
+        this.createModelLabel()
+      } else if (currentFamily !== this.modelFamily) {
+        // Model changed — recreate label
+        this.container.removeChild(this.modelLabel)
+        this.modelLabel.destroy()
+        this.modelLabel = null
+        this.createModelLabel()
+      }
     }
   }
 
@@ -201,45 +242,60 @@ export class ClusterObject {
     const compacting = this.data.compacting ?? 0
     const compacted = this.data.compacted ?? 0
 
+    // Update model family if it changed (e.g. model info arrived late)
+    if ((this.data as any).model) {
+      const fam = parseModelFamily((this.data as any).model)
+      if (fam !== this.modelFamily) this.modelFamily = fam
+    }
+
+    const colors = MODEL_COLORS[this.modelFamily] || MODEL_COLORS.unknown
+    let glowColor = colors.glow
+    let coreColor = colors.core
+    let brightColor = colors.brightHex
+    let baseCol = colors.base
+    let brightCol = colors.bright
+
+    // Update label color when model family changes
+    if (this.coreLabel) {
+      (this.coreLabel.style as any).fill = colors.brightHex
+    }
+
     // Gentle breathing pulse — disrupted during compaction
     let breathe = 1 + Math.sin(t * 0.8 + s * 6) * 0.03 + act * 0.12
     if (compacting > 0.1) {
-      // Core shrinks and trembles during implosion
       breathe *= (1 - compacting * 0.4)
-      breathe += Math.sin(t * 20) * compacting * 0.08 // high-freq tremor
+      breathe += Math.sin(t * 20) * compacting * 0.08
+      glowColor = 0x304080
+      coreColor = 0x506090
+      brightColor = 0x8090C0
+      baseCol = [0.19, 0.25, 0.5]
+      brightCol = [0.31, 0.38, 0.75]
     } else if (compacted > 0.1) {
-      // Core swells during rebirth
       breathe *= (1 + compacted * 0.5)
+      glowColor = 0xFFD060
+      coreColor = 0xFFF0C0
+      brightColor = 0xFFFFFF
+      baseCol = [1.0, 0.82, 0.38]
+      brightCol = [1.0, 0.94, 0.75]
     }
     const coreR = baseR * breathe
 
-    // Color shifts: darken during implosion, warm gold during rebirth
-    let glowColor = isChild ? 0xDCB464 : 0xC8D5F0
-    let coreColor = isChild ? 0xFFE6A0 : 0xF0F5FF
-    let brightColor = isChild ? 0xFFF0C8 : 0xFFFFFF
-    if (compacting > 0.2) {
-      glowColor = 0x304080  // cold blue during implosion
-      coreColor = 0x506090
-      brightColor = 0x8090C0
-    } else if (compacted > 0.2) {
-      glowColor = 0xFFD060   // warm gold during rebirth
-      coreColor = 0xFFF0C0
-      brightColor = 0xFFFFFF
+    // ===== PLASMA CORE =====
+    if (this.plasmaCore && this.plasmaSprite) {
+      // Update plasma texture every 3rd frame for performance
+      if (Math.floor(t * 60) % 3 === 0) {
+        this.plasmaCore.update(t, act, s, baseCol as [number, number, number], brightCol as [number, number, number])
+      }
+      const visualSize = (isChild ? 22 : 32) * breathe
+      this.plasmaSprite.width = visualSize
+      this.plasmaSprite.height = visualSize
     }
 
-    // ===== CORE GFX: glow layers + core body =====
+    // ===== CORE GFX: ambient glow layers behind plasma =====
     this.coreGfx.clear()
-
-    // Outer ambient glow (very soft, large)
-    this.coreGfx.circle(0, 0, coreR * 5).fill({ color: glowColor, alpha: 0.04 + act * 0.04 })
-    this.coreGfx.circle(0, 0, coreR * 3.5).fill({ color: glowColor, alpha: 0.07 + act * 0.05 })
-    this.coreGfx.circle(0, 0, coreR * 2.2).fill({ color: glowColor, alpha: 0.12 + act * 0.06 })
-
-    // Core body — layered for depth, no directional shadow
-    this.coreGfx.circle(0, 0, coreR * 1.2).fill({ color: coreColor, alpha: 0.5 })
-    this.coreGfx.circle(0, 0, coreR).fill({ color: coreColor, alpha: 0.85 })
-    this.coreGfx.circle(0, 0, coreR * 0.55).fill({ color: brightColor, alpha: 0.6 })
-    this.coreGfx.circle(0, 0, coreR * 0.25).fill({ color: 0xFFFFFF, alpha: 0.7 })
+    this.coreGfx.circle(0, 0, coreR * 4).fill({ color: glowColor, alpha: 0.03 + act * 0.03 })
+    this.coreGfx.circle(0, 0, coreR * 2.5).fill({ color: glowColor, alpha: 0.05 + act * 0.04 })
+    this.coreGfx.circle(0, 0, coreR * 1.5).fill({ color: glowColor, alpha: 0.08 + act * 0.05 })
 
     // Activity flare: expanding bright ring
     if (act > 0.05) {
@@ -247,17 +303,23 @@ export class ClusterObject {
       this.coreGfx.circle(0, 0, flareR).stroke({ width: 1.5 * act, color: brightColor, alpha: act * 0.5 })
     }
 
+    // Fallback: if plasma failed, draw simple core body
+    if (!this.plasmaCore) {
+      this.coreGfx.circle(0, 0, coreR * 1.2).fill({ color: coreColor, alpha: 0.5 })
+      this.coreGfx.circle(0, 0, coreR).fill({ color: coreColor, alpha: 0.85 })
+      this.coreGfx.circle(0, 0, coreR * 0.55).fill({ color: brightColor, alpha: 0.6 })
+      this.coreGfx.circle(0, 0, coreR * 0.25).fill({ color: 0xFFFFFF, alpha: 0.7 })
+    }
+
     // ===== RING GFX: containment rings + energy arcs + orbiting particles =====
     this.ringGfx.clear()
 
-    // --- Containment rings: 2 thin rings that breathe at different rates ---
     const ring1R = coreR * (2.0 + Math.sin(t * 0.5 + s) * 0.08)
     const ring2R = coreR * (2.8 + Math.sin(t * 0.35 + s + 2) * 0.06)
     const ringBaseAlpha = 0.06 + act * 0.08
     this.ringGfx.circle(0, 0, ring1R).stroke({ width: 0.5, color: glowColor, alpha: ringBaseAlpha })
     this.ringGfx.circle(0, 0, ring2R).stroke({ width: 0.4, color: glowColor, alpha: ringBaseAlpha * 0.7 })
 
-    // --- Energy arcs: short bright arc segments orbiting at different speeds ---
     const arcConfigs = [
       { r: 1.5, speed: 0.6, len: 0.5, width: 1.0 },
       { r: 1.9, speed: -0.4, len: 0.35, width: 0.8 },
@@ -275,7 +337,6 @@ export class ClusterObject {
 
       this.ringGfx.arc(0, 0, arcR, arcAngle, arcAngle + pulsLen)
         .stroke({ width: cfg.width, color: glowColor, alpha: arcAlpha })
-      // Break path
       const nextCfg = arcConfigs[i + 1]
       if (nextCfg) {
         const nextAngle = t * nextCfg.speed + s * (i + 2) * 1.3 + (i + 1) * 1.25
@@ -284,7 +345,6 @@ export class ClusterObject {
       }
     }
 
-    // --- Orbiting particles: tiny bright dots circling the core ---
     const particleCount = 3
     for (let i = 0; i < particleCount; i++) {
       const orbitR = coreR * (1.6 + i * 0.5)
@@ -294,13 +354,10 @@ export class ClusterObject {
       const py = Math.sin(pAngle) * orbitR
       const pAlpha = 0.4 + act * 0.4 + Math.sin(t * 2 + i) * 0.15
 
-      // Tiny glow behind particle
       this.ringGfx.circle(px, py, 2.5).fill({ color: glowColor, alpha: pAlpha * 0.3 })
-      // Bright dot
       this.ringGfx.circle(px, py, 1).fill({ color: brightColor, alpha: pAlpha })
     }
 
-    // --- Activity: extra orbiting sparks when events fire ---
     if (act > 0.1) {
       const sparkCount = 5
       for (let i = 0; i < sparkCount; i++) {

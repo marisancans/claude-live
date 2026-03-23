@@ -1,6 +1,7 @@
-import { Container, Graphics, Text } from 'pixi.js'
+import { Container, Graphics, Text, Sprite } from 'pixi.js'
 import type { GraphNode } from '../../types'
-import { ORBIT_RADII } from '../../constants'
+import { ORBIT_RADII, parseModelFamily, MODEL_COLORS } from '../../constants'
+import { PlasmaCore } from '../shaders/PlasmaCore'
 
 /**
  * Visual representation of a node (file, tool, etc.) in the solar system.
@@ -39,6 +40,10 @@ export class NodeObject {
   compacting: number = 0
   compacted: number = 0
 
+  // Mini plasma for agent nodes
+  private agentPlasma: PlasmaCore | null = null
+  private agentPlasmaSprite: Sprite | null = null
+
   constructor(node: GraphNode) {
     this.data = node
     this.container = new Container()
@@ -50,6 +55,18 @@ export class NodeObject {
     // Main graphics redrawn each tick
     this.gfx = new Graphics()
     this.container.addChild(this.gfx)
+
+    // Agent nodes get a mini plasma core
+    if (node.nodeType === 'agent') {
+      try {
+        this.agentPlasma = new PlasmaCore(32)
+        this.agentPlasmaSprite = new Sprite(this.agentPlasma.texture)
+        this.agentPlasmaSprite.anchor.set(0.5)
+        this.agentPlasmaSprite.width = 12
+        this.agentPlasmaSprite.height = 12
+        this.container.addChildAt(this.agentPlasmaSprite, 0)
+      } catch (_) { /* fallback to gfx */ }
+    }
 
     this.createNodeLabel()
     this.updatePosition()
@@ -137,41 +154,40 @@ export class NodeObject {
   }
 
   /**
-   * Draw an agent node: spinning dashed ring + rotating diamond core.
+   * Draw an agent node: spinning dashed ring + plasma core (or diamond fallback).
    */
   private drawAgentNode(r: number, color: number, entry: number) {
-    const ringR = 7
-    const sz = 1.8
+    const ringR = 9
     const spinAngle = this.time * 2.5
-    const diamondAngle = Math.PI / 4 + this.time * 1.5
 
     // Soft glow behind
-    this.gfx.circle(0, 0, ringR * 2.5).fill({ color, alpha: 0.25 * entry })
+    this.gfx.circle(0, 0, ringR * 2).fill({ color, alpha: 0.2 * entry })
 
     // Spinning dashed ring: 6 arc segments
     const SEGS = 6
     for (let s = 0; s < SEGS; s++) {
       const a1 = (s / SEGS) * Math.PI * 2 + spinAngle
       const a2 = ((s + 0.38) / SEGS) * Math.PI * 2 + spinAngle
-      this.gfx.arc(0, 0, ringR, a1, a2).stroke({ width: 1, color, alpha: entry })
-      // moveTo to break the path for next segment
+      this.gfx.arc(0, 0, ringR, a1, a2).stroke({ width: 1, color, alpha: entry * 0.8 })
       if (s < SEGS - 1) {
         const nextA1 = ((s + 1) / SEGS) * Math.PI * 2 + spinAngle
         this.gfx.moveTo(Math.cos(nextA1) * ringR, Math.sin(nextA1) * ringR)
       }
     }
 
-    // Rotating diamond core
-    const cos = Math.cos(diamondAngle)
-    const sin = Math.sin(diamondAngle)
-    // Diamond vertices: rotate a square by diamondAngle
-    const verts = [
-      -sz * cos - (-sz) * sin, -sz * sin + (-sz) * cos,
-       sz * cos - (-sz) * sin,  sz * sin + (-sz) * cos,
-       sz * cos -   sz  * sin,  sz * sin +   sz  * cos,
-      -sz * cos -   sz  * sin, -sz * sin +   sz  * cos,
-    ]
-    this.gfx.poly(verts).fill({ color, alpha: entry })
+    // If no plasma sprite, draw diamond fallback
+    if (!this.agentPlasma) {
+      const sz = 1.8
+      const diamondAngle = Math.PI / 4 + this.time * 1.5
+      const cos = Math.cos(diamondAngle), sin = Math.sin(diamondAngle)
+      const verts = [
+        -sz * cos - (-sz) * sin, -sz * sin + (-sz) * cos,
+         sz * cos - (-sz) * sin,  sz * sin + (-sz) * cos,
+         sz * cos -   sz  * sin,  sz * sin +   sz  * cos,
+        -sz * cos -   sz  * sin, -sz * sin +   sz  * cos,
+      ]
+      this.gfx.poly(verts).fill({ color, alpha: entry })
+    }
   }
 
   /**
@@ -281,6 +297,15 @@ export class NodeObject {
 
     // Update orbital position
     this.updatePosition()
+
+    // Update agent plasma
+    if (this.agentPlasma && this.agentPlasmaSprite) {
+      if (Math.floor(this.time * 60) % 4 === 0) {
+        const colors = MODEL_COLORS.unknown // agents use parent color, default for now
+        this.agentPlasma.update(this.time, this.impactTime, 0.5, colors.base, colors.bright)
+      }
+      this.agentPlasmaSprite.alpha = this.life
+    }
 
     // Redraw node graphics (glow, body, agent effects)
     this.redrawNode()

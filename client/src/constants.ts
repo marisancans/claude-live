@@ -45,6 +45,23 @@ export function hexToInt(hex: string): number {
   return parseInt(hex.replace('#', ''), 16)
 }
 
+// Model-based core colors: [baseR, baseG, baseB], [brightR, brightG, brightB]
+// Parse model string ignoring version: "claude-sonnet-4-5-20250514" → "sonnet"
+export function parseModelFamily(model: string): string {
+  const lower = model.toLowerCase().replace('claude-', '')
+  if (lower.startsWith('opus')) return 'opus'
+  if (lower.startsWith('sonnet')) return 'sonnet'
+  if (lower.startsWith('haiku')) return 'haiku'
+  return 'unknown'
+}
+
+export const MODEL_COLORS: Record<string, { base: [number, number, number]; bright: [number, number, number]; glow: number; core: number; brightHex: number }> = {
+  opus:    { base: [1.0, 0.45, 0.12], bright: [1.0, 0.75, 0.4],  glow: 0xF07020, core: 0xFFBB66, brightHex: 0xFFCC88 },
+  sonnet:  { base: [0.25, 0.5, 1.0],  bright: [0.5, 0.75, 1.0],  glow: 0x4080FF, core: 0x80B0FF, brightHex: 0xAAD0FF },
+  haiku:   { base: [0.2, 0.85, 0.45], bright: [0.5, 1.0, 0.7],   glow: 0x30D870, core: 0x70FFB0, brightHex: 0xA0FFC8 },
+  unknown: { base: [0.78, 0.84, 0.94], bright: [0.94, 0.96, 1.0], glow: 0xC8D5F0, core: 0xF0F5FF, brightHex: 0xFFFFFF },
+}
+
 // Utility: Small deterministic radial offset per node so trails on the same ring don't overlap
 export function radialJitter(key: string): number {
   let h = 0x811c9dc5

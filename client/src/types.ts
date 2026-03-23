@@ -5,7 +5,7 @@ export interface RawEvent {
   id: string
   session_id: string
   timestamp: number
-  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Stop' | 'Notification' | 'PermissionRequest' | 'SubagentStart' | 'SubagentStop' | 'SessionEnd' | 'UserPromptSubmit' | 'PreCompact' | 'PostCompact' | 'SessionStart' | 'InstructionsLoaded' | 'WorktreeCreate' | 'WorktreeRemove'
+  hook_event_name: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Stop' | 'Notification' | 'PermissionRequest' | 'SubagentStart' | 'SubagentStop' | 'SessionEnd' | 'UserPromptSubmit' | 'PreCompact' | 'PostCompact' | 'SessionStart' | 'InstructionsLoaded' | 'WorktreeCreate' | 'WorktreeRemove' | 'ConfigChange'
   tool_name: string | null
   tool_input: Record<string, unknown> | null
   tool_response: Record<string, unknown> | null

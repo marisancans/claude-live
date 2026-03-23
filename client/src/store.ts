@@ -393,6 +393,11 @@ export function createStore() {
     const cluster = sessions.get(event.session_id)!
     ;(cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
 
+    // Capture/update model from any event that carries it
+    if (event.model && event.model !== (cluster as any).model) {
+      (cluster as any).model = event.model
+    }
+
     // Update cluster label from cwd or file paths (better than hash)
     if (cluster.label.length <= 8 || cluster.label.startsWith('#')) {
       let project = ''
@@ -505,6 +510,15 @@ export function createStore() {
 
     // UserPromptSubmit: pulse core, let EventProcessor trigger the snake animation
     if (event.hook_event_name === 'UserPromptSubmit') {
+      ;(cluster as any).coreAct = 1.0
+      recomputeAges()
+      EventProcessor.process(event, cluster, null)
+      return
+    }
+
+    // ConfigChange: update model, pulse core
+    if (event.hook_event_name === 'ConfigChange') {
+      if (event.model) (cluster as any).model = event.model
       ;(cluster as any).coreAct = 1.0
       recomputeAges()
       EventProcessor.process(event, cluster, null)
