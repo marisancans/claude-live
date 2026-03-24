@@ -57,7 +57,6 @@ function chordIndexFor(toolName?: string, hookName?: string): number {
 }
 
 export function playChordForEvent(toolName?: string, hookName?: string) {
-  console.log('[audio] playChordForEvent called', { enabled, howlCount: howls.length, toolName, hookName })
   if (!enabled || howls.length === 0) return
 
   // Debounce same event type within 150ms
@@ -67,7 +66,9 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
   lastPlayTime.set(key, now)
 
   const idx = chordIndexFor(toolName, hookName)
-  howls[idx % howls.length].play()
+  const howl = howls[idx % howls.length]
+  // Only play if loaded — prevents queued blast when audio is enabled late
+  if (howl.state() === 'loaded') howl.play()
 }
 
 export function playChord() {
