@@ -49,11 +49,6 @@ export class PixiApp {
       autoDensity: true,
       backgroundColor: 0x080808,
       autoStart: false,
-      // Aggressive GC: flush unused GPU geometry every 5s, free after 10s.
-      // Default is gcFrequency=30s / gcMaxUnusedTime=60s which causes massive
-      // GPU buffer accumulation when Graphics.clear() is called every frame.
-      gcFrequency: 5000,
-      gcMaxUnusedTime: 10000,
     })
 
     // Create scene hierarchy
