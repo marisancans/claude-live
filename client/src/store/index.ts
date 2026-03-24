@@ -31,7 +31,6 @@ function extractWords(event: RawEvent): string[] {
   if (tool === 'Read') {
     const text: string = resp?.content ?? resp?.text ?? resp?.output ?? ''
     const words = text.trim().split(/\s+/).filter(Boolean).slice(0, MAX)
-    if (words.length > 0) console.log('[extractWords] Read:', words.length, 'words')
     return words
   }
   if (tool === 'Write') {
@@ -107,7 +106,6 @@ export function createStore() {
 
   function addEvent(event: RawEvent, skipAnimations: boolean = false) {
     if (event.hook_event_name === 'PostToolUse') {
-      console.log('[addEvent]', event.tool_name, 'skipAnimations:', skipAnimations, 'tool_response:', event.tool_response)
     }
     buffer.push(event)
     if (buffer.length > MAX_BUFFER_SIZE) buffer.shift()
@@ -474,7 +472,6 @@ export function createStore() {
       } else if (event.hook_event_name === 'PostToolUse') {
         // Refresh impact visual; enrich label with response data
         const tool = event.tool_name || ''
-        console.log('[PostToolUse-debug]', tool, 'skipAnimations:', skipAnimations)
         if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
         else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
         else if (tool === 'Bash') node.impactType = 'spark'
@@ -488,7 +485,6 @@ export function createStore() {
         }
         // Spawn ResponseSnake with tool output words
         const words = extractWords(event)
-        console.log('[ResponseSnake-attempt]', tool, 'words.length:', words.length, 'skipAnimations:', skipAnimations)
         if (!skipAnimations && words.length > 0) {
           const dist = Math.hypot(node.x - cluster.centerX, node.y - cluster.centerY) || 80
           const angle = Math.atan2(node.y - cluster.centerY, node.x - cluster.centerX)

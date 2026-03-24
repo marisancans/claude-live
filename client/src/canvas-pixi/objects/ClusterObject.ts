@@ -400,8 +400,11 @@ export class ClusterObject {
 
   destroy() {
     for (const ring of this.orbitRingGraphics) {
-      this.container.removeChild(ring)
+      ring.destroy()
     }
+    this.orbitRingGraphics = []
+    this.plasmaCore?.destroy()
+    this.plasmaCore = null
     this.container.destroy()
   }
 }

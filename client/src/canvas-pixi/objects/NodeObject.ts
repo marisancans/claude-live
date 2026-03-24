@@ -192,94 +192,82 @@ export class NodeObject {
 
   /**
    * Play an impact animation (scan, morph, spark, ping, fade, fail).
-   * Creates animated Graphics that ticks down and removes itself.
-   * Also sets impactTime for the glow boost.
+   * Driven by tick() to avoid dangling requestAnimationFrame loops.
    */
   playImpact(type: 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | 'fail') {
-    // Set impact glow boost
     this.impactTime = 1.0
 
-    const impactGraphics = new Graphics()
-    this.container.addChild(impactGraphics)
+    // Reuse existing impact graphics or create new
+    if (!this.impactGraphics) {
+      this.impactGraphics = new Graphics()
+      this.container.addChild(this.impactGraphics)
+    }
+    this.impactType = type
+    this.impactProgress = 1.0
+  }
 
-    let progress = 1 // Count down from 1 to 0
-    const duration = 0.4 // 400ms animation
-    const speed = 1 / (duration * 60) // Assuming 60 FPS
+  private impactType: 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | 'fail' | null = null
+  private impactProgress: number = 0
+  private readonly IMPACT_SPEED = 1 / 0.4 // 400ms
 
-    const animate = () => {
-      progress -= speed
-      if (progress <= 0) {
-        this.container.removeChild(impactGraphics)
-        impactGraphics.destroy()
-        return
-      }
+  private tickImpact(dt: number) {
+    if (!this.impactGraphics || this.impactType === null) return
 
-      impactGraphics.clear()
-      const r = this.data.baseRadius
-
-      switch (type) {
-        case 'scan': {
-          // Expanding ring scan
-          const radius = r + progress * 15
-          const alpha = progress * 0.8
-          impactGraphics.circle(0, 0, radius).stroke({ width: 1.5, color: 0x4ade80, alpha })
-          break
-        }
-        case 'spark': {
-          // Spark burst: 6 rays radiating
-          const alpha = progress * 0.8
-          for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2
-            const dist = (1 - progress) * 20
-            const x = Math.cos(angle) * dist
-            const y = Math.sin(angle) * dist
-            impactGraphics.circle(x, y, 2).fill({ color: 0xff6b35, alpha })
-          }
-          break
-        }
-        case 'ping': {
-          // Concentric ping circles
-          const ring1 = r + (1 - progress) * 12
-          const ring2 = r + (1 - progress) * 22
-          impactGraphics.circle(0, 0, ring1).stroke({ width: 1, color: 0x4ade80, alpha: progress * 0.6 })
-          impactGraphics.circle(0, 0, ring2).stroke({ width: 1, color: 0x4ade80, alpha: progress * 0.3 })
-          break
-        }
-        case 'fade': {
-          // Fade pulse: shrinking filled circle
-          const radius = r + (1 - progress) * 8
-          const alpha = progress * 0.5
-          impactGraphics.circle(0, 0, radius).fill({ color: 0xffffff, alpha })
-          break
-        }
-        case 'fail': {
-          // X-mark flash
-          const scale = 8 + progress * 4
-          const alpha = progress * 0.8
-          impactGraphics.moveTo(-scale, -scale).lineTo(scale, scale).stroke({ width: 2, color: 0xff0000, alpha })
-          impactGraphics.moveTo(scale, -scale).lineTo(-scale, scale).stroke({ width: 2, color: 0xff0000, alpha })
-          break
-        }
-        case 'morph': {
-          // Double ring morphing
-          const ring1 = r + (1 - progress) * 8
-          const ring2 = r + (1 - progress) * 16
-          impactGraphics.circle(0, 0, ring1).stroke({ width: 1, color: 0x9d4edd, alpha: progress * 0.7 })
-          impactGraphics.circle(0, 0, ring2).stroke({ width: 1, color: 0x9d4edd, alpha: progress * 0.4 })
-          break
-        }
-      }
-
-      requestAnimationFrame(animate)
+    this.impactProgress -= dt * this.IMPACT_SPEED
+    if (this.impactProgress <= 0) {
+      this.container.removeChild(this.impactGraphics)
+      this.impactGraphics.destroy()
+      this.impactGraphics = null
+      this.impactType = null
+      return
     }
 
-    requestAnimationFrame(animate)
+    const progress = this.impactProgress
+    const r = this.data.baseRadius
+    this.impactGraphics.clear()
+
+    switch (this.impactType) {
+      case 'scan': {
+        this.impactGraphics.circle(0, 0, r + progress * 15).stroke({ width: 1.5, color: 0x4ade80, alpha: progress * 0.8 })
+        break
+      }
+      case 'spark': {
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2
+          const dist = (1 - progress) * 20
+          this.impactGraphics.circle(Math.cos(angle) * dist, Math.sin(angle) * dist, 2).fill({ color: 0xff6b35, alpha: progress * 0.8 })
+        }
+        break
+      }
+      case 'ping': {
+        this.impactGraphics.circle(0, 0, r + (1 - progress) * 12).stroke({ width: 1, color: 0x4ade80, alpha: progress * 0.6 })
+        this.impactGraphics.circle(0, 0, r + (1 - progress) * 22).stroke({ width: 1, color: 0x4ade80, alpha: progress * 0.3 })
+        break
+      }
+      case 'fade': {
+        this.impactGraphics.circle(0, 0, r + (1 - progress) * 8).fill({ color: 0xffffff, alpha: progress * 0.5 })
+        break
+      }
+      case 'fail': {
+        const scale = 8 + progress * 4
+        this.impactGraphics.moveTo(-scale, -scale).lineTo(scale, scale).stroke({ width: 2, color: 0xff0000, alpha: progress * 0.8 })
+        this.impactGraphics.moveTo(scale, -scale).lineTo(-scale, scale).stroke({ width: 2, color: 0xff0000, alpha: progress * 0.8 })
+        break
+      }
+      case 'morph': {
+        this.impactGraphics.circle(0, 0, r + (1 - progress) * 8).stroke({ width: 1, color: 0x9d4edd, alpha: progress * 0.7 })
+        this.impactGraphics.circle(0, 0, r + (1 - progress) * 16).stroke({ width: 1, color: 0x9d4edd, alpha: progress * 0.4 })
+        break
+      }
+    }
   }
 
   tick(dt: number) {
     // Advance animation time
     this.time += dt
 
+    // Tick impact animation (driven here, not via rAF)
+    this.tickImpact(dt)
 
     // Decay impact time (~750ms total at 60fps: 1.0 / 0.022 ~= 45 frames)
     if (this.impactTime > 0) {
@@ -438,6 +426,12 @@ export class NodeObject {
       this.actionLabel.destroy()
       this.actionLabel = null
     }
+    if (this.impactGraphics) {
+      this.impactGraphics.destroy()
+      this.impactGraphics = null
+    }
+    this.agentPlasma?.destroy()
+    this.agentPlasma = null
     this.container.destroy()
   }
 }
