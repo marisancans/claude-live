@@ -405,6 +405,6 @@ export class ClusterObject {
     this.orbitRingGraphics = []
     this.plasmaCore?.destroy()
     this.plasmaCore = null
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }

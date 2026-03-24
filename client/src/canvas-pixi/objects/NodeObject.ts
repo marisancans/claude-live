@@ -432,6 +432,6 @@ export class NodeObject {
     }
     this.agentPlasma?.destroy()
     this.agentPlasma = null
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }
