@@ -18,6 +18,7 @@ export class NodeObject {
 
   // Main graphics object redrawn each tick
   private gfx: Graphics
+  private gfxDirty: boolean = true  // only redraw when state changes
 
   // Orbital/animation state
   private entryProgress: number = 1 // instant display, no fade-in
@@ -97,9 +98,16 @@ export class NodeObject {
   }
 
   /**
-   * Redraw the node graphics each tick for animated glow/pulse.
+   * Redraw the node graphics when state has changed.
+   * Agent nodes always redraw (spinning ring). File/ephemeral only redraw when dirty.
    */
   private redrawNode() {
+    // Agent nodes spin every frame — always dirty
+    if (this.data.nodeType === 'agent') {
+      this.gfxDirty = true
+    }
+    if (!this.gfxDirty) return
+    this.gfxDirty = false
     this.gfx.clear()
 
     const entry = Math.min(1, this.entryProgress)
@@ -196,6 +204,7 @@ export class NodeObject {
    */
   playImpact(type: 'scan' | 'morph' | 'spark' | 'ping' | 'fade' | 'fail') {
     this.impactTime = 1.0
+    this.gfxDirty = true
 
     // Reuse existing impact graphics or create new
     if (!this.impactGraphics) {
@@ -273,11 +282,13 @@ export class NodeObject {
     if (this.impactTime > 0) {
       this.impactTime -= 0.022
       if (this.impactTime < 0) this.impactTime = 0
+      this.gfxDirty = true
     }
 
     // Update lifecycle (fade out when life depletes)
     if (this.data.life < 1.0) {
-      this.life = Math.max(0, this.data.life)
+      const newLife = Math.max(0, this.data.life)
+      if (newLife !== this.life) { this.life = newLife; this.gfxDirty = true }
       if (this.life <= 0) {
         this.isRemoved = true
       }
