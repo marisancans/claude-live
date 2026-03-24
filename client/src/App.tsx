@@ -276,6 +276,7 @@ export function App() {
 
           if (parsed.type === 'event') {
             const event: RawEvent = parsed.data
+            if (event.hook_event_name === 'Diagnostic') return
             const prevSize = store.getSessions().size
             store.addEvent(event)
             const sessions = store.getSessions()
