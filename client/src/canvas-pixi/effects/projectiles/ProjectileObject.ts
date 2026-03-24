@@ -15,6 +15,8 @@ export abstract class ProjectileObject {
   trackTarget: Container | null = null
   /** If true, trackTarget updates startPos; if false, updates endPos */
   trackIsStart: boolean = false
+  /** Deferred lookup info — set when NodeObject doesn't exist at spawn time */
+  trackLookup: { sessionId: string; nodeKey: string; resolve: () => Container | null } | null = null
 
   constructor(startPos: Point, endPos: Point, duration: number = 1) {
     this.container = new Container()
@@ -25,6 +27,14 @@ export abstract class ProjectileObject {
 
   /** Update startPos or endPos from tracked target container position */
   syncTarget() {
+    // Deferred lookup: NodeObject may not exist at spawn time (new nodes)
+    if (!this.trackTarget && this.trackLookup) {
+      const container = this.trackLookup.resolve()
+      if (container) {
+        this.trackTarget = container
+        this.trackLookup = null
+      }
+    }
     if (this.trackTarget) {
       const pos = { x: this.trackTarget.position.x, y: this.trackTarget.position.y }
       if (this.trackIsStart) this.startPos = pos
@@ -48,6 +58,6 @@ export abstract class ProjectileObject {
    * Clean up PixiJS objects.
    */
   destroy(): void {
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }

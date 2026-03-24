@@ -221,7 +221,7 @@ export class SessionEndEffect {
 
   destroy() {
     this.gfx.destroy()
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }
 

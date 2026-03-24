@@ -65,6 +65,6 @@ export class TrailObject {
   }
 
   destroy() {
-    this.container.destroy()
+    this.container.destroy({ children: true })
   }
 }

@@ -44,6 +44,13 @@ export class GlobProjectile extends ProjectileObject {
     const g = this.graphics
     g.clear()
 
+    // Recompute direction from live positions (may be updated by syncTarget)
+    this.dx = this.endPos.x - this.startPos.x
+    this.dy = this.endPos.y - this.startPos.y
+    const len = Math.hypot(this.dx, this.dy) || 1
+    this.nx = -this.dy / len
+    this.ny = this.dx / len
+
     const c = this.color
     const e = eio(Math.min(this.progress, 1))
     const sx = this.startPos.x

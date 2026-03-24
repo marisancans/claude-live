@@ -54,8 +54,8 @@ export class SnakeObject {
 
     const fontSize = isResponse ? 6 : 7
     // Pixel spacing between letters and words
-    const CHAR_PX = 3.5
-    const SPACE_PX = 2.5
+    const CHAR_PX = 4.0
+    const SPACE_PX = 3.0
 
     // Build flat list of letters with cumulative pixel positions
     const letters: string[] = []
@@ -74,7 +74,8 @@ export class SnakeObject {
     // Convert pixel positions to normalized t-space using actual spline length
     const splineLength = estimateSplineLength(splinePath)
     const totalTextPx = cursor
-    this.snakeSpan = Math.min(0.6, totalTextPx / splineLength)
+    // Scale text to fit available spline, capped at 0.85 to leave room for animation
+    this.snakeSpan = Math.min(0.85, totalTextPx / splineLength)
 
     for (let i = 0; i < pixelPositions.length; i++) {
       this.letterOffsets.push((pixelPositions[i] / totalTextPx) * this.snakeSpan)

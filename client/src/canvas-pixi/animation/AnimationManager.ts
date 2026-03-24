@@ -112,8 +112,13 @@ export class AnimationManager {
       this.spawnClusterEntrance(e.cluster.sessionId)
     })
 
-    eventBus.on('cluster:removed', (_e) => {
-      // Cleanup handled by WorldLayer
+    eventBus.on('cluster:removed', (e) => {
+      this.lastResponseSnakeTime.delete(e.sessionId)
+      const timer = this.permissionTimers.get(e.sessionId)
+      if (timer) {
+        clearTimeout(timer)
+        this.permissionTimers.delete(e.sessionId)
+      }
     })
 
     eventBus.on('subagent:start', (e) => {
