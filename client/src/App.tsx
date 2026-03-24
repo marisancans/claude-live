@@ -165,7 +165,7 @@ interface PermNotification {
 
 export function App() {
   const [clusters, setClusters] = useState(store.getSessions())
-  const [lastEvent, setLastEvent] = useState<RawEvent | null>(null)
+  const [lastToolName, setLastToolName] = useState<string | null>(null)
   const [eventCount, setEventCount] = useState(0)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
@@ -214,7 +214,7 @@ export function App() {
           const event: RawEvent = parsed.data
           store.addEvent(event)
           setClusters(new Map(store.getSessions()))
-          setLastEvent(event)
+          setLastToolName(event.tool_name ?? event.hook_event_name ?? null)
           setEventCount(c => c + 1)
           playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
 
@@ -280,7 +280,7 @@ export function App() {
             store.addEvent(event)
             const sessions = store.getSessions()
             setClusters(new Map(sessions))
-            setLastEvent(event)
+            setLastToolName(event.tool_name ?? event.hook_event_name ?? null)
             setEventCount(c => c + 1)
             playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
 
@@ -380,7 +380,7 @@ export function App() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <PixiScene clusters={clusters} lastEvent={lastEvent} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      <PixiScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
 
       {/* HUD */}
       <div className="hud">
@@ -401,8 +401,8 @@ export function App() {
         </div>
         <div className="hud-stat">
           <span className="hud-label">last</span>
-          <span className="hud-value hud-tool" style={{ color: toolColor(lastEvent) }}>
-            {lastEvent?.tool_name ?? '—'}
+          <span className="hud-value hud-tool" style={{ color: TOOL_COLORS[lastToolName ?? ""] ?? "#888" }}>
+            {lastToolName ?? '—'}
           </span>
         </div>
       </div>

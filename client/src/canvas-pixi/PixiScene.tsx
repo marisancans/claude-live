@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Cluster, GraphNode, RawEvent } from '../types'
+import type { Cluster, GraphNode } from '../types'
 import { PixiApp } from './PixiApp'
 
 interface Props {
   clusters: Map<string, Cluster>
-  lastEvent: RawEvent | null
   onHover: (node: GraphNode | null, cluster: Cluster | null) => void
   onSelect: (node: GraphNode | null, cluster: Cluster | null) => void
   autofitEnabled: boolean
 }
 
-export function PixiScene({ clusters, lastEvent, onHover, onSelect, autofitEnabled }: Props) {
+export function PixiScene({ clusters, onHover, onSelect, autofitEnabled }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const pixiAppRef = useRef<PixiApp | null>(null)
   const clustersRef = useRef(clusters)

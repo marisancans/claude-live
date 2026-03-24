@@ -49,6 +49,44 @@ fn bool_field(raw: &Value, key: &str) -> Option<bool> {
     raw.get(key).and_then(|v| v.as_bool())
 }
 
+/// Keep only metadata fields from tool_input — strip large content/code strings.
+fn strip_tool_input(v: Option<&Value>) -> Option<Value> {
+    let obj = v?.as_object()?;
+    let mut out = serde_json::Map::new();
+    for key in &["file_path", "path", "pattern", "url", "glob", "command", "description"] {
+        if let Some(val) = obj.get(*key) {
+            // Truncate string values to 256 chars to avoid passing large commands/paths
+            let truncated = val.as_str()
+                .map(|s| Value::String(s.chars().take(256).collect()))
+                .unwrap_or_else(|| val.clone());
+            out.insert(key.to_string(), truncated);
+        }
+    }
+    Some(Value::Object(out))
+}
+
+/// Truncate tool_response to a small prefix — the client only needs the first
+/// few hundred chars to extract words for the response snake animation.
+fn strip_tool_response(v: Option<&Value>) -> Option<Value> {
+    let val = v?;
+    // If it's an object, truncate any large string fields
+    if let Some(obj) = val.as_object() {
+        let mut out = serde_json::Map::new();
+        for (k, v) in obj {
+            let truncated = v.as_str()
+                .map(|s| Value::String(s.chars().take(512).collect()))
+                .unwrap_or_else(|| v.clone());
+            out.insert(k.clone(), truncated);
+        }
+        return Some(Value::Object(out));
+    }
+    // If it's a plain string, truncate it
+    if let Some(s) = val.as_str() {
+        return Some(Value::String(s.chars().take(512).collect()));
+    }
+    Some(val.clone())
+}
+
 pub fn normalize_event(raw: &Value, remote_ip: &str) -> NormalizedEvent {
     let session_id = raw.get("session_id")
         .and_then(|v| v.as_str())
@@ -72,8 +110,8 @@ pub fn normalize_event(raw: &Value, remote_ip: &str) -> NormalizedEvent {
             .as_millis() as u64,
         hook_event_name: str_field(raw, "hook_event_name"),
         tool_name: str_field(raw, "tool_name"),
-        tool_input: raw.get("tool_input").cloned(),
-        tool_response: raw.get("tool_response").cloned(),
+        tool_input: strip_tool_input(raw.get("tool_input")),
+        tool_response: strip_tool_response(raw.get("tool_response")),
         agent_id: str_field(raw, "agent_id"),
         agent_type: str_field(raw, "agent_type"),
         cwd: str_field(raw, "cwd"),
