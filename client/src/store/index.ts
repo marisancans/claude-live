@@ -107,7 +107,23 @@ export function createStore() {
   function addEvent(event: RawEvent, skipAnimations: boolean = false) {
     if (event.hook_event_name === 'PostToolUse') {
     }
-    buffer.push(event)
+
+    // Strip large payload fields before buffering — file contents can be megabytes.
+    // Everything needed for visualization is extracted above; we only need metadata.
+    const lean: RawEvent = { ...event }
+    if (lean.tool_input && typeof lean.tool_input === 'object') {
+      const inp = lean.tool_input as Record<string, any>
+      lean.tool_input = {
+        file_path: inp.file_path,
+        path: inp.path,
+        command: inp.command ? String(inp.command).slice(0, 120) : undefined,
+        pattern: inp.pattern,
+        url: inp.url,
+      }
+    }
+    lean.tool_response = null
+
+    buffer.push(lean)
     if (buffer.length > MAX_BUFFER_SIZE) buffer.shift()
 
     if (!sessions.has(event.session_id)) {

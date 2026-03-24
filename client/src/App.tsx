@@ -276,7 +276,6 @@ export function App() {
 
           if (parsed.type === 'event') {
             const event: RawEvent = parsed.data
-            console.log('[claude-live]', event.hook_event_name, event.tool_name ?? '', event.session_id, event.tool_input)
             const prevSize = store.getSessions().size
             store.addEvent(event)
             const sessions = store.getSessions()
