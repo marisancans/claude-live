@@ -19,6 +19,8 @@ export class NodeObject {
   // Main graphics object redrawn each tick
   private gfx: Graphics
   private gfxDirty: boolean = true  // only redraw when state changes
+  private _redrawAccum: number = 0
+  private static REDRAW_INTERVAL = 1 / 20 // 20fps max for agent node spin
 
   // Orbital/animation state
   private entryProgress: number = 1 // instant display, no fade-in
@@ -102,10 +104,6 @@ export class NodeObject {
    * Agent nodes always redraw (spinning ring). File/ephemeral only redraw when dirty.
    */
   private redrawNode() {
-    // Agent nodes spin every frame — always dirty
-    if (this.data.nodeType === 'agent') {
-      this.gfxDirty = true
-    }
     if (!this.gfxDirty) return
     this.gfxDirty = false
     this.gfx.clear()
@@ -304,6 +302,15 @@ export class NodeObject {
         this.agentPlasma.update(this.time, this.impactTime, 0.5, colors.base, colors.bright)
       }
       this.agentPlasmaSprite.alpha = this.life
+    }
+
+    // Agent nodes spin — throttle to 20fps to limit GPU geometry churn
+    if (this.data.nodeType === 'agent') {
+      this._redrawAccum += dt
+      if (this._redrawAccum >= NodeObject.REDRAW_INTERVAL) {
+        this._redrawAccum = 0
+        this.gfxDirty = true
+      }
     }
 
     // Redraw node graphics (glow, body, agent effects)

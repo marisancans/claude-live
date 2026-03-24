@@ -25,6 +25,8 @@ export class ClusterObject {
   private coreGfx: Graphics   // redrawn each tick
   private ringGfx: Graphics   // animated thin ring
   private seed: number = 0
+  private _redrawAccum: number = 0
+  private static REDRAW_INTERVAL = 1 / 20 // 20fps max for Graphics redraws
 
   // Plasma core renderer
   private plasmaCore: PlasmaCore | null = null
@@ -188,11 +190,13 @@ export class ClusterObject {
       this.coreAct = Math.max(0, this.coreAct - 0.02)
     }
 
-    // Redraw core each frame
-    this.redrawCore()
-
-    // Draw permission ring when active
-    this.redrawPermissionRing()
+    // Throttle Graphics redraws to 20fps to limit GPU geometry churn
+    this._redrawAccum += dt
+    if (this._redrawAccum >= ClusterObject.REDRAW_INTERVAL) {
+      this._redrawAccum = 0
+      this.redrawCore()
+      this.redrawPermissionRing()
+    }
 
     // Distort orbit rings during compaction (scale inward during implosion, outward during rebirth)
     const compacting = this.data.compacting ?? 0
