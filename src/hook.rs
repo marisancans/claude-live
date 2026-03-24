@@ -8,6 +8,7 @@ use axum::{
 };
 use serde_json::Value;
 use std::sync::Arc;
+use tracing::info;
 
 pub async fn hook_handler(
     State(state): State<Arc<AppState>>,
@@ -26,6 +27,14 @@ pub async fn hook_handler(
     }
 
     let event = normalize_event(&raw, "127.0.0.1");
+
+    // Log diagnostic events from the memory monitor
+    if event.hook_event_name.as_deref() == Some("Diagnostic") {
+        if let Some(msg) = raw.get("message").and_then(|v| v.as_str()) {
+            info!("[diag] {}", msg);
+        }
+        return (StatusCode::OK, Json(serde_json::json!({ "ok": true })));
+    }
 
     // Broadcast to all WebSocket clients
     let msg = serde_json::json!({ "type": "event", "data": event }).to_string();

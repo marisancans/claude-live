@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react'
 import { BackgroundLayer } from './layers/BackgroundLayer'
 import { WorldLayer } from './layers/WorldLayer'
 import { AnimationManager } from './animation/AnimationManager'
+import { MemoryMonitor } from './MemoryMonitor'
 import { RENDER_SCALE } from '../constants'
 
 /**
@@ -19,6 +20,7 @@ export class PixiApp {
   worldLayer!: WorldLayer
   animationManager: AnimationManager | null = null
   uiLayer!: Container
+  memoryMonitor: MemoryMonitor | null = null
   private rafId: number = 0
   private _resizeHandler = () => this.onResize()
 
@@ -70,6 +72,10 @@ export class PixiApp {
     this.uiLayer = new Container()
     this.app.stage.addChild(this.uiLayer)
 
+    // Memory monitor: samples heap + object counts every 5s, posts to /hook
+    this.memoryMonitor = new MemoryMonitor(this.app, this.worldLayer, this.animationManager)
+    this.memoryMonitor.start(5)
+
     // Resize handler
     window.addEventListener('resize', this._resizeHandler)
   }
@@ -104,6 +110,7 @@ export class PixiApp {
    */
   destroy() {
     window.removeEventListener('resize', this._resizeHandler)
+    this.memoryMonitor?.stop()
     this.animationManager?.destroy()
 
     try {
