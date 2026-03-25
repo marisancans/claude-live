@@ -38,6 +38,21 @@ export function initAudio() {
       loadingCallbacks.forEach(cb => cb(loadedCount, CHORD_FILES.length))
     },
   }))
+
+  // When the tab is hidden, stop all sounds and reset debounce timestamps.
+  // Chrome throttles JS in background tabs but WebSocket events keep arriving,
+  // causing Howler to queue dozens of play() calls that all fire on tab focus.
+  // Resetting lastPlayTime to Date.now() means the 150ms debounce window starts
+  // fresh on visibility, so at most one sound plays per event type on return.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      howls.forEach(h => { if (h.playing()) h.stop() })
+      const now = Date.now()
+      for (const key of lastPlayTime.keys()) {
+        lastPlayTime.set(key, now)
+      }
+    }
+  })
 }
 
 // Map event type to chord index for consistent sounds
