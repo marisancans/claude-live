@@ -39,14 +39,12 @@ export function initAudio() {
     },
   }))
 
-  // When the tab is hidden, stop all sounds and reset debounce timestamps.
-  // Chrome throttles JS in background tabs but WebSocket events keep arriving,
-  // causing Howler to queue dozens of play() calls that all fire on tab focus.
-  // Resetting lastPlayTime to Date.now() means the 150ms debounce window starts
-  // fresh on visibility, so at most one sound plays per event type on return.
+  // When the tab becomes visible again, reset debounce timestamps so that the
+  // backlog of events that arrived while Chrome was throttling the tab doesn't
+  // cause a blast of sounds all firing at once on focus. New events after this
+  // point will play normally (one per 150ms per event type).
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      howls.forEach(h => { if (h.playing()) h.stop() })
+    if (!document.hidden) {
       const now = Date.now()
       for (const key of lastPlayTime.keys()) {
         lastPlayTime.set(key, now)
