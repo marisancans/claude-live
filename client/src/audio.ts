@@ -15,6 +15,11 @@ let initialized = false
 // Debounce per event type
 const lastPlayTime = new Map<string, number>()
 
+// Tab visibility: suppress plays while hidden + brief cooldown on refocus
+let tabHidden = document.hidden
+let visibleSince = document.hidden ? 0 : Date.now()
+const REFOCUS_COOLDOWN_MS = 500
+
 // Loading progress callbacks
 const loadingCallbacks: Array<(loaded: number, total: number) => void> = []
 export function onAudioLoadingProgress(callback: (loaded: number, total: number) => void) {
@@ -39,16 +44,13 @@ export function initAudio() {
     },
   }))
 
-  // When the tab becomes visible again, reset debounce timestamps so that the
-  // backlog of events that arrived while Chrome was throttling the tab doesn't
-  // cause a blast of sounds all firing at once on focus. New events after this
-  // point will play normally (one per 150ms per event type).
+  // Track tab visibility. When hidden, playChordForEvent() becomes a no-op.
+  // On refocus, a 500ms cooldown swallows any queued plays that Howler or
+  // Chrome's throttled JS fires all at once.
   document.addEventListener('visibilitychange', () => {
+    tabHidden = document.hidden
     if (!document.hidden) {
-      const now = Date.now()
-      for (const key of lastPlayTime.keys()) {
-        lastPlayTime.set(key, now)
-      }
+      visibleSince = Date.now()
     }
   })
 }
@@ -72,6 +74,14 @@ function chordIndexFor(toolName?: string, hookName?: string): number {
 export function playChordForEvent(toolName?: string, hookName?: string) {
   if (!enabled || howls.length === 0) return
 
+  // Don't play while tab is hidden — prevents Howler from queuing plays
+  // that all fire at once on focus
+  if (tabHidden) return
+
+  // Swallow the burst of queued events that fire in the first 500ms after
+  // the tab becomes visible again
+  if (Date.now() - visibleSince < REFOCUS_COOLDOWN_MS) return
+
   // Debounce same event type within 150ms
   const key = toolName || hookName || 'unknown'
   const now = Date.now()
@@ -80,7 +90,6 @@ export function playChordForEvent(toolName?: string, hookName?: string) {
 
   const idx = chordIndexFor(toolName, hookName)
   const howl = howls[idx % howls.length]
-  // Only play if loaded — prevents queued blast when audio is enabled late
   if (howl.state() === 'loaded') howl.play()
 }
 
