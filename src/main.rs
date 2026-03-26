@@ -72,6 +72,12 @@ enum Commands {
     },
     /// Print version info
     Version,
+    /// Ingest a hook event from stdin into the SQLite database
+    Hook {
+        /// Path to the SQLite database file (defaults to ~/.local/share/claude-live/events.db)
+        #[arg(long)]
+        db: Option<String>,
+    },
 }
 
 fn api_get(port: u16, path: &str) -> Result<String, String> {
@@ -234,6 +240,47 @@ async fn main() {
             if follow {
                 eprintln!("Hint: start the server with RUST_LOG=claude_live=debug for verbose output");
             }
+        }
+        Some(Commands::Hook { db }) => {
+            // Resolve DB path: --db flag or default
+            let db_path = db
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(claude_live::paths::db_path);
+
+            // Ensure parent directory exists
+            if let Some(parent) = db_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+
+            // Read stdin — silently return on any error
+            let mut input = String::new();
+            if std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).is_err() {
+                return;
+            }
+            if input.is_empty() {
+                return;
+            }
+
+            // Parse JSON — silently return on error (never block Claude Code)
+            let raw: serde_json::Value = match serde_json::from_str(&input) {
+                Ok(v) => v,
+                Err(_) => return,
+            };
+
+            // Normalize the event
+            let event = claude_live::normalize::normalize_event(&raw, "local");
+
+            // Skip diagnostic events
+            if event.hook_event_name.as_deref() == Some("Diagnostic") {
+                return;
+            }
+
+            // Open EventStore and record — silently return on error
+            let store = match claude_live::storage::EventStore::open(&db_path) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let _ = store.record(&event);
         }
     }
 }
