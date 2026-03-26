@@ -9,6 +9,7 @@ import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
 import { EventLog } from './EventLog'
 import { isDemoMode, createDemoSimulator } from './demo'
+import { StatsDialog } from './StatsDialog'
 
 const store = createStore()
 
@@ -182,6 +183,7 @@ export function App() {
     const saved = localStorage.getItem('claude-live-audio-enabled')
     return saved === 'true'
   })
+  const [showStats, setShowStats] = useState(false)
   const [autofitEnabled, setAutofitEnabledState] = useState(() => {
     // Load from localStorage
     const saved = localStorage.getItem('claude-live-autofit-enabled')
@@ -442,6 +444,15 @@ export function App() {
         >
           ⚙
         </button>
+        <button
+          onClick={() => setShowStats(true)}
+          title="Database stats"
+          style={{
+            background: 'none', border: 'none', color: '#888',
+            cursor: 'pointer', fontSize: 11, fontFamily: 'monospace',
+            padding: '2px 6px',
+          }}
+        >DB</button>
       </div>
 
       {/* Permission notifications */}
@@ -478,6 +489,7 @@ export function App() {
 
       <DebugPanel sessionIds={[...clusters.keys()]} isOpen={debugOpen} onClose={() => setDebugOpen(false)} />
       <OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />
+      {showStats && <StatsDialog onClose={() => setShowStats(false)} />}
 
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>
