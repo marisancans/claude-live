@@ -12,14 +12,36 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 claude plugin marketplace add marisancans/claude-live
 ```
 
+That's it. Events are recorded automatically in the background as you work.
+
 ## Use
 
 ```bash
-# Work normally -- events are recorded in the background
-claude "refactor the auth module"
-
 # View the visualization whenever you want
 claude-live start
+```
+
+## How It Works
+
+Sessions appear as star systems. Files orbit as planets -- the more a file is touched, the larger it grows. Tool calls animate between nodes:
+
+- **Read / Grep / Glob** -- scanner at the file, data streams back to core
+- **Edit / Write** -- ink beam fires from core to file
+- **Bash** -- terminal window appears at the node
+- **Subagents** -- satellite systems tethered to their parent
+
+Multiple Claude sessions show as separate star systems. Prompts fly inward, responses fly outward. Context compaction triggers an implosion/rebirth effect.
+
+Under the hood: the plugin writes every event to a local SQLite database (~5ms per write, no server needed). When you run `claude-live start`, a lightweight Rust server polls the database and streams events to a PixiJS frontend via WebSocket.
+
+## CLI
+
+```bash
+claude-live start       # Open visualization in browser
+claude-live stop        # Stop the server
+claude-live status      # Show server + database stats
+claude-live share       # Share via Cloudflare tunnel
+claude-live update      # Self-update
 ```
 
 ## Development
