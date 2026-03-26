@@ -21,10 +21,29 @@ fn test_unknown_subcommand() {
 
 #[test]
 fn test_status_when_not_running() {
-    // status should fail gracefully when no server is running
     Command::cargo_bin("claude-live")
         .unwrap()
-        .args(["status", "--port", "19999"])
+        .arg("status")
         .assert()
-        .failure();
+        .success()
+        .stdout(predicates::str::contains("stopped"));
+}
+
+#[test]
+fn test_stop_when_not_running() {
+    Command::cargo_bin("claude-live")
+        .unwrap()
+        .arg("stop")
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("not running"));
+}
+
+#[test]
+fn test_stats_with_no_db() {
+    Command::cargo_bin("claude-live")
+        .unwrap()
+        .arg("stats")
+        .assert()
+        .success();
 }

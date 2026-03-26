@@ -25,6 +25,8 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 ureq = "2"
 url = "2"
 open = "5"
+ctrlc = "3"
+libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 tokio-tungstenite = "0.24"
