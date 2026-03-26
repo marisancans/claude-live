@@ -132,8 +132,7 @@ pub fn self_update() -> Result<(), String> {
     let binary_data = if asset_name.ends_with(".tar.gz") {
         extract_from_tar_gz(&data)?
     } else if asset_name.ends_with(".zip") {
-        // TODO: implement zip extraction for windows
-        return Err("Zip extraction for Windows is not yet supported. Please extract manually.".to_string());
+        extract_from_zip(&data)?
     } else {
         return Err(format!("Unknown archive format: {asset_name}"));
     };
@@ -185,4 +184,27 @@ fn extract_from_tar_gz(data: &[u8]) -> Result<Vec<u8>, String> {
     }
 
     Err("Archive does not contain a 'claude-live' binary".to_string())
+}
+
+/// Extract the `claude-live.exe` binary from a zip archive.
+fn extract_from_zip(data: &[u8]) -> Result<Vec<u8>, String> {
+    let reader = Cursor::new(data);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| format!("Failed to read zip archive: {e}"))?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {e}"))?;
+
+        let file_name = file.name().rsplit('/').next().unwrap_or("");
+
+        if file_name == "claude-live.exe" {
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to extract binary from zip: {e}"))?;
+            return Ok(buf);
+        }
+    }
+
+    Err("Archive does not contain a 'claude-live.exe' binary".to_string())
 }

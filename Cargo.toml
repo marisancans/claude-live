@@ -25,13 +25,16 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 ureq = "2"
 flate2 = "1"
 tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 url = "2"
 open = "5"
 ctrlc = "3"
-libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 futures-util = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2"
