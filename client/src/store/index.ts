@@ -392,20 +392,20 @@ export function createStore() {
       // Assign orbit ring (all node types use same logic)
       let orbitRing = 0
       for (let ri = 0; ri < 5; ri++) {
-        if (cluster.ringSpawnProgress[ri] > 0 && cluster.ringCounts[ri] < RING_CAPACITIES[ri]) {
+        if (cluster.ringSpawnProgress![ri] > 0 && cluster.ringCounts[ri] < RING_CAPACITIES[ri]) {
           orbitRing = ri
           break
         }
       }
       // Ensure at least ring 0 is spawning
-      if (cluster.ringSpawnProgress[0] === 0) {
-        cluster.ringSpawnProgress[0] = 0.001
+      if (cluster.ringSpawnProgress![0] === 0) {
+        cluster.ringSpawnProgress![0] = 0.001
       }
       // If this ring will now be full, preemptively activate next ring
       const nextRing = orbitRing + 1
       if (nextRing < 5 && cluster.ringCounts[orbitRing] + 1 >= RING_CAPACITIES[orbitRing]) {
-        if (cluster.ringSpawnProgress[nextRing] === 0) {
-          cluster.ringSpawnProgress[nextRing] = 0.001
+        if (cluster.ringSpawnProgress![nextRing] === 0) {
+          cluster.ringSpawnProgress![nextRing] = 0.001
         }
       }
       cluster.ringCounts[orbitRing]++
@@ -656,7 +656,7 @@ export function createStore() {
   function checkStaleSessions(thresholdMs: number) {
     const now = Date.now()
     for (const cluster of sessions.values()) {
-      if (!cluster.stopping && now - cluster.lastEventTime > thresholdMs) {
+      if (!cluster.stopping && now - cluster.lastEventTime! > thresholdMs) {
         cluster.stopping = true
         for (const node of cluster.nodes.values()) node.age = Math.max(node.age, 80)
       }

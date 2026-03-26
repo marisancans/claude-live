@@ -40,6 +40,8 @@ export interface GraphNode {
   colorHex: string      // CSS hex string e.g. '#60a5fa'
   x: number
   y: number
+  vx: number
+  vy: number
   age: number
   lastEventIndex: number
   lastTool: string | null

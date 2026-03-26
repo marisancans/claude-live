@@ -63,7 +63,7 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
   const TOOL_BTNS: { label: string; color: string; fn: () => void }[] = [
     { label: 'Read',        color: '#4ade80', fn: () => responseSnake('Read',     { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'Response data from file read operation with individual letters streaming outward' } }) },
     { label: 'Edit',        color: '#60a5fa', fn: () => pre('Edit',     { file_path: nextFile() }) },
-    { label: 'Write',       color: '#60a5fa', fn: () => responseSnake('Write',    { file_path: nextFile(), content: 'Writing content to file with response snake animation showing letters outward' }, null) },
+    { label: 'Write',       color: '#60a5fa', fn: () => responseSnake('Write',    { file_path: nextFile(), content: 'Writing content to file with response snake animation showing letters outward' }, {}) },
     { label: 'Grep',        color: '#a78bfa', fn: () => pre('Grep',     { pattern: 'useState', path: '.' }) },
     { label: 'Glob',        color: '#a78bfa', fn: () => pre('Glob',     { pattern: '**/*.tsx', path: nextFile() }) },
     { label: 'Bash',        color: '#f59e0b', fn: () => responseSnake('Bash',     { command: nextCmd() }, { stdout: 'bash command output with response letters flowing outward in straight animation paths', stderr: '', interrupted: false }) },
@@ -79,7 +79,7 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
     { label: 'Compact↑',   color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostCompact' }) },
     { label: 'Prompt',      color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the login bug on the dashboard page' }) },
     { label: 'RespRead',    color: '#4ade80', fn: () => responseSnake('Read', { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'const response data flowing outward through the canvas with individual letters' } }) },
-    { label: 'RespWrite',   color: '#60a5fa', fn: () => responseSnake('Write', { file_path: nextFile(), content: 'Writing response snake letters streaming outward in straight paths with subtle glow effects' }, null) },
+    { label: 'RespWrite',   color: '#60a5fa', fn: () => responseSnake('Write', { file_path: nextFile(), content: 'Writing response snake letters streaming outward in straight paths with subtle glow effects' }, {}) },
     { label: 'RespBash',    color: '#f59e0b', fn: () => responseSnake('Bash', { command: nextCmd() }, { stdout: 'command output letters flowing smoothly outward from cluster center with proper spacing', stderr: '', interrupted: false }) },
   ]
 

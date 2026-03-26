@@ -453,6 +453,7 @@ export function createStore() {
           colorHex: '#c084fc',
           x: cluster.centerX + Math.cos(angle) * 32,
           y: cluster.centerY + Math.sin(angle) * 32,
+          vx: 0, vy: 0,
           age: 0,
           lastEventIndex: buffer.length - 1,
           lastTool: null,
@@ -719,7 +720,8 @@ export function createStore() {
     recomputeAges()
 
     // Emit domain events to EventBus for PixiJS animations
-    const affectedNode = cluster.nodes.get(nodeKeyFor(event)) ?? null
+    const nk = nodeKeyFor(event)
+    const affectedNode = nk ? cluster.nodes.get(nk) ?? null : null
     EventProcessor.process(event, cluster, affectedNode)
   }
 
