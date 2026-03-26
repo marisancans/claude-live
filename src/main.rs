@@ -123,8 +123,18 @@ async fn main() {
                 eprintln!("Daemon mode not yet implemented. Running in foreground.");
             }
 
+            // Resolve paths for static dir and database
+            let data_dir = claude_live::paths::data_dir();
+            let _ = std::fs::create_dir_all(&data_dir);
+            let db_path = claude_live::paths::db_path();
+            // Static dir: client/dist in dev, or alongside the binary in production
+            let static_dir = std::env::current_dir()
+                .unwrap_or_default()
+                .join("client")
+                .join("dist");
+
             let (actual_port, handle) = claude_live::server::start_server(
-                &bind, port, token
+                &static_dir, &db_path, port, token
             ).await;
 
             println!("claude-live running at http://{bind}:{actual_port}");
