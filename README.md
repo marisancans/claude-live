@@ -6,7 +6,7 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 
 <p align="center">
 
-https://github.com/marisancans/claude-live/raw/main/claude-live-demo.mp4
+<video src="https://github.com/marisancans/claude-live/raw/main/claude-live-demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 **[Install](#install)** | **[How It Works](#how-it-works)**
 
