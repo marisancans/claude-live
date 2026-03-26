@@ -1,28 +1,20 @@
 {
   "name": "claude-live",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "description": "Realtime Claude Code activity visualizer",
-  "bin": {
-    "claude-live": "./bin/claude-live.js"
-  },
   "scripts": {
     "dev": "cd client && vite dev",
-    "build": "cd client && vite build && npm run build:bin",
-    "build:bin": "bun build ./bin/claude-live.js --compile --outfile ./bin/claude-live",
-    "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "build": "cd client && vite build",
+    "test": "vitest run"
   },
   "dependencies": {
-    "howler": "^2.2.4",
-    "open": "^10.1.0",
-    "uuid": "^9.0.0"
+    "howler": "^2.2.4"
   },
   "devDependencies": {
     "@types/howler": "^2.2.12",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
-    "bun": "^1.0.0",
     "pixi-filters": "^6.0.0",
     "pixi.js": "^8.0.0",
     "react": "^18.2.0",
