@@ -4,3 +4,4 @@ node_modules/
 .worktrees/
 .superpowers/
 client/dist/
+docs/superpowers/

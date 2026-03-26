@@ -1,6 +1,6 @@
 {
   "name": "claude-live",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "description": "Realtime Claude Code activity visualizer",
   "scripts": {
     "dev": "cd client && vite dev",

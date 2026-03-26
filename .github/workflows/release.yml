@@ -24,7 +24,6 @@ jobs:
           path: client/dist/
 
   build-binaries:
-    needs: build-frontend
     strategy:
       matrix:
         include:
@@ -49,10 +48,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: client/dist/
       - name: Install cross (Linux)
         if: contains(matrix.target, 'linux')
         run: cargo install cross
@@ -83,17 +78,68 @@ jobs:
             ${{ matrix.artifact }}.*
 
   release:
-    needs: build-binaries
+    needs: [build-frontend, build-binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts/
+      - name: Build plugin archive
+        run: |
+          mkdir -p plugin-staging/bin
+          mkdir -p plugin-staging/client
+          mkdir -p plugin-staging/.claude-plugin/hooks
+
+          # Extract each binary from its per-platform archive into bin/
+          cd artifacts/claude-live-linux-x86_64
+          tar xzf claude-live-linux-x86_64.tar.gz
+          mv claude-live ../../plugin-staging/bin/claude-live-linux-x86_64
+          cd ../..
+
+          cd artifacts/claude-live-linux-aarch64
+          tar xzf claude-live-linux-aarch64.tar.gz
+          mv claude-live ../../plugin-staging/bin/claude-live-linux-aarch64
+          cd ../..
+
+          cd artifacts/claude-live-macos-x86_64
+          tar xzf claude-live-macos-x86_64.tar.gz
+          mv claude-live ../../plugin-staging/bin/claude-live-macos-x86_64
+          cd ../..
+
+          cd artifacts/claude-live-macos-aarch64
+          tar xzf claude-live-macos-aarch64.tar.gz
+          mv claude-live ../../plugin-staging/bin/claude-live-macos-aarch64
+          cd ../..
+
+          cd artifacts/claude-live-windows-x86_64
+          7z x claude-live-windows-x86_64.zip
+          mv claude-live.exe ../../plugin-staging/bin/claude-live-windows-x86_64.exe
+          cd ../..
+
+          # Copy hook wrapper script
+          cp bin/hook-wrapper.sh plugin-staging/bin/hook-wrapper.sh
+
+          # Copy frontend dist
+          cp -r artifacts/frontend-dist/ plugin-staging/client/dist/
+
+          # Copy plugin metadata
+          cp .claude-plugin/plugin.json plugin-staging/.claude-plugin/plugin.json
+          cp .claude-plugin/marketplace.json plugin-staging/.claude-plugin/marketplace.json
+          cp .claude-plugin/hooks/hooks.json plugin-staging/.claude-plugin/hooks/hooks.json
+
+          # Create the plugin archive
+          cd plugin-staging
+          tar czf ../claude-live-plugin.tar.gz bin/ client/ .claude-plugin/
+          cd ..
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+            artifacts/**/*.sha256
+            claude-live-plugin.tar.gz
           generate_release_notes: true
 
   deploy-demo:
@@ -120,15 +166,10 @@ jobs:
         uses: actions/deploy-pages@v4
 
   publish-crate:
-    needs: build-frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: client/dist/
       - run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

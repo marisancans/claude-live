@@ -10,13 +10,13 @@ ARCH=$(uname -m)
 
 case "$OS" in
     mingw*|msys*|cygwin*) OS="windows" ;;
-    darwin) OS="darwin" ;;
+    darwin) OS="macos" ;;
     linux) OS="linux" ;;
 esac
 
 case "$ARCH" in
-    x86_64|amd64) ARCH="amd64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
+    x86_64|amd64) ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="aarch64" ;;
 esac
 
 EXT=""

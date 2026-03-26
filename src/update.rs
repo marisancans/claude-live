@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::io::Read;
+use std::io::{Cursor, Read};
 
 const GITHUB_REPO: &str = "marisancans/claude-live";
 
@@ -128,8 +128,17 @@ pub fn self_update() -> Result<(), String> {
         .map_err(|e| format!("Cannot determine current executable: {e}"))?;
     let tmp_path = current_exe.with_extension("new");
 
-    // TODO: extract from tar.gz, for now just write directly
-    std::fs::write(&tmp_path, &data)
+    // Extract binary from the downloaded archive
+    let binary_data = if asset_name.ends_with(".tar.gz") {
+        extract_from_tar_gz(&data)?
+    } else if asset_name.ends_with(".zip") {
+        // TODO: implement zip extraction for windows
+        return Err("Zip extraction for Windows is not yet supported. Please extract manually.".to_string());
+    } else {
+        return Err(format!("Unknown archive format: {asset_name}"));
+    };
+
+    std::fs::write(&tmp_path, &binary_data)
         .map_err(|e| format!("Failed to write new binary: {e}"))?;
 
     #[cfg(unix)]
@@ -144,4 +153,36 @@ pub fn self_update() -> Result<(), String> {
 
     println!("Updated to {}! Restart claude-live to use the new version.", release.tag_name);
     Ok(())
+}
+
+/// Extract the `claude-live` binary from a tar.gz archive.
+fn extract_from_tar_gz(data: &[u8]) -> Result<Vec<u8>, String> {
+    let gz = flate2::read::GzDecoder::new(Cursor::new(data));
+    let mut archive = tar::Archive::new(gz);
+
+    let entries = archive.entries()
+        .map_err(|e| format!("Failed to read tar.gz entries: {e}"))?;
+
+    for entry in entries {
+        let mut entry = entry
+            .map_err(|e| format!("Failed to read tar.gz entry: {e}"))?;
+
+        let path = entry.path()
+            .map_err(|e| format!("Failed to read entry path: {e}"))?
+            .to_path_buf();
+
+        // Look for the binary — it should be "claude-live" at the archive root
+        let file_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        if file_name == "claude-live" {
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to extract binary from tar.gz: {e}"))?;
+            return Ok(buf);
+        }
+    }
+
+    Err("Archive does not contain a 'claude-live' binary".to_string())
 }

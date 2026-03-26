@@ -114,6 +114,48 @@
         "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
+    }],
+    "StopFailure": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
+    }],
+    "TeammateIdle": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
+    }],
+    "TaskCompleted": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
+    }],
+    "ConfigChange": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
+    }],
+    "Elicitation": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
+    }],
+    "ElicitationResult": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
     }]
   }
 }
