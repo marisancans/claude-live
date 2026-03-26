@@ -417,17 +417,14 @@ async fn main() {
             }).expect("Failed to set Ctrl+C handler");
 
             while running.load(std::sync::atomic::Ordering::SeqCst) {
-                match store.poll_after(last_id) {
-                    Ok((new_events, max_id)) => {
-                        if max_id > last_id {
-                            last_id = max_id;
-                        }
-                        for event in new_events {
-                            let json_val = serde_json::to_value(&event).unwrap();
-                            events.push(json_val);
-                        }
+                if let Ok((new_events, max_id)) = store.poll_after(last_id) {
+                    if max_id > last_id {
+                        last_id = max_id;
                     }
-                    Err(_) => {}
+                    for event in new_events {
+                        let json_val = serde_json::to_value(&event).unwrap();
+                        events.push(json_val);
+                    }
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
