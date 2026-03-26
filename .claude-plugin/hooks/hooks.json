@@ -1,108 +1,101 @@
 {
-  "description": "claude-live hooks — forwards Claude Code events to the visualizer server",
+  "description": "claude-live hooks — forwards Claude Code events to the visualizer database",
   "hooks": {
     "SessionStart": [{
-      "hooks": [
-        {
-          "type": "command",
-          "command": "curl -sf http://localhost:43451/buffer >/dev/null 2>&1 || (npx claude-live@latest >/tmp/claude-live.log 2>&1 &)",
-          "async": true
-        },
-        {
-          "type": "command",
-          "command": "bin/send-hook.sh",
-          "async": true
-        }
-      ]
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
+        "async": true
+      }]
     }],
     "InstructionsLoaded": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "WorktreeCreate": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "WorktreeRemove": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "PreToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "PostToolUse": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "Notification": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "PermissionRequest": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "SubagentStart": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "SubagentStop": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "SessionEnd": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "PostToolUseFailure": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
@@ -110,7 +103,7 @@
       "match": { "trigger": ["manual", "auto"] },
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }],
@@ -118,7 +111,7 @@
       "match": { "trigger": ["manual", "auto"] },
       "hooks": [{
         "type": "command",
-        "command": "bin/send-hook.sh",
+        "command": "${CLAUDE_PLUGIN_ROOT}/bin/hook-wrapper.sh",
         "async": true
       }]
     }]
