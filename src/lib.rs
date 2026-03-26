@@ -7,3 +7,4 @@ pub mod websocket;
 pub mod storage;
 pub mod update;
 pub mod share;
+pub mod paths;
