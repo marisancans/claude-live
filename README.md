@@ -6,11 +6,7 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 
 <p align="center">
 
-<!-- TODO: Replace with actual recording -->
-<!-- Use: asciinema, vhs (https://github.com/charmbracelet/vhs), or screen recording -->
-<!-- Recommended: 80x24 terminal + browser side-by-side, ~30s showing a real coding session -->
-
-![claude-live demo](https://via.placeholder.com/800x450.png?text=Demo+GIF+--+see+CONTRIBUTING.md+for+recording+instructions)
+https://github.com/marisancans/claude-live/raw/main/claude-live-demo.mp4
 
 **[Install](#install)** | **[How It Works](#how-it-works)**
 
