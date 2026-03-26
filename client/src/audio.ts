@@ -2,10 +2,10 @@
 import { Howl } from 'howler'
 
 const CHORD_FILES = [
-  '/chords/chord_01.wav', '/chords/chord_02.wav', '/chords/chord_03.wav', '/chords/chord_04.wav',
-  '/chords/chord_05.wav', '/chords/chord_06.wav', '/chords/chord_07.wav', '/chords/chord_08.wav',
-  '/chords/chord_09.wav', '/chords/chord_10.wav', '/chords/chord_11.wav', '/chords/chord_12.wav',
-  '/chords/chord_13.wav', '/chords/chord_14.wav', '/chords/chord_15.wav', '/chords/chord_16.wav',
+  '/chords/chord_01.ogg', '/chords/chord_02.ogg', '/chords/chord_03.ogg', '/chords/chord_04.ogg',
+  '/chords/chord_05.ogg', '/chords/chord_06.ogg', '/chords/chord_07.ogg', '/chords/chord_08.ogg',
+  '/chords/chord_09.ogg', '/chords/chord_10.ogg', '/chords/chord_11.ogg', '/chords/chord_12.ogg',
+  '/chords/chord_13.ogg', '/chords/chord_14.ogg', '/chords/chord_15.ogg', '/chords/chord_16.ogg',
 ]
 
 let enabled = false
