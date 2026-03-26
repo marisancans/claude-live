@@ -1,8 +1,8 @@
 # claude-live
 
-### **[▶ Live Demo](https://marisancans.github.io/claude-live/)**
+### **[Live Demo](https://marisancans.github.io/claude-live/)**
 
-Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) activity. Watch your coding sessions come alive as an orbital solar system — files orbit as planets, tool calls fire as directional lasers, and parallel sessions glow as separate star systems.
+Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) activity. Watch your coding sessions come alive as an orbital solar system -- files orbit as planets, tool calls fire as directional lasers, and parallel sessions glow as separate star systems.
 
 <p align="center">
 
@@ -10,9 +10,9 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 <!-- Use: asciinema, vhs (https://github.com/charmbracelet/vhs), or screen recording -->
 <!-- Recommended: 80x24 terminal + browser side-by-side, ~30s showing a real coding session -->
 
-![claude-live demo](https://via.placeholder.com/800x450.png?text=Demo+GIF+—+see+CONTRIBUTING.md+for+recording+instructions)
+![claude-live demo](https://via.placeholder.com/800x450.png?text=Demo+GIF+--+see+CONTRIBUTING.md+for+recording+instructions)
 
-**[Install](#install)** · **[How It Works](#how-it-works)**
+**[Install](#install)** | **[How It Works](#how-it-works)**
 
 </p>
 
@@ -22,13 +22,13 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 
 Every time Claude Code reads a file, runs a command, or edits code, `claude-live` captures that event and renders it in real time:
 
-- **Sessions** appear as glowing star systems — each Claude Code session gets its own orbital cluster
+- **Sessions** appear as glowing star systems -- each Claude Code session gets its own orbital cluster
 - **Files** orbit their session's core as planets. The more a file is touched, the larger it grows
 - **Tool calls** fire as animated projectiles between the core and file nodes:
-  - `Read` / `Grep` / `Glob` → scanner animation at the file, then data packets stream back to core
-  - `Edit` / `Write` → ink beam fires from core to file
-  - `Bash` → mini terminal window appears at the target node
-  - `WebFetch` → wave pulse radiates outward
+  - `Read` / `Grep` / `Glob` -- scanner animation at the file, then data packets stream back to core
+  - `Edit` / `Write` -- ink beam fires from core to file
+  - `Bash` -- mini terminal window appears at the target node
+  - `WebFetch` -- wave pulse radiates outward
 - **Prompts** fly in from outside the viewport toward the session core
 - **Responses** stream outward from the core and fly off-screen
 - **Compaction** triggers a gravitational collapse (implosion) followed by a rebirth explosion
@@ -38,7 +38,7 @@ Multiple Claude Code sessions (even across different projects) appear as separat
 
 ## Live Demo
 
-A simulated demo runs on GitHub Pages with synthetic events — no server needed:
+A simulated demo runs on GitHub Pages with synthetic events -- no server needed:
 
 **https://marisancans.github.io/claude-live/**
 
@@ -50,7 +50,7 @@ A simulated demo runs on GitHub Pages with synthetic events — no server needed
 claude plugin marketplace add marisancans/claude-live
 ```
 
-Hooks are configured automatically. Open `http://localhost:43451` during a Claude Code session.
+Hooks are configured automatically. All events are recorded to a local SQLite database. Run `claude-live start` whenever you want to view the visualization.
 
 ### Homebrew (macOS / Linux)
 
@@ -73,13 +73,11 @@ curl -sSfL https://github.com/marisancans/claude-live/releases/latest/download/i
 ## Quick Start
 
 ```bash
-# 1. Start the visualization server
-claude-live start
-
-# 2. Use Claude Code normally — events flow automatically
+# 1. Use Claude Code normally -- events are recorded automatically via hooks
 claude "refactor the auth module"
 
-# 3. Open http://localhost:43451 in your browser
+# 2. Open the visualization whenever you want
+claude-live start
 ```
 
 That's it. If you installed via the plugin marketplace, hooks are already wired. Otherwise, see [Manual Hook Setup](#manual-hook-setup).
@@ -87,29 +85,42 @@ That's it. If you installed via the plugin marketplace, hooks are already wired.
 ## How It Works
 
 ```
-┌──────────────┐     POST /hook      ┌──────────────┐    WebSocket     ┌──────────────┐
-│  Claude Code  │ ──────────────────▶ │  claude-live  │ ──────────────▶ │   Browser     │
-│  (hooks)      │   JSON events       │  (Rust server)│   real-time     │  (PixiJS v8)  │
-└──────────────┘                      └──────────────┘                  └──────────────┘
+                                    SQLite DB
+                                 (~/.local/share/
+                                  claude-live/events.db)
+
+Claude Code hooks ──► hook-wrapper.sh ──► claude-live hook ──► [SQLite write]
+                       (detects OS/arch,                         │
+                        execs binary)                            │ polls every 100ms
+                                                                 ▼
+                                              claude-live start ──► Browser (PixiJS v8)
+                                              (reads DB, serves     via WebSocket
+                                               frontend from disk)
 ```
 
-1. **Claude Code hooks** fire on every tool use, sending a JSON payload to the local server
-2. **Rust server** (axum + tokio) normalizes events, manages session state, and fans out to WebSocket clients
-3. **Browser** (React + PixiJS v8) renders the orbital visualization with GPU-accelerated animations
+1. **Claude Code hooks** fire on every tool use. The hook wrapper script detects your platform and execs the right binary
+2. **`claude-live hook`** reads the JSON event from stdin, normalizes it, and writes it to a local SQLite database. No server needed -- this runs in ~5ms and exits
+3. **`claude-live start`** (run whenever you want to look) starts a local server that polls the database for new events and pushes them to the browser via WebSocket
+4. **Browser** (React + PixiJS v8) renders the orbital visualization with GPU-accelerated animations
 
-The entire server is a single static binary (~25MB) with the frontend embedded. No Node.js, no npm, no runtime dependencies.
+### Key design decisions
+
+- **No server required for event collection** -- hooks write directly to SQLite via the binary. Events accumulate whether or not you're watching
+- **Single binary per platform** (~5MB) + shared frontend assets (~25MB). No Node.js, no npm, no curl, no runtime dependencies
+- **Cross-platform** -- Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64)
+- **SQLite WAL mode** enables concurrent writes from hooks and reads from the server without locking
 
 ## Usage
 
 ```bash
-# Start with defaults (port 43451, localhost only)
+# Start the visualization (opens browser)
 claude-live start
 
-# Custom port + LAN access
-claude-live start --port 8080 --bind 0.0.0.0
+# Stop the server
+claude-live stop
 
-# Require authentication
-claude-live start --token mysecret
+# Check server status and database stats
+claude-live status
 
 # Share with teammates via Cloudflare tunnel
 claude-live share
@@ -119,28 +130,17 @@ claude-live share
 
 | Command | Description |
 |---------|-------------|
-| `start` | Start server (foreground) |
+| `start [--static-dir PATH]` | Start visualization server, open browser |
 | `stop` | Stop running server |
-| `status` | Show server status |
-| `sessions` | List active sessions |
-| `health` | Detailed diagnostics |
-| `reset` | Clear all session buffers |
-| `inject <file>` | Feed test events from JSON file |
-| `record -o <file>` | Record events to SQLite file |
-| `replay <file>` | Replay recorded events |
+| `status` | Show server status + database stats |
+| `stats` | Print database statistics as JSON |
+| `hook [--db PATH]` | Receive event from stdin, write to database |
+| `inject <file> [--db PATH]` | Feed test events from JSON file into database |
+| `record -o <file> [--db PATH]` | Record live events to JSON file |
+| `replay <file> [--speed N] [--db PATH]` | Replay recorded events into database |
 | `update` | Self-update from GitHub releases |
 | `share` | Share via Cloudflare tunnel |
 | `version` | Show version info |
-
-### Start Options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--port` | `43451` | Server port |
-| `--bind` | `127.0.0.1` | Bind address (`0.0.0.0` for LAN) |
-| `--token` | — | Require auth token |
-| `--buffer-size` | `50` | Events per session buffer |
-| `--session-timeout` | `660` | Session timeout (seconds) |
 
 ## Manual Hook Setup
 
@@ -149,20 +149,23 @@ If not using the plugin marketplace, add to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "PreToolUse":        [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "PostToolUse":       [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "Stop":              [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "Notification":      [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "UserPromptSubmit":  [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "PreCompact":        [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "PostCompact":       [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "SessionStart":      [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "SubagentStart":     [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "SubagentStop":      [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}],
-    "PermissionRequest": [{"hooks":[{"type":"command","command":"curl -sf -X POST http://localhost:43451/hook -H 'Content-Type: application/json' -d @- 2>/dev/null || true","async":true}]}]
+    "PreToolUse":        [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "PostToolUse":       [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "Stop":              [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "Notification":      [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "UserPromptSubmit":  [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "SessionStart":      [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "SessionEnd":        [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "SubagentStart":     [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "SubagentStop":      [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "PermissionRequest": [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "PreCompact":        [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}],
+    "PostCompact":       [{"hooks":[{"type":"command","command":"/path/to/claude-live hook","async":true}]}]
   }
 }
 ```
+
+Replace `/path/to/claude-live` with the actual binary path for your platform.
 
 ## Visualization Guide
 
@@ -171,22 +174,20 @@ If not using the plugin marketplace, add to `~/.claude/settings.json`:
 | Orbiting circle | File node (Read/Edit/Write/Grep/Glob target) |
 | Spinning dashed ring | Agent / subagent node |
 | Diamond shape | Ephemeral node (Bash, WebFetch, Stop, Notification) |
-| Green scanner → core | Read / Grep / Glob (data flowing in) |
-| Blue ink beam → node | Edit / Write (changes flowing out) |
+| Green scanner to core | Read / Grep / Glob (data flowing in) |
+| Blue ink beam to node | Edit / Write (changes flowing out) |
 | Orange terminal | Bash command executing |
 | Amber core ring | Session awaiting permission / user input |
-| Tether line | Parent → child session link |
-| Implosion + explosion | Context compaction (PreCompact → PostCompact) |
+| Tether line | Parent to child session link |
+| Implosion + explosion | Context compaction (PreCompact to PostCompact) |
 | Words flying inward | User prompt submitted |
 | Words flying outward | Agent response |
 
 ## Remote Access
 
 ```bash
-# LAN — other machines on your network can watch
-claude-live start --bind 0.0.0.0 --token myteamtoken
-
-# Internet — share via Cloudflare tunnel (requires cloudflared)
+# Share via Cloudflare tunnel (requires cloudflared + server running)
+claude-live start
 claude-live share
 ```
 
@@ -199,11 +200,11 @@ cd claude-live
 # Install frontend deps
 cd client && npm install && cd ..
 
-# Run Rust server (serves embedded frontend from client/dist/)
+# Run Rust server (serves frontend from client/dist/)
 cargo run -- start
 
 # Frontend hot-reload dev mode
-cd client && npm run dev    # Vite on :7979, proxies to :43451
+cd client && npm run dev    # Vite on :5173, proxies to :43451
 ```
 
 ### Architecture
@@ -211,44 +212,49 @@ cd client && npm run dev    # Vite on :7979, proxies to :43451
 ```
 ├── src/                    # Rust backend
 │   ├── main.rs             # CLI (clap) + entry point
-│   ├── server.rs           # Axum HTTP/WS router
-│   ├── websocket.rs        # WebSocket handler
-│   ├── hook.rs             # POST /hook event ingestion
-│   ├── normalize.rs        # Raw → normalized event
-│   ├── snapshot.rs         # Session snapshot for new clients
-│   ├── session.rs          # Session manager + rolling buffers
+│   ├── server.rs           # Axum router, ServeDir, DB polling, /api/stats
+│   ├── websocket.rs        # WebSocket handler + heartbeat
+│   ├── hook.rs             # POST /hook (also writes to SQLite)
+│   ├── normalize.rs        # Raw event to normalized event
+│   ├── storage.rs          # SQLite WAL, polling, snapshots, stats
+│   ├── paths.rs            # Cross-platform data dir, pidfile utilities
 │   ├── broadcast.rs        # WebSocket fan-out
-│   ├── storage.rs          # SQLite record/replay
-│   ├── update.rs           # Self-update from GitHub
+│   ├── update.rs           # Self-update from GitHub releases
 │   └── share.rs            # Cloudflare tunnel
 ├── client/src/             # Frontend (React + PixiJS v8)
 │   ├── App.tsx             # React root, WebSocket, HUD
+│   ├── StatsDialog.tsx     # Database stats dialog
 │   ├── store.ts            # State management (FIFO node eviction)
 │   ├── canvas-pixi/        # PixiJS rendering
 │   │   ├── PixiApp.ts      # Application bootstrap
-│   │   ├── PixiScene.tsx   # React ↔ PixiJS bridge
+│   │   ├── PixiScene.tsx   # React <> PixiJS bridge
 │   │   ├── layers/         # World, Edge, Background layers
 │   │   ├── objects/        # Cluster, Node visual objects
 │   │   ├── effects/        # Projectiles, snakes, compaction FX
 │   │   ├── animation/      # Camera controller, animation manager
 │   │   └── shaders/        # Custom GPU shaders
 │   ├── events/             # EventBus + EventProcessor
-│   ├── simulation/         # Orbital physics
 │   └── constants.ts        # Single source of truth for radii/capacities
+├── bin/
+│   └── hook-wrapper.sh     # POSIX sh: detects OS/arch, execs right binary
+├── .claude-plugin/         # Plugin marketplace config + hook definitions
 └── tests/                  # Rust integration + unit tests
 ```
 
 ### Testing
 
 ```bash
-# Rust tests (32 tests)
+# Rust tests
 cargo test
 
 # Frontend typecheck
 cd client && npx tsc --noEmit
 
-# Inject test events
+# Feed test events directly to database
 claude-live inject test-events.json
+
+# Or pipe a single event
+echo '{"session_id":"test","hook_event_name":"PreToolUse","tool_name":"Read"}' | claude-live hook
 ```
 
 ## Updating
