@@ -1,23 +1,24 @@
 # claude-live
 
-Real-time Claude Code activity visualizer. Single Rust binary with embedded frontend.
+Real-time Claude Code activity visualizer. Single Rust binary serving frontend from disk, backed by SQLite.
 
 ## Architecture
 
-- **Backend:** Rust (axum + tokio), serves WebSocket API + embedded static frontend
+- **Backend:** Rust (axum + tokio), serves WebSocket API + static frontend from disk
+- **Storage:** SQLite (WAL mode) at `~/.local/share/claude-live/events.db`
 - **Frontend:** React 18 + PixiJS v8 (TypeScript, Vite)
-- **Transport:** WebSocket at `/ws`, hook ingestion at `POST /hook`
+- **Transport:** WebSocket at `/ws`, hook ingestion via CLI stdin or `POST /hook`
 - **CLI:** clap-based with subcommands for server lifecycle, debugging, and management
 
 ## Dev Workflow
 
 ```bash
-# Run Rust server (serves embedded frontend)
+# Run Rust server (serves client/dist/ from disk)
 cargo run -- start
 
 # Frontend dev with hot reload
 cd client && npm run dev   # Vite on :5173
-cargo run -- start         # Server on :43451
+cargo run -- start         # Server on :43451 (hardcoded)
 
 # Run all tests
 cargo test
@@ -30,12 +31,12 @@ cd client && npx tsc --noEmit
 
 ### Rust Backend (`src/`)
 - `main.rs` — CLI entry, subcommand dispatch
-- `server.rs` — Axum router, static file serving
+- `server.rs` — Axum router, ServeDir for frontend, DB polling, /api/stats
 - `websocket.rs` — WebSocket upgrade, per-client message loop
-- `hook.rs` — POST /hook handler
+- `hook.rs` — POST /hook handler, also writes to SQLite
 - `normalize.rs` — Event normalization (RawEvent → NormalizedEvent)
-- `snapshot.rs` — Session snapshot computation for new WS clients
-- `session.rs` — SessionManager with rolling buffers
+- `storage.rs` — SQLite WAL mode, polling, snapshot loading, stats queries
+- `paths.rs` — Cross-platform data dir, DB path, pidfile utilities
 - `broadcast.rs` — Fan-out events to WS clients
 
 ### Frontend (`client/src/`)
@@ -47,14 +48,16 @@ cd client && npx tsc --noEmit
 
 ## Conventions
 
-- Server port: 43451 (default)
-- Event buffer: 50 events per session, 11min timeout
-- Frontend builds to `client/dist/`, embedded into Rust binary via `rust-embed`
-- All hook events POST to `/hook` as JSON, normalized server-side
-- WebSocket messages are JSON with `type` field: `event`, `snapshot`, `heartbeat`, `version_available`
+- Database: ~/.local/share/claude-live/events.db (SQLite, WAL mode)
+- Server port: 43451 (hardcoded, started on-demand via `claude-live start`)
+- Event buffer: 50 events per session loaded as snapshot on server start
+- Frontend in `client/dist/`, served from disk via tower-http ServeDir
+- Hook events received via binary stdin (`claude-live hook`), written to SQLite
+- POST /hook endpoint kept for backwards compat and remote/LAN use
+- WebSocket messages are JSON with `type` field: `event`, `heartbeat`, `version_available`
 
 ## Testing
 
 - Rust: `cargo test` (unit + integration tests in `tests/`)
 - Frontend: `cd client && npx tsc --noEmit` (typecheck only, no unit tests)
-- Manual: `claude-live inject <file.json>` to feed test events
+- Manual: `claude-live hook --db test.db` to feed test events directly to SQLite
