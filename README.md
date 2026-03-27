@@ -8,18 +8,41 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 
 ## Install
 
+### Via Claude plugin marketplace (recommended)
+
 ```bash
 claude plugin marketplace add marisancans/claude-live
 ```
 
-That's it. Events stream automatically in the background as you work.
+Hooks are configured automatically. Events stream in the background as you work.
+
+### Via npm (manual setup)
+
+```bash
+npm install -g claude-live
+```
+
+Then add hooks to your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/hook.js", "async": true }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/hook.js", "async": true }] }]
+  }
+}
+```
+
+Replace `/path/to/hook.js` with the result of `npm root -g`/`claude-live/bin/hook.js`.
 
 ## Use
 
 ```bash
-# View the visualization whenever you want
-claude-live start
+claude-live          # Start server (foreground)
+claude-live start    # Start server (detached)
 ```
+
+Then open http://localhost:43451 in your browser.
 
 ## How It Works
 
