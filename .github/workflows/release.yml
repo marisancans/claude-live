@@ -230,9 +230,9 @@ jobs:
             mkdir -p "$PKG_DIR/client/"
             cp -r artifacts/frontend-dist/ "$PKG_DIR/client/dist/"
 
-            # Publish
+            # Publish (ignore "already published" errors for retries)
             cd "$PKG_DIR"
-            npm publish --access public
+            npm publish --access public || echo "Warning: failed to publish ${NPM_DIR}, may already exist"
             cd ../..
           done
 
