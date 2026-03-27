@@ -173,3 +173,80 @@ jobs:
       - run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-npm:
+    needs: [build-frontend, build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Set version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Prepare and publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+
+          # Map: npm-dir -> artifact-name
+          declare -A PLATFORM_MAP
+          PLATFORM_MAP["claude-live-linux-x64"]="claude-live-linux-x86_64"
+          PLATFORM_MAP["claude-live-linux-arm64"]="claude-live-linux-aarch64"
+          PLATFORM_MAP["claude-live-darwin-x64"]="claude-live-macos-x86_64"
+          PLATFORM_MAP["claude-live-darwin-arm64"]="claude-live-macos-aarch64"
+          PLATFORM_MAP["claude-live-win32-x64"]="claude-live-windows-x86_64"
+
+          for NPM_DIR in "${!PLATFORM_MAP[@]}"; do
+            ARTIFACT="${PLATFORM_MAP[$NPM_DIR]}"
+            PKG_DIR="npm/${NPM_DIR}"
+
+            echo "=== Publishing @claude-live/${NPM_DIR#claude-live-} ==="
+
+            # Update version
+            cd "$PKG_DIR"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            cd ../..
+
+            # Create bin/ directory and extract binary
+            mkdir -p "$PKG_DIR/bin"
+            if [[ "$NPM_DIR" == *"win32"* ]]; then
+              cd "artifacts/${ARTIFACT}"
+              7z x "${ARTIFACT}.zip"
+              mv claude-live.exe "../../${PKG_DIR}/bin/claude-live.exe"
+              cd ../..
+            else
+              tar xzf "artifacts/${ARTIFACT}/${ARTIFACT}.tar.gz" -C "$PKG_DIR/bin/"
+            fi
+
+            # Copy frontend dist
+            cp -r artifacts/frontend-dist/ "$PKG_DIR/client/dist/"
+
+            # Publish
+            cd "$PKG_DIR"
+            npm publish --access public
+            cd ../..
+          done
+
+      - name: Publish main wrapper package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/claude-live
+          # Update version and optionalDependencies versions
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node -e "
+            const pkg = require('./package.json');
+            for (const dep of Object.keys(pkg.optionalDependencies)) {
+              pkg.optionalDependencies[dep] = '$VERSION';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          npm publish --access public
