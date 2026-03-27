@@ -1,0 +1,13 @@
+{
+  "name": "@claude-live/win32-x64",
+  "version": "1.0.0",
+  "description": "claude-live binary for Windows x64",
+  "license": "MIT",
+  "repository": "https://github.com/marisancans/claude-live",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": [
+    "bin/",
+    "client/dist/"
+  ]
+}
