@@ -1,8 +1,0 @@
-.claude
-client/src
-client/node_modules
-client/vite.config.ts
-client/tsconfig*.json
-client/index.html
-.superpowers
-docs
