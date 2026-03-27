@@ -30,9 +30,7 @@ cd client && npx tsc --noEmit
 - `index.js` — HTTP server: POST /hook, GET /events (SSE), static files
 
 ### Hook (`bin/`)
-- `hook.js` — Reads stdin JSON, POSTs to localhost:43451/hook
-- `hook-wrapper.sh` — Shell wrapper for plugin hooks
-- `hook-wrapper.bat` — Windows wrapper for plugin hooks
+- `hook.js` — Reads stdin JSON, POSTs to localhost:43451/hook (called directly by plugin hooks via `node`)
 - `cli.js` — CLI entry point (starts server)
 
 ### Frontend (`client/src/`)
