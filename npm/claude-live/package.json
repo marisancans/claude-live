@@ -17,6 +17,7 @@
     "@claude-live/darwin-arm64": "1.0.0",
     "@claude-live/win32-x64": "1.0.0"
   },
+  "type": "module",
   "engines": {
     "node": ">=18"
   }
