@@ -1,30 +1,29 @@
 /**
- * Demo mode: when no real WebSocket server is available (e.g. GitHub Pages),
+ * Demo mode: when no real server is available (e.g. GitHub Pages),
  * simulate realistic Claude Code events to showcase the visualization.
  */
 
 const TOOLS = ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'WebFetch'] as const
 const FILES = [
-  'src/main.rs', 'src/server.rs', 'src/websocket.rs', 'src/hook.rs',
-  'src/normalize.rs', 'src/session.rs', 'src/broadcast.rs', 'src/lib.rs',
+  'server/index.js', 'bin/hook.js', 'bin/cli.js', 'bin/hook-wrapper.sh',
   'client/src/App.tsx', 'client/src/store.ts', 'client/src/types.ts',
   'client/src/canvas-pixi/PixiApp.ts', 'client/src/canvas-pixi/PixiScene.tsx',
   'client/src/canvas-pixi/layers/WorldLayer.ts', 'client/src/events/EventBus.ts',
-  'Cargo.toml', 'package.json', 'README.md', 'CLAUDE.md', 'vite.config.ts',
+  'package.json', 'README.md', 'CLAUDE.md', 'client/vite.config.ts',
 ]
 const BASH_COMMANDS = [
-  'cargo test', 'cargo build --release', 'npm run dev', 'git status',
-  'npx tsc --noEmit', 'grep -r TODO src/', 'ls -la target/', 'cat .gitignore',
+  'npm test', 'npm run build', 'npm run dev', 'git status',
+  'npx tsc --noEmit', 'grep -r TODO client/src/', 'ls -la node_modules/', 'cat .gitignore',
 ]
 const URLS = [
-  'https://docs.rs/axum/latest', 'https://api.github.com/repos', 'https://crates.io/api/v1',
+  'https://nodejs.org/api/http.html', 'https://api.github.com/repos', 'https://www.npmjs.com/package/claude-live',
 ]
 const PROMPTS = [
   'refactor the auth module to use JWT tokens',
-  'add error handling to the WebSocket handler',
-  'fix the failing test in normalize_test.rs',
-  'implement the self-update mechanism',
-  'write unit tests for the broadcast module',
+  'add error handling to the SSE endpoint',
+  'fix the failing typecheck in App.tsx',
+  'implement the event filtering feature',
+  'write tests for the hook handler',
 ]
 
 let eventId = 0
@@ -107,7 +106,7 @@ export function createDemoSimulator(onEvent: (data: any) => void) {
         response = { numMatches: Math.floor(Math.random() * 20) }
         break
       case 'Glob':
-        input = { pattern: pick(['**/*.rs', '**/*.ts', '**/*.tsx']), path: '.' }
+        input = { pattern: pick(['**/*.js', '**/*.ts', '**/*.tsx']), path: '.' }
         response = { files: FILES.slice(0, Math.floor(Math.random() * 10)) }
         break
       case 'WebFetch':

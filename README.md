@@ -12,7 +12,7 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 claude plugin marketplace add marisancans/claude-live
 ```
 
-That's it. Events are recorded automatically in the background as you work.
+That's it. Events stream automatically in the background as you work.
 
 ## Use
 
@@ -32,16 +32,14 @@ Sessions appear as star systems. Files orbit as planets -- the more a file is to
 
 Multiple Claude sessions show as separate star systems. Prompts fly inward, responses fly outward. Context compaction triggers an implosion/rebirth effect.
 
-Under the hood: the plugin writes every event to a local SQLite database (~5ms per write, no server needed). When you run `claude-live start`, a lightweight Rust server polls the database and streams events to a PixiJS frontend via WebSocket.
+Under the hood: the plugin sends every event to a lightweight Node.js server (pure passthrough, no persistence). The server broadcasts events to a PixiJS frontend via Server-Sent Events (SSE).
 
 ## CLI
 
 ```bash
 claude-live start       # Open visualization in browser
 claude-live stop        # Stop the server
-claude-live status      # Show server + database stats
-claude-live share       # Share via Cloudflare tunnel
-claude-live update      # Self-update
+claude-live status      # Show server status
 ```
 
 ## Development
@@ -49,11 +47,11 @@ claude-live update      # Self-update
 ```bash
 git clone https://github.com/marisancans/claude-live.git
 cd claude-live
-cd client && npm install && cd ..
+npm install
 
-cargo run -- start              # Rust server on :43451
-cd client && npm run dev        # Vite hot-reload on :5173
-cargo test                      # Run tests
+node server/index.js            # Node.js server on :43451
+cd client && npm run dev        # Vite hot-reload on :7979
+cd client && npx tsc --noEmit   # Type check frontend
 ```
 
 ## License
