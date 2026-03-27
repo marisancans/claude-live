@@ -1,5 +1,6 @@
 {
   "name": "claude-live",
+  "private": true,
   "version": "1.0.0",
   "description": "Realtime Claude Code activity visualizer",
   "scripts": {
