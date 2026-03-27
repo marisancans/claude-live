@@ -1,6 +1,6 @@
 import { createServer } from 'http'
 import { readFileSync, existsSync, statSync } from 'fs'
-import { join, extname } from 'path'
+import { join, extname, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
@@ -69,7 +69,11 @@ const server = createServer((req, res) => {
   }
 
   // Static files
-  let filePath = join(DIST, req.url === '/' ? 'index.html' : req.url)
+  const urlPath = new URL(req.url, 'http://localhost').pathname
+  let filePath = join(DIST, urlPath === '/' ? 'index.html' : urlPath)
+  if (!resolve(filePath).startsWith(resolve(DIST) + sep) && resolve(filePath) !== resolve(DIST)) {
+    filePath = join(DIST, 'index.html')
+  }
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     filePath = join(DIST, 'index.html') // SPA fallback
   }
