@@ -10,9 +10,22 @@ Real-time Claude Code activity visualizer. Zero-dependency Node.js server servin
 - **Transport:** SSE at `/events`, hook ingestion via `POST /hook`
 - **CLI:** `bin/cli.js` — starts the server
 
+## Branch Strategy
+
+- **`main`** — production branch. CI auto-builds and commits `client/dist/` on every push. Plugin users install from here.
+- **`dev`** — integration branch. All feature branches merge here first.
+- **feature branches** — new features always start from `dev` as a new branch, PR back to `dev`.
+- Never commit `client/dist/` manually — CI handles it on `main`.
+
+Flow: `feature/xyz` → PR → `dev` → PR → `main` → CI builds dist → plugin users get it.
+
 ## Dev Workflow
 
 ```bash
+# Start a new feature
+git checkout dev && git pull
+git checkout -b feature/my-feature
+
 # Run server
 node server/index.js
 
