@@ -227,6 +227,7 @@ jobs:
             fi
 
             # Copy frontend dist
+            mkdir -p "$PKG_DIR/client/"
             cp -r artifacts/frontend-dist/ "$PKG_DIR/client/dist/"
 
             # Publish
