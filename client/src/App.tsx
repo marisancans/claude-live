@@ -9,7 +9,6 @@ import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
 import { EventLog } from './EventLog'
 import { isDemoMode, createDemoSimulator } from './demo'
-import { StatsDialog } from './StatsDialog'
 
 const store = createStore()
 
@@ -183,7 +182,6 @@ export function App() {
     const saved = localStorage.getItem('claude-live-audio-enabled')
     return saved === 'true'
   })
-  const [showStats, setShowStats] = useState(false)
   const [autofitEnabled, setAutofitEnabledState] = useState(() => {
     // Load from localStorage
     const saved = localStorage.getItem('claude-live-autofit-enabled')
@@ -248,38 +246,26 @@ export function App() {
       return () => stopDemo()
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws`
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let reconnectDelay = 1000
+    const eventsUrl = '/events'
+    let es: EventSource | null = null
     let cancelled = false
 
     function connect() {
       if (cancelled) return
-      ws = new WebSocket(wsUrl)
+      es = new EventSource(eventsUrl)
 
-      ws.onopen = () => {
-        console.log('[claude-live] WebSocket connected')
+      es.onopen = () => {
+        console.log('[claude-live] SSE connected')
         setWsStatus('connected')
-        reconnectDelay = 1000 // reset on successful connect
       }
 
-      ws.onmessage = (e) => {
+      es.onmessage = (e) => {
         try {
           const parsed = JSON.parse(e.data)
-
-          if (parsed.type === 'heartbeat') return
-
-          if (parsed.type === 'version_available') {
-            console.log('[claude-live] Update available:', parsed.version)
-            return
-          }
 
           if (parsed.type === 'event') {
             const event: RawEvent = parsed.data
             if ((event.hook_event_name as string) === 'Diagnostic') return
-            const prevSize = store.getSessions().size
             store.addEvent(event)
             const sessions = store.getSessions()
             setClusters(new Map(sessions))
@@ -287,7 +273,6 @@ export function App() {
             setEventCount(c => c + 1)
             playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
 
-            // Live event log (same logic as before)
             const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
             const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
 
@@ -312,7 +297,6 @@ export function App() {
               })
             }
 
-            // Permission notifications
             if (event.hook_event_name === 'Notification' || event.hook_event_name === 'PermissionRequest') {
               const cluster = sessions.get(event.session_id)
               const msg = (event.tool_input as Record<string, string> | null)?.message ?? 'awaiting input'
@@ -339,20 +323,9 @@ export function App() {
         } catch { /* ignore malformed */ }
       }
 
-      ws.onclose = () => {
-        console.warn('[claude-live] WebSocket closed, reconnecting in', reconnectDelay, 'ms')
+      es.onerror = () => {
+        console.warn('[claude-live] SSE error, reconnecting...')
         setWsStatus('disconnected')
-        reconnectTimer = setTimeout(() => {
-          reconnectDelay = Math.min(reconnectDelay * 2, 30000)
-          setWsStatus('connecting')
-          connect()
-        }, reconnectDelay)
-      }
-
-      ws.onerror = (err) => {
-        console.warn('[claude-live] WebSocket error', err)
-        setWsStatus('error')
-        ws?.close()
       }
     }
 
@@ -360,8 +333,7 @@ export function App() {
 
     return () => {
       cancelled = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
+      es?.close()
     }
   }, [])
 
@@ -389,7 +361,7 @@ export function App() {
       <div className="hud">
         <div className="hud-title">claude<span>live</span></div>
         <div className="hud-stat">
-          <span className="hud-label">ws</span>
+          <span className="hud-label">sse</span>
           <span className="hud-value" style={{ color: wsStatus === 'connected' ? '#4ade80' : wsStatus === 'error' ? '#f87171' : '#fbbf24' }}>
             {wsStatus}
           </span>
@@ -444,15 +416,6 @@ export function App() {
         >
           ⚙
         </button>
-        <button
-          onClick={() => setShowStats(true)}
-          title="Database stats"
-          style={{
-            background: 'none', border: 'none', color: '#888',
-            cursor: 'pointer', fontSize: 11, fontFamily: 'monospace',
-            padding: '2px 6px',
-          }}
-        >DB</button>
       </div>
 
       {/* Permission notifications */}
@@ -489,8 +452,6 @@ export function App() {
 
       <DebugPanel sessionIds={[...clusters.keys()]} isOpen={debugOpen} onClose={() => setDebugOpen(false)} />
       <OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />
-      {showStats && <StatsDialog onClose={() => setShowStats(false)} />}
-
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>
         <div className="sidebar-header">

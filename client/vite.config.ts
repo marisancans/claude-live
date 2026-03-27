@@ -32,10 +32,8 @@ export default defineConfig({
       interval: 100,
     },
     proxy: {
-      '/ws': { target: `ws://localhost:${backendPort}`, ws: true },
+      '/events': `http://localhost:${backendPort}`,
       '/hook': `http://localhost:${backendPort}`,
-      '/api': `http://localhost:${backendPort}`,
-      '/buffer': `http://localhost:${backendPort}`,
     }
   },
   build: {
