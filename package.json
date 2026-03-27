@@ -1,17 +1,31 @@
 {
   "name": "claude-live",
-  "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Realtime Claude Code activity visualizer",
+  "license": "MIT",
+  "repository": "https://github.com/marisancans/claude-live",
+  "type": "module",
+  "bin": {
+    "claude-live": "bin/cli.js"
+  },
   "scripts": {
+    "start": "node server/index.js",
     "dev": "cd client && vite dev",
     "build": "cd client && vite build",
-    "test": "vitest run"
+    "test": "cd client && npx tsc --noEmit"
   },
-  "dependencies": {
-    "howler": "^2.2.4"
+  "files": [
+    "server/",
+    "bin/",
+    "client/dist/",
+    ".claude-plugin/",
+    "commands/"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "devDependencies": {
+    "howler": "^2.2.4",
     "@types/howler": "^2.2.12",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
@@ -21,11 +35,6 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "typescript": "^5.3.0",
-    "vite": "^5.1.0",
-    "vitest": "^1.3.0"
-  },
-  "type": "module",
-  "engines": {
-    "node": ">=18"
+    "vite": "^5.1.0"
   }
 }
