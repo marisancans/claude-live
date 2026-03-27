@@ -10,140 +10,40 @@ permissions:
   id-token: write
 
 jobs:
-  build-frontend:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
       - run: npm ci && cd client && npx vite build
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
+          name: dist
           path: client/dist/
 
-  build-binaries:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            artifact: claude-live-linux-x86_64
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-latest
-            artifact: claude-live-linux-aarch64
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact: claude-live-macos-x86_64
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact: claude-live-macos-aarch64
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact: claude-live-windows-x86_64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - name: Install cross (Linux)
-        if: contains(matrix.target, 'linux')
-        run: cargo install cross
-      - name: Build (Linux cross)
-        if: contains(matrix.target, 'linux')
-        run: cross build --release --target ${{ matrix.target }}
-      - name: Build (native)
-        if: "!contains(matrix.target, 'linux')"
-        run: cargo build --release --target ${{ matrix.target }}
-      - name: Package (Unix)
-        if: "!contains(matrix.os, 'windows')"
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.artifact }}.tar.gz claude-live
-          cd ../../..
-          sha256sum ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
-      - name: Package (Windows)
-        if: contains(matrix.os, 'windows')
-        run: |
-          cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.artifact }}.zip claude-live.exe
-          cd ../../..
-          certutil -hashfile ${{ matrix.artifact }}.zip SHA256 > ${{ matrix.artifact }}.zip.sha256
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            ${{ matrix.artifact }}.*
+      - name: Set version from tag
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
-    needs: [build-frontend, build-binaries]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-      - name: Build plugin archive
-        run: |
-          mkdir -p plugin-staging/bin
-          mkdir -p plugin-staging/client
-          mkdir -p plugin-staging/.claude-plugin/hooks
-
-          # Extract each binary from its per-platform archive into bin/
-          cd artifacts/claude-live-linux-x86_64
-          tar xzf claude-live-linux-x86_64.tar.gz
-          mv claude-live ../../plugin-staging/bin/claude-live-linux-x86_64
-          cd ../..
-
-          cd artifacts/claude-live-linux-aarch64
-          tar xzf claude-live-linux-aarch64.tar.gz
-          mv claude-live ../../plugin-staging/bin/claude-live-linux-aarch64
-          cd ../..
-
-          cd artifacts/claude-live-macos-x86_64
-          tar xzf claude-live-macos-x86_64.tar.gz
-          mv claude-live ../../plugin-staging/bin/claude-live-macos-x86_64
-          cd ../..
-
-          cd artifacts/claude-live-macos-aarch64
-          tar xzf claude-live-macos-aarch64.tar.gz
-          mv claude-live ../../plugin-staging/bin/claude-live-macos-aarch64
-          cd ../..
-
-          cd artifacts/claude-live-windows-x86_64
-          7z x claude-live-windows-x86_64.zip
-          mv claude-live.exe ../../plugin-staging/bin/claude-live-windows-x86_64.exe
-          cd ../..
-
-          # Copy hook wrapper script
-          cp bin/hook-wrapper.sh plugin-staging/bin/hook-wrapper.sh
-
-          # Copy frontend dist
-          cp -r artifacts/frontend-dist/ plugin-staging/client/dist/
-
-          # Copy plugin metadata
-          cp .claude-plugin/plugin.json plugin-staging/.claude-plugin/plugin.json
-          cp .claude-plugin/marketplace.json plugin-staging/.claude-plugin/marketplace.json
-          cp .claude-plugin/hooks/hooks.json plugin-staging/.claude-plugin/hooks/hooks.json
-
-          # Create the plugin archive
-          cd plugin-staging
-          tar czf ../claude-live-plugin.tar.gz bin/ client/ .claude-plugin/
-          cd ..
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.zip
-            artifacts/**/*.sha256
-            claude-live-plugin.tar.gz
           generate_release_notes: true
 
   deploy-demo:
-    needs: build-frontend
+    needs: build
     runs-on: ubuntu-latest
     concurrency:
       group: pages
@@ -156,98 +56,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install and build for GitHub Pages
-        run: npm ci && cd client && npx vite build --base /claude-live/
+      - run: npm ci && cd client && npx vite build --base /claude-live/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: client/dist/
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-  publish-crate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-  publish-npm:
-    needs: [build-frontend, build-binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-
-      - name: Set version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-
-      - name: Prepare and publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -e
-
-          # Map: npm-dir -> artifact-name
-          declare -A PLATFORM_MAP
-          PLATFORM_MAP["claude-live-linux-x64"]="claude-live-linux-x86_64"
-          PLATFORM_MAP["claude-live-linux-arm64"]="claude-live-linux-aarch64"
-          PLATFORM_MAP["claude-live-darwin-x64"]="claude-live-macos-x86_64"
-          PLATFORM_MAP["claude-live-darwin-arm64"]="claude-live-macos-aarch64"
-          PLATFORM_MAP["claude-live-win32-x64"]="claude-live-windows-x86_64"
-
-          for NPM_DIR in "${!PLATFORM_MAP[@]}"; do
-            ARTIFACT="${PLATFORM_MAP[$NPM_DIR]}"
-            PKG_DIR="npm/${NPM_DIR}"
-
-            echo "=== Publishing @claude-live/${NPM_DIR#claude-live-} ==="
-
-            # Update version
-            cd "$PKG_DIR"
-            npm version "$VERSION" --no-git-tag-version --allow-same-version
-            cd ../..
-
-            # Create bin/ directory and extract binary
-            mkdir -p "$PKG_DIR/bin"
-            if [[ "$NPM_DIR" == *"win32"* ]]; then
-              cd "artifacts/${ARTIFACT}"
-              7z x "${ARTIFACT}.zip"
-              mv claude-live.exe "../../${PKG_DIR}/bin/claude-live.exe"
-              cd ../..
-            else
-              tar xzf "artifacts/${ARTIFACT}/${ARTIFACT}.tar.gz" -C "$PKG_DIR/bin/"
-            fi
-
-            # Copy frontend dist
-            mkdir -p "$PKG_DIR/client/"
-            cp -r artifacts/frontend-dist/ "$PKG_DIR/client/dist/"
-
-            # Publish (ignore "already published" errors for retries)
-            cd "$PKG_DIR"
-            npm publish --access public || echo "Warning: failed to publish ${NPM_DIR}, may already exist"
-            cd ../..
-          done
-
-      - name: Publish main wrapper package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd npm/claude-live
-          # Update version and optionalDependencies versions
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          node -e "
-            const pkg = require('./package.json');
-            for (const dep of Object.keys(pkg.optionalDependencies)) {
-              pkg.optionalDependencies[dep] = '$VERSION';
-            }
-            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          npm publish --access public
