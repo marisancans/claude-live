@@ -27,13 +27,13 @@ Then add hooks to your `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/hook.js", "async": true }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node /path/to/hook.js", "async": true }] }]
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }]
   }
 }
 ```
 
-Replace `/path/to/hook.js` with the result of `npm root -g`/`claude-live/bin/hook.js`.
+Run `npm root -g` to find your global node_modules path if the above doesn't work on your shell.
 
 ## Use
 
