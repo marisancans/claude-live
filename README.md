@@ -37,9 +37,16 @@ Run `npm root -g` to find your global node_modules path if the above doesn't wor
 
 ## Use
 
-```bash
-claude-live          # Start server (foreground)
-claude-live start    # Start server (detached)
+Once installed, use the `/claude-live:server` slash command in Claude Code:
+
+```
+/claude-live:server          # Check status, auto-start if needed
+/claude-live:server stop     # Stop the server
+/claude-live:server restart  # Restart the server
+/claude-live:server logs     # Show last 30 log lines
+/claude-live:server config   # Show current endpoint URL
+/claude-live:server config http://192.168.1.50:43451  # Set remote endpoint
+/claude-live:server config reset  # Reset to localhost default
 ```
 
 Then open http://localhost:43451 in your browser.
@@ -57,13 +64,22 @@ Multiple Claude sessions show as separate star systems. Prompts fly inward, resp
 
 Under the hood: the plugin sends every event to a lightweight Node.js server (pure passthrough, no persistence). The server broadcasts events to a PixiJS frontend via Server-Sent Events (SSE).
 
-## CLI
+## Server Endpoints
 
-```bash
-claude-live start       # Open visualization in browser
-claude-live stop        # Stop the server
-claude-live status      # Show server status
-```
+| Endpoint | Method | Description |
+|---|---|---|
+| `/hook` | POST | Receive hook events, broadcast to SSE clients |
+| `/events` | GET | SSE stream for the frontend |
+| `/health` | GET | Health check — returns `{"ok":true,"clients":<N>,"port":43451}` |
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No activity in browser | Hooks not firing | Run `/reload-plugins` or check `settings.json` hooks |
+| Server not reachable | Server not running | `/claude-live:server` auto-starts it |
+| `clients: 0` in `/health` | Server up, no browser tab open | Open `http://localhost:43451` |
+| Hook logs location | Debug delivery failures | `~/.config/claude-live/logs/YYYY-MM-DD.jsonl` |
 
 ## Development
 
