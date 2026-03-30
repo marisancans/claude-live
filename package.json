@@ -1,6 +1,6 @@
 {
   "name": "claude-live",
-  "version": "2.0.8",
+  "version": "2.1.0",
   "description": "Realtime Claude Code activity visualizer",
   "license": "MIT",
   "repository": "https://github.com/marisancans/claude-live",
@@ -12,7 +12,8 @@
     "start": "node server/index.js",
     "dev": "cd client && vite dev",
     "build": "cd client && vite build",
-    "test": "cd client && npx tsc --noEmit"
+    "test": "cd client && npx tsc --noEmit",
+    "test:server": "vitest run --config vitest.config.server.js"
   },
   "files": [
     "server/",
