@@ -20,23 +20,29 @@ User's argument: $ARGUMENTS
 
 ## Status output (default and after start)
 
-Run these and display in a compact summary:
+Use `/health` endpoint — not SSE stream (SSE causes false negatives with short timeouts):
 
 ```
-curl -sf http://localhost:43451/events -o /dev/null -m 1 2>&1 && echo "● running on port 43451 — http://localhost:43451" || echo "○ stopped"
+curl -sf http://localhost:43451/health -m 2
+```
+
+Returns `{"ok":true,"clients":<N>,"port":43451}` when running.
+
+Also show:
+```
 ps -eo pid,etime,cmd | grep "node.*server/index.js" | grep -v grep
 tail -5 /tmp/claude-live.log 2>/dev/null
 ```
 
-Show: running/stopped, port (always 43451), PID and uptime if running, last 5 log lines.
+Show: running/stopped, port (always 43451), PID and uptime if running, client count, last 5 log lines.
 
 ## Config Management
 
-The `/claude-live config` subcommands manage where hooks send events.
+The `/claude-live:server config` subcommands manage where hooks send events.
 
 ### Display current URL
 ```
-/claude-live config
+/claude-live:server config
 ```
 Output example: `● Configured: http://192.168.1.50:43451 (from global config)`
 
@@ -48,7 +54,7 @@ Possible sources shown:
 
 ### Set global URL
 ```
-/claude-live config http://192.168.1.50:43451
+/claude-live:server config http://192.168.1.50:43451
 ```
 Output: `✓ URL set to http://192.168.1.50:43451`
 
@@ -70,7 +76,7 @@ Invalid URLs:
 
 ### Reset to default
 ```
-/claude-live config reset
+/claude-live:server config reset
 ```
 Output: `✓ Reset to default (localhost:43451)`
 

@@ -12,18 +12,33 @@ Real-time Claude Code activity visualizer. Zero-dependency Node.js server servin
 
 ## Branch Strategy
 
+> ⚠️ **THIS IS THE ONLY CORRECT WAY TO RELEASE. DO NOT DEVIATE.**
+> Working directly on `main` or `dev` is WRONG and will break the release pipeline.
+> Before starting ANY work, confirm with the user that a feature branch has been created from `dev`.
+> If not — stop, create the branch, then proceed.
+
 - **`main`** — production branch. CI auto-builds and commits `client/dist/` on every push. Plugin users install from here.
 - **`dev`** — integration branch. All feature branches merge here first.
-- **feature branches** — new features always start from `dev` as a new branch, PR back to `dev`.
+- **feature branches** — ALL new work starts from `dev` as a new branch, PRs back to `dev`.
 - Never commit `client/dist/` manually — CI handles it on `main`.
 
-Flow: `feature/xyz` → PR → `dev` → PR → `main` → CI builds dist → plugin users get it.
+**THE ONLY CORRECT FLOW:**
+```
+git checkout dev && git pull origin dev
+git checkout -b feature/my-feature
+# ... do work ...
+# PR feature/my-feature → dev
+# PR dev → main
+# CI builds dist and releases to plugin users
+```
+
+`feature/xyz` → PR → `dev` → PR → `main` → CI builds dist → plugin users get it.
 
 ## Dev Workflow
 
 ```bash
-# Start a new feature
-git checkout dev && git pull
+# Start a new feature (MANDATORY — never work on main or dev directly)
+git checkout dev && git pull origin dev
 git checkout -b feature/my-feature
 
 # Run server
