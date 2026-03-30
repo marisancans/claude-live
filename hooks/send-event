@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Forwards stdin event JSON to bin/hook.js. Fails silently.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+exec node "${PLUGIN_ROOT}/bin/hook.js"
