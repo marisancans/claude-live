@@ -34,7 +34,7 @@ fi
 
 # Forward event to server (if it came up)
 if [ -n "$input" ]; then
-    printf '%s' "$input" | node "${PLUGIN_ROOT}/bin/hook.js"
+    printf '%s' "$input" | node "${PLUGIN_ROOT}/bin/hook.js" || true
 fi
 
 exit 0
