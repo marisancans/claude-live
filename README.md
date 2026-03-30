@@ -8,48 +8,51 @@ Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/clau
 
 ## Install
 
-### Via Claude plugin marketplace (recommended)
-
-```bash
-claude plugin marketplace add marisancans/claude-live
-```
-
-Hooks are configured automatically. Events stream in the background as you work.
-
-### Via npm (manual setup)
-
 ```bash
 npm install -g claude-live
 ```
 
-Then add hooks to your `~/.claude/settings.json`:
+After installing, you need to configure Claude Code hooks so events reach the visualizer. Add this to your `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }]
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "PreCompact": [{ "match": { "trigger": ["manual", "auto"] }, "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
+    "PostCompact": [{ "match": { "trigger": ["manual", "auto"] }, "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }]
   }
 }
 ```
 
-Run `npm root -g` to find your global node_modules path if the above doesn't work on your shell.
+> **Tip:** Run `npm root -g` to verify your global node_modules path if hooks aren't firing.
 
 ## Use
 
-Once installed, use the `/claude-live:server` slash command in Claude Code:
+Start the server and open the dashboard:
+
+```bash
+claude-live          # Start server on port 43451
+claude-live start    # Start server in background
+```
+
+Then open http://localhost:43451 in your browser.
+
+If you have the plugin installed, you can also use the slash command inside Claude Code:
 
 ```
 /claude-live:server          # Check status, auto-start if needed
 /claude-live:server stop     # Stop the server
 /claude-live:server restart  # Restart the server
 /claude-live:server logs     # Show last 30 log lines
-/claude-live:server config   # Show current endpoint URL
-/claude-live:server config http://192.168.1.50:43451  # Set remote endpoint
-/claude-live:server config reset  # Reset to localhost default
 ```
-
-Then open http://localhost:43451 in your browser.
 
 ## How It Works
 
@@ -62,7 +65,7 @@ Sessions appear as star systems. Files orbit as planets -- the more a file is to
 
 Multiple Claude sessions show as separate star systems. Prompts fly inward, responses fly outward. Context compaction triggers an implosion/rebirth effect.
 
-Under the hood: the plugin sends every event to a lightweight Node.js server (pure passthrough, no persistence). The server broadcasts events to a PixiJS frontend via Server-Sent Events (SSE).
+Under the hood: hooks send every Claude Code event to a lightweight Node.js server (zero dependencies, pure passthrough, no persistence). The server broadcasts to the browser via Server-Sent Events (SSE).
 
 ## Server Endpoints
 
@@ -70,16 +73,17 @@ Under the hood: the plugin sends every event to a lightweight Node.js server (pu
 |---|---|---|
 | `/hook` | POST | Receive hook events, broadcast to SSE clients |
 | `/events` | GET | SSE stream for the frontend |
-| `/health` | GET | Health check — returns `{"ok":true,"clients":<N>,"port":43451}` |
+| `/health` | GET | Health check — returns `{"ok":true,"version":"X.Y.Z","clients":<N>,"port":43451}` |
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| No activity in browser | Hooks not firing | Run `/reload-plugins` or check `settings.json` hooks |
-| Server not reachable | Server not running | `/claude-live:server` auto-starts it |
-| `clients: 0` in `/health` | Server up, no browser tab open | Open `http://localhost:43451` |
-| Hook logs location | Debug delivery failures | `~/.config/claude-live/logs/YYYY-MM-DD.jsonl` |
+| Symptom | Fix |
+|---|---|
+| No activity in browser | Check hooks in `~/.claude/settings.json`, restart Claude Code |
+| Server not reachable | Run `claude-live` to start it |
+| `clients: 0` in `/health` | Open http://localhost:43451 in your browser |
+
+Hook logs are written to `~/.config/claude-live/logs/YYYY-MM-DD.jsonl` for debugging.
 
 ## Development
 
