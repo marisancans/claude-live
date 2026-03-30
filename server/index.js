@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version
 const PORT = parseInt(process.env.PORT || '43451', 10)
 const DIST = process.env.CLAUDE_LIVE_STATIC_DIR
   || join(__dirname, '..', 'client', 'dist')
@@ -55,7 +56,7 @@ const server = createServer((req, res) => {
   // GET /health — health check
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, clients: clients.size, port: PORT }))
+    res.end(JSON.stringify({ ok: true, version: VERSION, clients: clients.size, port: PORT }))
     return
   }
 

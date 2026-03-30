@@ -1,0 +1,161 @@
+{
+  "description": "claude-live hooks — forwards Claude Code events to the visualizer",
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "InstructionsLoaded": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "WorktreeCreate": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "WorktreeRemove": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PreToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PostToolUse": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "Notification": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PermissionRequest": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "SubagentStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "SubagentStop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PostToolUseFailure": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PreCompact": [{
+      "match": { "trigger": ["manual", "auto"] },
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "PostCompact": [{
+      "match": { "trigger": ["manual", "auto"] },
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "StopFailure": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "TeammateIdle": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "TaskCompleted": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "ConfigChange": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "Elicitation": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }],
+    "ElicitationResult": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/marketplaces/claude-live}/bin/hook.js",
+        "async": true
+      }]
+    }]
+  }
+}

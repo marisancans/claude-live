@@ -26,7 +26,7 @@ Use `/health` endpoint — not SSE stream (SSE causes false negatives with short
 curl -sf http://localhost:43451/health -m 2
 ```
 
-Returns `{"ok":true,"clients":<N>,"port":43451}` when running.
+Returns `{"ok":true,"version":"X.Y.Z","clients":<N>,"port":43451}` when running.
 
 Also show:
 ```
@@ -35,6 +35,15 @@ tail -5 /tmp/claude-live.log 2>/dev/null
 ```
 
 Show: running/stopped, port (always 43451), PID and uptime if running, client count, last 5 log lines.
+
+## Version check
+
+Compare the running server version (from `/health` response `version` field) against the installed plugin version (from `${CLAUDE_PLUGIN_ROOT}/package.json`). If they differ, warn the user:
+
+```
+⚠ Version mismatch: server running v2.0.6 but plugin is v2.0.7
+  Run `/claude-live:server restart` to pick up the new version.
+```
 
 ## Config Management
 
