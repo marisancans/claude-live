@@ -52,6 +52,13 @@ const server = createServer((req, res) => {
     return
   }
 
+  // GET /health — health check
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, clients: clients.size, port: PORT }))
+    return
+  }
+
   // GET /events — SSE stream
   if (req.method === 'GET' && req.url === '/events') {
     res.writeHead(200, {
