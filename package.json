@@ -1,6 +1,8 @@
 {
   "name": "claude-live",
-  "version": "2.0.5",
+
+  "version": "2.0.6",
+  "version": "2.0.3",
   "description": "Realtime Claude Code activity visualizer",
   "license": "MIT",
   "repository": "https://github.com/marisancans/claude-live",
@@ -19,7 +21,8 @@
     "bin/",
     "client/dist/",
     ".claude-plugin/",
-    "commands/"
+    "commands/",
+    "hooks/"
   ],
   "engines": {
     "node": ">=18"
