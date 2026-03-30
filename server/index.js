@@ -3,6 +3,8 @@ import { readFileSync, existsSync, statSync } from 'fs'
 import { join, extname, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import { homedir } from 'os'
+import { SessionScanner } from './session-scanner.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version
@@ -96,6 +98,21 @@ const server = createServer((req, res) => {
   res.end(readFileSync(filePath))
 })
 
-server.listen(PORT, () => {
-  console.log(`claude-live running at http://localhost:${PORT}`)
+const PROJECTS_DIR = process.env.CLAUDE_PROJECTS_DIR
+  || join(homedir(), '.claude', 'projects')
+
+const scanner = new SessionScanner(PROJECTS_DIR, event => {
+  broadcast({ type: 'event', data: event })
 })
+
+// Only auto-start when run directly (not imported for testing)
+const isMainModule = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
+if (isMainModule) {
+  server.listen(PORT, () => {
+    console.log(`claude-live running at http://localhost:${PORT}`)
+    scanner.start()
+    console.log(`watching ${PROJECTS_DIR} for sessions`)
+  })
+}
+
+export { server, scanner, broadcast }
