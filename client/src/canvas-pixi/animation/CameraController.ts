@@ -12,8 +12,8 @@ export class CameraController {
   private worldLayer: Container
   private app: Application
   private canvas: HTMLCanvasElement
-  private currentScale: number = 1
-  private targetScale: number = 1
+  private currentScale: number = 0.5
+  private targetScale: number = 0.5
   private currentCx: number = 0
   private currentCy: number = 0
   private targetCx: number = 0
