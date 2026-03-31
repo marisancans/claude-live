@@ -369,6 +369,11 @@ export class AnimationManager {
     // Update all projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i]
+      // Guard against destroyed containers (cluster removed while projectile in-flight)
+      if (proj.container.destroyed) {
+        this.projectiles.splice(i, 1)
+        continue
+      }
       proj.syncTarget()
       proj.tick(dt)
       if (proj.isDone()) {
@@ -381,6 +386,7 @@ export class AnimationManager {
     // Update all snakes
     for (let i = this.snakes.length - 1; i >= 0; i--) {
       const snake = this.snakes[i]
+      if (snake.container.destroyed) { this.snakes.splice(i, 1); continue }
       snake.tick(dt)
       if (snake.isDone()) {
         snake.container.parent?.removeChild(snake.container)
@@ -392,6 +398,7 @@ export class AnimationManager {
     // Update all compaction effects
     for (let i = this.compactions.length - 1; i >= 0; i--) {
       const fx = this.compactions[i]
+      if (fx.container.destroyed) { this.compactions.splice(i, 1); continue }
       fx.tick(dt)
       if (fx.isDone()) {
         fx.container.parent?.removeChild(fx.container)
@@ -403,6 +410,7 @@ export class AnimationManager {
     // Update misc effects (entrance, spawn, dissolution)
     for (let i = this.miscEffects.length - 1; i >= 0; i--) {
       const fx = this.miscEffects[i]
+      if (fx.container.destroyed) { this.miscEffects.splice(i, 1); continue }
       fx.tick(dt)
       if (fx.isDone()) {
         fx.container.parent?.removeChild(fx.container)
