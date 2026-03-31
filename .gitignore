@@ -4,3 +4,4 @@ node_modules/
 .superpowers/
 client/dist/
 docs/superpowers/
+.playwright-mcp/
