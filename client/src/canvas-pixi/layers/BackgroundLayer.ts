@@ -327,11 +327,12 @@ export class BackgroundLayer {
     this.elapsed += clampedDt / 60
     const t = this.elapsed
 
-    // ── Aurora curtain sway + secondary alpha pulse ──
+    // ── Aurora curtain sway — very gentle, never teleports ──
     for (const aurora of this.auroras) {
-      aurora.sprite.x = aurora.baseX + Math.sin(t * aurora.freq + aurora.phase) * aurora.amplitude
-      // Secondary slow alpha oscillation: gentle pulse, period ~42s
-      aurora.sprite.alpha = aurora.baseAlpha * (0.85 + 0.15 * Math.sin(t * 0.15 + aurora.alphaPhase))
+      // Tiny sway: max 8px side to side, very slow
+      aurora.sprite.x = aurora.baseX + Math.sin(t * 0.08 + aurora.phase) * 8
+      // Very gentle alpha pulse
+      aurora.sprite.alpha = aurora.baseAlpha * (0.92 + 0.08 * Math.sin(t * 0.1 + aurora.alphaPhase))
     }
 
     // ── Star twinkle ──
