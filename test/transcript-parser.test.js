@@ -125,6 +125,23 @@ describe('TranscriptParser', () => {
     expect(pre).toBeDefined();
   });
 
+  it('passes through structured JSON tool_response as-is', () => {
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'assistant', uuid: 'a1',
+      message: { role: 'assistant', content: [
+        { type: 'tool_use', name: 'Bash', id: 'tu1', input: { command: 'ls' } }
+      ]}
+    }));
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'user', uuid: 'u1',
+      message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'tu1', content: '{"exitCode":0,"stdout":"file.txt"}' }
+      ]}
+    }));
+    const post = events.find(e => e.hook_event_name === 'PostToolUse');
+    expect(post.tool_response).toEqual({ exitCode: 0, stdout: 'file.txt' });
+  });
+
   it('deduplicates tool_use by id', () => {
     const line = JSON.stringify({
       sessionId: 's1', type: 'assistant', uuid: 'a1',

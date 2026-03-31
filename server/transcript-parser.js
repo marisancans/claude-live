@@ -86,21 +86,26 @@ export class TranscriptParser {
 
     this.pendingToolCalls.delete(tool_use_id);
 
-    let responseContent;
+    let raw;
     if (Array.isArray(content)) {
-      responseContent = content
-        .filter(c => c.text)
-        .map(c => c.text)
-        .join('\n');
+      raw = content.filter(c => c.text).map(c => c.text).join('\n');
     } else {
-      responseContent = content;
+      raw = content;
+    }
+
+    // Try to parse as JSON so structured responses (exitCode, count, etc.) pass through
+    let toolResponse;
+    if (typeof raw === 'string') {
+      try { toolResponse = JSON.parse(raw); } catch { toolResponse = { content: raw }; }
+    } else {
+      toolResponse = raw != null ? raw : {};
     }
 
     this.onEvent(this._makeEvent(sessionId, {
       hook_event_name: 'PostToolUse',
       tool_name: pending.name,
       tool_use_id,
-      tool_response: { content: responseContent },
+      tool_response: toolResponse,
     }));
   }
 
