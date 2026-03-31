@@ -48,7 +48,7 @@ export class PixiApp {
       antialias: true,
       resolution: (window.devicePixelRatio || 1) * RENDER_SCALE,
       autoDensity: true,
-      backgroundColor: 0x080808,
+      backgroundColor: 0x050510,
       autoStart: false,
     })
 

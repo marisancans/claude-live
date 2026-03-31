@@ -80,11 +80,12 @@ export class NodeObject {
   }
 
   private initFileVisuals(node: GraphNode) {
-    // Glow sprite (soft radial, behind body)
+    // Glow sprite (soft radial, behind body) — additive blend for light bleed
     const glowTex = getCircleGlowTexture(node.color)
     this.glowSprite = spriteFromTexture(glowTex)
-    const glowScale = (this.baseRadius * 2.5) / 16  // texture is 32px, radius=16
+    const glowScale = (this.baseRadius * 2.5) / 16
     this.glowSprite.scale.set(glowScale)
+    this.glowSprite.blendMode = 'add'
     this.container.addChild(this.glowSprite)
 
     // Body sprite (solid circle)
@@ -122,10 +123,11 @@ export class NodeObject {
     this.agentRingSprite.scale.set(ringScale)
     this.container.addChild(this.agentRingSprite)
 
-    // Glow behind agent
+    // Glow behind agent — additive blend
     const glowTex = getCircleGlowTexture(node.color)
     this.glowSprite = spriteFromTexture(glowTex)
     this.glowSprite.scale.set(0.6)
+    this.glowSprite.blendMode = 'add'
     this.container.addChildAt(this.glowSprite, 0)
   }
 
@@ -244,17 +246,24 @@ export class NodeObject {
       this.agentRingSprite.rotation = this.time * 2.5
     }
 
-    // Glow alpha: boost during impact
+    // Breathing + glow: subtle ambient pulsing + boost during impact
+    const breathe = 1 + 0.04 * Math.sin(this.time * 0.8 + this.data.key.length * 2.3)
     if (this.glowSprite) {
       const glowAlpha = 0.12 * this.life + (this.impactTime > 0 ? this.impactTime * 0.3 : 0)
       this.glowSprite.alpha = glowAlpha
+      // Glow breathes slightly more than body
+      const glowBreathe = 1 + 0.06 * Math.sin(this.time * 0.5 + this.data.key.length * 2.3)
+      if (this.data.nodeType === 'file') {
+        const glowScale = (this.baseRadius * 2.5) / 16
+        this.glowSprite.scale.set(glowScale * glowBreathe)
+      }
     }
 
-    // Morph bump on body
+    // Morph bump on body + breathing
     if (this.bodySprite && this.data.nodeType === 'file') {
       const bump = this.data.impactType === 'morph' ? this.data.impactTime * 1.8 : 0
       const bodyScale = (this.baseRadius + bump) / 8
-      this.bodySprite.scale.set(bodyScale)
+      this.bodySprite.scale.set(bodyScale * breathe)
     }
 
     // Action label float/fade

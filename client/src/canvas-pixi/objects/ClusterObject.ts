@@ -86,6 +86,7 @@ export class ClusterObject {
     const colors = MODEL_COLORS[this.modelFamily] || MODEL_COLORS.unknown
     const glowTex = getCoreGlowTexture(colors.glow, colors.brightHex)
     this.coreGlowSprite = spriteFromTexture(glowTex)
+    this.coreGlowSprite.blendMode = 'add'
     const isChild = this.data.isChild
     const baseR = isChild ? 4.5 : 7
     // Scale so the outer glow matches ~4x baseR
