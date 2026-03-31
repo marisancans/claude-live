@@ -5,6 +5,7 @@ import { TranscriptParser } from './transcript-parser.js';
 const MAX_SESSIONS = 50;
 const SCAN_INTERVAL = 5000;
 const POLL_INTERVAL = 3000;
+const ACTIVE_AGE_MS = 10 * 60 * 1000; // Only watch sessions modified in last 10 minutes
 
 export class SessionScanner {
   constructor(projectsDir, onEvent) {
@@ -49,8 +50,24 @@ export class SessionScanner {
       return;
     }
 
+    // Prune stale sessions (no longer recently modified)
+    const now = Date.now();
+    for (const [path, session] of this.sessions) {
+      try {
+        const mtime = statSync(path).mtimeMs;
+        if (now - mtime >= ACTIVE_AGE_MS) {
+          if (session.watcher) session.watcher.close();
+          this.sessions.delete(path);
+        }
+      } catch {
+        if (session.watcher) session.watcher.close();
+        this.sessions.delete(path);
+      }
+    }
+
+    // Collect all JSONL files with their mtimes
+    const candidates = [];
     for (const subdir of subdirs) {
-      if (this.sessions.size >= MAX_SESSIONS) break;
       const dirPath = join(this.projectsDir, subdir);
       let files;
       try {
@@ -59,20 +76,33 @@ export class SessionScanner {
         continue;
       }
       for (const file of files) {
-        if (this.sessions.size >= MAX_SESSIONS) break;
         const filePath = join(dirPath, file);
         if (this.sessions.has(filePath)) continue;
-
-        const parser = new TranscriptParser(this.onEvent);
-        let watcher = null;
         try {
-          watcher = watch(filePath, () => this._readNewLines(this.sessions.get(filePath)));
-        } catch { /* ignore */ }
-
-        const session = { filePath, offset: 0, parser, watcher };
-        this.sessions.set(filePath, session);
-        this._readNewLines(session);
+          const mtime = statSync(filePath).mtimeMs;
+          // Only consider recently active sessions
+          if (now - mtime < ACTIVE_AGE_MS) {
+            candidates.push({ filePath, mtime });
+          }
+        } catch { continue; }
       }
+    }
+
+    // Sort by most recent first so active sessions get priority
+    candidates.sort((a, b) => b.mtime - a.mtime);
+
+    for (const { filePath } of candidates) {
+      if (this.sessions.size >= MAX_SESSIONS) break;
+
+      const parser = new TranscriptParser(this.onEvent);
+      let watcher = null;
+      try {
+        watcher = watch(filePath, () => this._readNewLines(this.sessions.get(filePath)));
+      } catch { /* ignore */ }
+
+      const session = { filePath, offset: 0, parser, watcher };
+      this.sessions.set(filePath, session);
+      this._readNewLines(session);
     }
   }
 
