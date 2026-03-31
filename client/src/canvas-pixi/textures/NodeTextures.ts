@@ -7,7 +7,7 @@
  */
 import { Texture, Sprite } from 'pixi.js'
 import type { Renderer } from 'pixi.js'
-import { softGlow, softBody, softDiamond, coreGlow, dashedRing, hexToRgb } from './GradientTextures'
+import { softGlow, softBody, softDiamond, coreGlow, dashedRing, hexToRgb, prewarmTextures } from './GradientTextures'
 
 const CIRCLE_SIZE = 32
 const DIAMOND_SIZE = 32
@@ -15,10 +15,28 @@ const AGENT_RING_SIZE = 48
 const CORE_GLOW_SIZE = 64
 const PERM_RING_SIZE = 64
 
-// Keep initNodeTextures for backward compat — now a no-op
+// Pre-warm all tool colors at startup to avoid mid-frame texture creation flashes
+const PREWARM_COLORS = [
+  0x4ade80, 0x60a5fa, 0xf59e0b, 0xa78bfa, 0xf472b6, 0x888888,
+  0x34d399, 0xc084fc, 0x7c3aed, 0xf87171, 0xef4444, 0x38bdf8,
+  0x94a3b8, 0x22d3ee, 0xa3a3a3, 0x86efac, 0xfca5a5, 0x555555,
+  // Model core colors
+  0xF07020, 0xFFBB66, 0x4080FF, 0x80B0FF, 0x30D870, 0x70FFB0, 0xC8D5F0, 0xF0F5FF,
+]
+
 let _renderer: Renderer | null = null
 export function initNodeTextures(r: Renderer) {
   _renderer = r
+  // Pre-warm on init so all textures are ready before first render
+  prewarmTextures(PREWARM_COLORS)
+  // Also prewarm core glow textures
+  const modelPairs: [number, number][] = [
+    [0xF07020, 0xFFCC88], [0x4080FF, 0xAAD0FF], [0x30D870, 0xA0FFC8], [0xC8D5F0, 0xFFFFFF],
+  ]
+  for (const [glow, bright] of modelPairs) {
+    getCoreGlowTexture(glow, bright)
+  }
+  getPermissionRingTexture()
 }
 
 /**

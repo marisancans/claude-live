@@ -162,3 +162,16 @@ export function dashedRing(r: number, g: number, b: number, size: number, segmen
 export function hexToRgb(hex: number): [number, number, number] {
   return [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
 }
+
+/**
+ * Pre-warm all textures for a set of hex int colors.
+ * Call at startup to avoid mid-frame texture creation (which causes white flash).
+ */
+export function prewarmTextures(colors: number[]) {
+  for (const color of colors) {
+    const [r, g, b] = hexToRgb(color)
+    softGlow(r, g, b, 64, 0.5, 0.08)     // circle glow
+    softBody(r, g, b, 32)                  // circle solid
+    softDiamond(r, g, b, 32)               // diamond
+  }
+}
