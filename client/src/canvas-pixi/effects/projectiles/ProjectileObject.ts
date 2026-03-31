@@ -36,6 +36,11 @@ export abstract class ProjectileObject {
       }
     }
     if (this.trackTarget) {
+      // Guard against destroyed containers whose position is null
+      if (!this.trackTarget.position) {
+        this.trackTarget = null
+        return
+      }
       const pos = { x: this.trackTarget.position.x, y: this.trackTarget.position.y }
       if (this.trackIsStart) this.startPos = pos
       else this.endPos = pos
