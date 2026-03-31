@@ -201,8 +201,8 @@ export class BackgroundLayer {
   }
 
   private buildAuroras(layer: Container) {
-    const W = this.app.renderer.width
-    const H = this.app.renderer.height
+    const W = window.innerWidth
+    const H = window.innerHeight
     const curtainSpacing = W / (AURORA_CONFIGS.length + 1)
 
     for (let i = 0; i < AURORA_CONFIGS.length; i++) {
@@ -239,8 +239,8 @@ export class BackgroundLayer {
   }
 
   private buildStars(layer: Container) {
-    const W = this.app.renderer.width
-    const H = this.app.renderer.height
+    const W = window.innerWidth
+    const H = window.innerHeight
     const starTex = starSpeckTex()
 
     const totalStars = 70
@@ -291,8 +291,8 @@ export class BackgroundLayer {
   }
 
   private buildGalaxies(layer: Container) {
-    const W = this.app.renderer.width
-    const H = this.app.renderer.height
+    const W = window.innerWidth
+    const H = window.innerHeight
     const tex = galaxySmudgeTex()
     const galaxyCount = 4
 
@@ -309,8 +309,8 @@ export class BackgroundLayer {
   }
 
   private buildVignette(layer: Container) {
-    const W = this.app.renderer.width
-    const H = this.app.renderer.height
+    const W = window.innerWidth
+    const H = window.innerHeight
     const tex = vignetteTex(W, H)
     const vig = new Sprite(tex)
     vig.x = 0
