@@ -44,6 +44,7 @@ const server = createServer((req, res) => {
     req.on('end', () => {
       try {
         const event = JSON.parse(body)
+        if (!event.id) event.id = `hook-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         broadcast({ type: 'event', data: event })
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end('{"ok":true}')
