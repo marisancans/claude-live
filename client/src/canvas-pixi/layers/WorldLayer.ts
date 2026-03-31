@@ -189,6 +189,13 @@ export class WorldLayer {
       if (!clusterObj) {
         this.createCluster(cluster)
         clusterObj = this.clusterObjects.get(sessionId)!
+        // Start invisible — fade in over first few frames to prevent flash
+        clusterObj.container.alpha = 0
+      }
+
+      // Fade in new clusters smoothly
+      if (clusterObj.container.alpha < 1) {
+        clusterObj.container.alpha = Math.min(1, clusterObj.container.alpha + dt * 2)
       }
 
       const prevLen = this.previousRingCounts.get(sessionId) ?? -1
