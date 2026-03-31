@@ -45,7 +45,7 @@ export function initNodeTextures(r: Renderer) {
  */
 export function getCircleGlowTexture(color: number): Texture {
   const [r, g, b] = hexToRgb(color)
-  return softGlow(r, g, b, CIRCLE_SIZE * 2, 0.5, 0.08)
+  return softGlow(r, g, b, CIRCLE_SIZE * 2, 0.15, 0.03)
 }
 
 /**

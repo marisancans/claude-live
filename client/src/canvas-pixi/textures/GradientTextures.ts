@@ -110,17 +110,17 @@ export function coreGlow(baseR: number, baseG: number, baseB: number, brightR: n
     canvas.width = canvas.height = size
     const ctx = canvas.getContext('2d')!
     const h = size / 2
-    // Outer haze
+    // Outer haze — kept subtle (additive blend amplifies)
     const outer = ctx.createRadialGradient(h, h, 0, h, h, h)
-    outer.addColorStop(0, `rgba(${brightR},${brightG},${brightB},0.15)`)
-    outer.addColorStop(0.4, `rgba(${baseR},${baseG},${baseB},0.06)`)
+    outer.addColorStop(0, `rgba(${brightR},${brightG},${brightB},0.05)`)
+    outer.addColorStop(0.4, `rgba(${baseR},${baseG},${baseB},0.02)`)
     outer.addColorStop(1, `rgba(${baseR},${baseG},${baseB},0)`)
     ctx.fillStyle = outer
     ctx.fillRect(0, 0, size, size)
     // Inner bright
     const inner = ctx.createRadialGradient(h, h, 0, h, h, h * 0.4)
-    inner.addColorStop(0, `rgba(${brightR},${brightG},${brightB},0.4)`)
-    inner.addColorStop(0.5, `rgba(${brightR},${brightG},${brightB},0.15)`)
+    inner.addColorStop(0, `rgba(${brightR},${brightG},${brightB},0.1)`)
+    inner.addColorStop(0.5, `rgba(${brightR},${brightG},${brightB},0.04)`)
     inner.addColorStop(1, `rgba(${brightR},${brightG},${brightB},0)`)
     ctx.fillStyle = inner
     ctx.fillRect(0, 0, size, size)
@@ -170,7 +170,7 @@ export function hexToRgb(hex: number): [number, number, number] {
 export function prewarmTextures(colors: number[]) {
   for (const color of colors) {
     const [r, g, b] = hexToRgb(color)
-    softGlow(r, g, b, 64, 0.5, 0.08)     // circle glow
+    softGlow(r, g, b, 64, 0.15, 0.03)    // circle glow (low alpha for additive blend)
     softBody(r, g, b, 32)                  // circle solid
     softDiamond(r, g, b, 32)               // diamond
   }
