@@ -36,10 +36,12 @@ export class TranscriptParser {
     if (!content) return;
 
     if (role === 'user' && typeof content === 'string') {
-      this.onEvent(this._makeEvent(sessionId, {
-        hook_event_name: 'UserPromptSubmit',
-        prompt: content,
-      }));
+      if (!this._isSystemContent(content)) {
+        this.onEvent(this._makeEvent(sessionId, {
+          hook_event_name: 'UserPromptSubmit',
+          prompt: content,
+        }));
+      }
       return;
     }
 
@@ -107,6 +109,17 @@ export class TranscriptParser {
       tool_use_id,
       tool_response: toolResponse,
     }));
+  }
+
+  _isSystemContent(text) {
+    const t = text.trimStart();
+    return t.startsWith('<system-reminder') ||
+      t.startsWith('<local-command-caveat') ||
+      t.startsWith('<command-name') ||
+      t.startsWith('<available-deferred-tools') ||
+      t.startsWith('<ide_') ||
+      t.startsWith('This session is being continued') ||
+      t.startsWith('<local-command-stdout');
   }
 
   _makeEvent(sessionId, overrides) {

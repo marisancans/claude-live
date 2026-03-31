@@ -100,6 +100,26 @@ describe('TranscriptParser', () => {
     expect(events[0].prompt).toBe('Hello Claude');
   });
 
+  it('filters out system-injected content from UserPromptSubmit', () => {
+    const systemMessages = [
+      '<system-reminder>\nSome reminder\n</system-reminder>',
+      '<local-command-caveat>Caveat: blah</local-command-caveat>',
+      '<command-name>/model</command-name>',
+      '<available-deferred-tools>stuff</available-deferred-tools>',
+      '<ide_context>vscode stuff</ide_context>',
+      'This session is being continued from a previous conversation.',
+      '<local-command-stdout>output here</local-command-stdout>',
+    ];
+    for (const content of systemMessages) {
+      parser.processLine(JSON.stringify({
+        sessionId: 's1', type: 'user', uuid: `u-${Math.random()}`,
+        message: { role: 'user', content }
+      }));
+    }
+    const prompts = events.filter(e => e.hook_event_name === 'UserPromptSubmit');
+    expect(prompts).toHaveLength(0);
+  });
+
   it('does not emit UserPromptSubmit for user messages with only tool_results', () => {
     parser.processLine(JSON.stringify({
       sessionId: 's1', type: 'user', uuid: 'u1',
