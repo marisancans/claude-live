@@ -213,20 +213,11 @@ export class CameraController {
     this.currentCx += (this.targetCx - this.currentCx) * this.lerpAlpha
     this.currentCy += (this.targetCy - this.currentCy) * this.lerpAlpha
 
-    // Screen shake (from compaction explosions)
-    let shakeX = 0, shakeY = 0
-    if (this.shakeIntensity > 0.5) {
-      shakeX = (Math.random() - 0.5) * this.shakeIntensity
-      shakeY = (Math.random() - 0.5) * this.shakeIntensity
-      this.shakeIntensity *= this.shakeDecay
-      if (this.shakeIntensity < 0.5) this.shakeIntensity = 0
-    }
-
     // Apply transform to worldLayer
     this.worldLayer.pivot.set(this.currentCx, this.currentCy)
     this.worldLayer.position.set(
-      this.app.renderer.width / 2 + shakeX,
-      this.app.renderer.height / 2 + shakeY
+      this.app.renderer.width / 2,
+      this.app.renderer.height / 2
     )
     this.worldLayer.scale.set(this.currentScale)
   }
@@ -235,8 +226,9 @@ export class CameraController {
    * Trigger screen shake (used by compaction rebirth).
    * @param intensity - initial shake amplitude in pixels
    */
-  shake(intensity: number) {
-    this.shakeIntensity = Math.max(this.shakeIntensity, intensity)
+  shake(_intensity: number) {
+    // Disabled — screen shake moves the world layer which makes the
+    // background aurora appear to teleport since it's in screen-space
   }
 
   /**
