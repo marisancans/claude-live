@@ -1,9 +1,52 @@
-import { Container, Text, TextStyle } from 'pixi.js'
+import { Container, Sprite, Texture, Text, TextStyle, RenderTexture } from 'pixi.js'
+import type { Application } from 'pixi.js'
 import type { SplinePath } from '../../utils/spline'
 import { evaluateSpline, evaluateTangent } from '../../utils/spline'
 
-// Shared style caches — avoids re-creating TextStyle per letter
-const styleCache = new Map<string, TextStyle>()
+/**
+ * Glyph atlas: renders each character once to a shared texture,
+ * then every letter in every snake is a cheap Sprite lookup.
+ */
+const glyphCache = new Map<string, Texture>()
+let atlasApp: Application | null = null
+
+/** Must be called once with the PixiJS Application so we can render glyphs */
+export function initSnakeAtlas(app: Application) {
+  atlasApp = app
+}
+
+function getGlyph(char: string, color: string, fontSize: number): Texture {
+  const key = `${char}|${color}|${fontSize}`
+  const cached = glyphCache.get(key)
+  if (cached) return cached
+
+  if (!atlasApp) {
+    // Fallback: return empty texture (shouldn't happen if initSnakeAtlas was called)
+    return Texture.EMPTY
+  }
+
+  // Render character to a small RenderTexture once
+  const style = new TextStyle({
+    fontSize,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    fill: color,
+    align: 'center',
+  })
+  const text = new Text({ text: char, style })
+
+  const bounds = text.getBounds()
+  const w = Math.ceil(bounds.width) || 8
+  const h = Math.ceil(bounds.height) || 10
+
+  const rt = RenderTexture.create({ width: w, height: h })
+  text.position.set(0, 0)
+  atlasApp.renderer.render({ container: text, target: rt })
+
+  glyphCache.set(key, rt)
+  text.destroy()
+  return rt
+}
 
 /**
  * Approximate the arc length of a quadratic Bézier by sampling.
@@ -23,8 +66,8 @@ function estimateSplineLength(path: SplinePath, samples = 20): number {
 }
 
 /**
- * Snake animation: individual letters flowing along a curved spline path,
- * with proper word spacing preserved.
+ * Snake animation: individual letter sprites flowing along a curved spline path.
+ * Each letter is a Sprite from a pre-rendered glyph atlas — no per-frame font rasterization.
  */
 export class SnakeObject {
   container: Container
@@ -35,11 +78,8 @@ export class SnakeObject {
   onComplete: (() => void) | null = null
   duration: number = 4.0
 
-  // One Text per letter — positioned and rotated each tick
-  private letterTexts: Text[] = []
-  // Normalized offset for each letter along the snake (in t-space 0..1)
+  private letterSprites: Sprite[] = []
   private letterOffsets: number[] = []
-  // How much of the spline the snake text occupies (in t-space)
   private snakeSpan: number = 0
 
   constructor(
@@ -56,7 +96,6 @@ export class SnakeObject {
     this.onComplete = onComplete || null
 
     const fontSize = isResponse ? 6 : 7
-    // Pixel spacing between letters and words
     const CHAR_PX = 4.0
     const SPACE_PX = 3.0
 
@@ -74,50 +113,35 @@ export class SnakeObject {
       }
     }
 
-    // Convert pixel positions to normalized t-space using actual spline length
+    // Convert pixel positions to normalized t-space
     const splineLength = estimateSplineLength(splinePath)
     const totalTextPx = cursor
-    // Scale text to fit available spline, capped at 0.85 to leave room for animation
     this.snakeSpan = Math.min(0.85, totalTextPx / splineLength)
 
     for (let i = 0; i < pixelPositions.length; i++) {
       this.letterOffsets.push((pixelPositions[i] / totalTextPx) * this.snakeSpan)
     }
 
-    // Shared style — one TextStyle per color+size combo, reused across all snakes
-    const cacheKey = `${color}-${fontSize}`
-    let style = styleCache.get(cacheKey)
-    if (!style) {
-      style = new TextStyle({
-        fontSize,
-        fontFamily: 'monospace',
-        fontWeight: '700',
-        fill: color,
-        align: 'center',
-      })
-      styleCache.set(cacheKey, style)
-    }
-
-    // Create one Text per letter
+    // Create one Sprite per letter from the glyph atlas
     for (const letter of letters) {
-      const text = new Text({ text: letter, style })
-      text.anchor.set(0.5, 0.5)
-      text.visible = false
-      this.letterTexts.push(text)
-      this.container.addChild(text)
+      const tex = getGlyph(letter, color, fontSize)
+      const sprite = new Sprite(tex)
+      sprite.anchor.set(0.5, 0.5)
+      sprite.visible = false
+      this.letterSprites.push(sprite)
+      this.container.addChild(sprite)
     }
   }
 
   tick(dt: number) {
     this.progress = Math.min(1, this.progress + dt / this.duration)
-
     const headT = this.progress * (1 + this.snakeSpan)
 
-    for (let i = 0; i < this.letterTexts.length; i++) {
+    for (let i = 0; i < this.letterSprites.length; i++) {
       const letterT = headT - (this.snakeSpan - this.letterOffsets[i])
 
       if (letterT < 0 || letterT > 1) {
-        this.letterTexts[i].visible = false
+        this.letterSprites[i].visible = false
         continue
       }
 
@@ -130,15 +154,15 @@ export class SnakeObject {
       const opacity = fadeIn * fadeOut
 
       if (opacity <= 0.01) {
-        this.letterTexts[i].visible = false
+        this.letterSprites[i].visible = false
         continue
       }
 
-      const text = this.letterTexts[i]
-      text.visible = true
-      text.position.set(pos.x, pos.y)
-      text.rotation = angle
-      text.alpha = opacity
+      const sprite = this.letterSprites[i]
+      sprite.visible = true
+      sprite.position.set(pos.x, pos.y)
+      sprite.rotation = angle
+      sprite.alpha = opacity
     }
 
     if (this.progress >= 1 && this.onComplete) {
@@ -151,6 +175,11 @@ export class SnakeObject {
   }
 
   destroy() {
-    this.container.destroy({ children: true })
+    // Just remove sprites from container — textures are shared in the atlas
+    for (const sprite of this.letterSprites) {
+      sprite.destroy({ texture: false })
+    }
+    this.letterSprites.length = 0
+    this.container.destroy({ children: false })
   }
 }

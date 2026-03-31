@@ -44,7 +44,7 @@ export class AnimationManager {
   private impactTimers: ReturnType<typeof setTimeout>[] = []
   private permissionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private lastResponseSnakeTime: Map<string, number> = new Map()
-  private static MAX_SNAKES = 3 // prevent GPU overload
+  private static MAX_SNAKES = 20 // sprites are cheap, allow many concurrent snakes
 
   // Map tool names to projectile constructors
   private projectileMap: Record<string, new (...args: any[]) => ProjectileObject> = {
@@ -260,7 +260,7 @@ export class AnimationManager {
     // Cap active snakes to prevent GPU overload
     if (this.snakes.length >= AnimationManager.MAX_SNAKES) return
 
-    const words = e.words.slice(0, 5)
+    const words = e.words.slice(0, 8)
     if (words.length === 0) return
 
     const clusterObj = this.worldLayer.clusterObjects.get(e.sessionId)

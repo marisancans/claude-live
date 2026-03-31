@@ -5,6 +5,7 @@ import { BackgroundLayer } from './layers/BackgroundLayer'
 import { WorldLayer } from './layers/WorldLayer'
 import { AnimationManager } from './animation/AnimationManager'
 import { MemoryMonitor } from './MemoryMonitor'
+import { initSnakeAtlas } from './effects/SnakeObject'
 import { RENDER_SCALE } from '../constants'
 
 /**
@@ -60,6 +61,9 @@ export class PixiApp {
     // Pass clustersRef so WorldLayer always reads fresh cluster data
     this.worldLayer = new WorldLayer(this.app, this.clustersRef, this.autofitRef)
     this.app.stage.addChild(this.worldLayer.container)
+
+    // Initialize glyph atlas for snake text rendering (must be after app.init)
+    initSnakeAtlas(this.app)
 
     // Animation manager: subscribes to events and creates projectiles/snakes
     try {
