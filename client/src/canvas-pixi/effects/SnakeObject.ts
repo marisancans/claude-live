@@ -1,6 +1,9 @@
-import { Container, Text } from 'pixi.js'
+import { Container, Text, TextStyle } from 'pixi.js'
 import type { SplinePath } from '../../utils/spline'
 import { evaluateSpline, evaluateTangent } from '../../utils/spline'
+
+// Shared style caches — avoids re-creating TextStyle per letter
+const styleCache = new Map<string, TextStyle>()
 
 /**
  * Approximate the arc length of a quadratic Bézier by sampling.
@@ -81,25 +84,23 @@ export class SnakeObject {
       this.letterOffsets.push((pixelPositions[i] / totalTextPx) * this.snakeSpan)
     }
 
+    // Shared style — one TextStyle per color+size combo, reused across all snakes
+    const cacheKey = `${color}-${fontSize}`
+    let style = styleCache.get(cacheKey)
+    if (!style) {
+      style = new TextStyle({
+        fontSize,
+        fontFamily: 'monospace',
+        fontWeight: '700',
+        fill: color,
+        align: 'center',
+      })
+      styleCache.set(cacheKey, style)
+    }
+
     // Create one Text per letter
     for (const letter of letters) {
-      const text = new Text({
-        text: letter,
-        style: {
-          fontSize,
-          fontFamily: 'monospace',
-          fontWeight: '700',
-          fill: color,
-          align: 'center',
-          dropShadow: {
-            alpha: 0.3,
-            angle: Math.PI / 4,
-            blur: 0,
-            distance: 1,
-            color: 0x000000,
-          },
-        },
-      })
+      const text = new Text({ text: letter, style })
       text.anchor.set(0.5, 0.5)
       text.visible = false
       this.letterTexts.push(text)

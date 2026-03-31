@@ -99,24 +99,10 @@ export class MemoryMonitor {
       `misc=${s.miscEffects}`,
     ].filter(Boolean).join(' ')
 
-    // Post to server as a diagnostic event so it shows in logs
-    fetch('/hook', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        hook_event_name: 'Diagnostic',
-        session_id: 'memory-monitor',
-        message: line,
-        heap_mb: s.heapMB,
-        heap_growth_mb: heapGrowthMB,
-        texture_count: s.textures,
-        cluster_count: s.clusters,
-        node_count: s.nodes,
-      }),
-    }).catch(() => {})  // best-effort, ignore errors
-
-    // Also log locally for quick dev inspection
-    console.info('[mem]', line)
+    // Log locally only in dev — no server round-trip
+    if ((import.meta as any).env?.DEV) {
+      console.debug('[mem]', line)
+    }
   }
 
   /** Return last N samples as a formatted table string */
