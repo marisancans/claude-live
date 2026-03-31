@@ -294,17 +294,22 @@ export function App() {
               }
             }
 
-            store.addEvent(event)
+            // When tab is hidden, update state silently (no animations/sounds)
+            const tabHidden = document.hidden
+
+            store.addEvent(event, tabHidden)
             const sessions = store.getSessions()
             setClusters(new Map(sessions))
             setLastToolName(event.tool_name ?? event.hook_event_name ?? null)
             setEventCount(c => c + 1)
-            playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
+            if (!tabHidden) {
+              playChordForEvent(event.tool_name ?? undefined, event.hook_event_name ?? undefined)
+            }
 
             const isEnrichedTool = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'Bash'].includes(event.tool_name || '')
             const skipDuplicate = event.hook_event_name === 'PostToolUse' && !isEnrichedTool
 
-            if (!skipDuplicate) {
+            if (!skipDuplicate && !tabHidden) {
               const cluster = sessions.get(event.session_id)
               let tool = event.tool_name || event.hook_event_name || '?'
               if (tool.startsWith('mcp_')) {

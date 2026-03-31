@@ -318,7 +318,7 @@ export function createStore() {
     }
   }
 
-  function addEvent(event: RawEvent) {
+  function addEvent(event: RawEvent, skipAnimations: boolean = false) {
     buffer.push(event)
     if (buffer.length > BUFFER_SIZE) buffer.shift()
 
@@ -481,7 +481,7 @@ export function createStore() {
         console.log(`[Store] Agent ${agentId} registered at (${agentNode.x.toFixed(0)}, ${agentNode.y.toFixed(0)})`)
       }
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -498,14 +498,14 @@ export function createStore() {
         cluster.agentPositionMap.delete(agentId)
       }
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
     // SessionEnd: completely remove the cluster
     if (event.hook_event_name === 'SessionEnd') {
       sessions.delete(event.session_id)
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -513,7 +513,7 @@ export function createStore() {
     if (event.hook_event_name === 'UserPromptSubmit') {
       ;(cluster as any).coreAct = 1.0
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -522,7 +522,7 @@ export function createStore() {
       if (event.model) (cluster as any).model = event.model
       ;(cluster as any).coreAct = 1.0
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -532,7 +532,7 @@ export function createStore() {
       if (event.source) (cluster as any).source = event.source
       ;(cluster as any).coreAct = 1.0
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -541,7 +541,7 @@ export function createStore() {
       ;(cluster as any).coreAct = 1.0
       ;(cluster as any).compacting = 1.0
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -551,7 +551,7 @@ export function createStore() {
       ;(cluster as any).compacted = 1.0
       ;(cluster as any).eventCount = Math.floor(((cluster as any).eventCount || 0) * 0.25)
       recomputeAges()
-      EventProcessor.process(event, cluster, null)
+      if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
     }
 
@@ -722,7 +722,7 @@ export function createStore() {
     // Emit domain events to EventBus for PixiJS animations
     const nk = nodeKeyFor(event)
     const affectedNode = nk ? cluster.nodes.get(nk) ?? null : null
-    EventProcessor.process(event, cluster, affectedNode)
+    if (!skipAnimations) EventProcessor.process(event, cluster, affectedNode)
   }
 
   return {
