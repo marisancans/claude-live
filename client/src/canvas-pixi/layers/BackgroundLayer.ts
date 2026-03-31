@@ -189,17 +189,14 @@ export class BackgroundLayer {
 
     const auroraLayer = new Container()
     const starLayer = new Container()
-    const galaxyLayer = new Container()
     const vignetteLayer = new Container()
 
     this.container.addChild(auroraLayer)
     this.container.addChild(starLayer)
-    this.container.addChild(galaxyLayer)
     this.container.addChild(vignetteLayer)
 
     this.buildAuroras(auroraLayer)
     this.buildStars(starLayer)
-    this.buildGalaxies(galaxyLayer)
     this.buildVignette(vignetteLayer)
   }
 
@@ -325,8 +322,9 @@ export class BackgroundLayer {
   }
 
   tick(dt: number) {
-    // Advance time in seconds (dt is in frames at 60fps)
-    this.elapsed += dt / 60
+    // Clamp dt to prevent jumps when main thread is busy with event bursts
+    const clampedDt = Math.min(dt, 2)
+    this.elapsed += clampedDt / 60
     const t = this.elapsed
 
     // ── Aurora curtain sway + secondary alpha pulse ──
