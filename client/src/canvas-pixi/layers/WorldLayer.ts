@@ -8,9 +8,6 @@ import { CameraController } from '../animation/CameraController'
 import { EdgeLayer } from './EdgeLayer'
 import { tickSimulation } from '../../simulation/graph'
 import { initNodeTextures } from '../textures/NodeTextures'
-import { ORBIT_RADII } from '../../constants'
-
-const TRAIL_DASH_PX = 3
 
 /**
  * World layer: camera-transformed container holding all game objects.
@@ -129,49 +126,6 @@ export class WorldLayer {
     }
   }
 
-  /**
-   * Draw trail marks for a cluster into the batch Graphics.
-   * All coordinates are world-space (offset by cluster center).
-   */
-  private drawTrailsIntoBatch(g: Graphics, cluster: Cluster) {
-    const cx = cluster.centerX
-    const cy = cluster.centerY
-    const compacting = cluster.compacting ?? 0
-    if (compacting > 0.8) return  // trails hidden during compaction
-
-    for (const node of cluster.nodes.values()) {
-      if (node.orbitRing < 0 || node.marks.length === 0) continue
-
-      const baseAl = node.nodeType === 'file'
-        ? 0.5
-        : (node.life ?? 1) * 0.4 * Math.min(1, node.entry ?? 1)
-      if (baseAl <= 0.01) continue
-      // Dim during compaction
-      const al = compacting > 0.5 ? baseAl * (1 - compacting) : baseAl
-
-      const ring = Math.max(0, Math.min(node.orbitRing, ORBIT_RADII.length - 1))
-      const radius = ORBIT_RADII[ring]
-      const dashArc = TRAIL_DASH_PX / radius
-
-      const n = node.marks.length
-      for (let i = 0; i < n; i++) {
-        const fade = (i + 1) / n
-        const markAl = al * fade
-        if (markAl <= 0.01) continue
-
-        const a = node.marks[i]
-        g.arc(cx, cy, radius, a - dashArc / 2, a + dashArc / 2)
-          .stroke({ width: 1.2, color: 0xffffff, alpha: markAl })
-        if (i < n - 1) {
-          const nextA = node.marks[i + 1]
-          g.moveTo(
-            cx + Math.cos(nextA - dashArc / 2) * radius,
-            cy + Math.sin(nextA - dashArc / 2) * radius
-          )
-        }
-      }
-    }
-  }
 
   tick(dt: number) {
     const clusters = this.clustersRef.current
@@ -208,9 +162,6 @@ export class WorldLayer {
 
       // Draw animated rings + energy arcs into the single batch Graphics
       clusterObj.drawRingsIntoBatch(this.batchGfx, cluster.centerX, cluster.centerY)
-
-      // Draw trail marks into the same batch Graphics
-      this.drawTrailsIntoBatch(this.batchGfx, cluster)
 
       // Update nodes
       for (const node of cluster.nodes.values()) {

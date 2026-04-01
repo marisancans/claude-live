@@ -1,6 +1,6 @@
 import type { Application, Container } from 'pixi.js'
 import type { Cluster } from '../../types'
-import { ORBIT_RADII, NODE_VISUAL_RADIUS } from '../../constants'
+import { NODE_VISUAL_RADIUS, orbitRadiusFor } from '../../constants'
 
 /**
  * Camera controller for PixiJS world layer.
@@ -118,9 +118,9 @@ export class CameraController {
     let minY = Infinity, maxY = -Infinity
 
     for (const cluster of clusters.values()) {
-      let ext = ORBIT_RADII[0] + NODE_VISUAL_RADIUS
-      for (let i = Math.min(cluster.ringCounts.length, ORBIT_RADII.length) - 1; i >= 0; i--) {
-        if (cluster.ringCounts[i] > 0) { ext = ORBIT_RADII[i] + NODE_VISUAL_RADIUS; break }
+      let ext = orbitRadiusFor(0) + NODE_VISUAL_RADIUS
+      for (let i = cluster.ringCounts.length - 1; i >= 0; i--) {
+        if (cluster.ringCounts[i] > 0) { ext = orbitRadiusFor(i) + NODE_VISUAL_RADIUS; break }
       }
 
       minX = Math.min(minX, cluster.centerX - ext)

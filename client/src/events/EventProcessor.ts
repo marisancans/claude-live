@@ -36,6 +36,8 @@ export class EventProcessor {
         colorHex: affectedNode.colorHex,
         inbound,
         agentId: null,
+        toolInput: event.tool_input,
+        toolResponse: event.tool_response,
       })
     }
 

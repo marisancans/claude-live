@@ -1,8 +1,6 @@
 /**
- * PROMPT — Neon Iridescent writhing threads.
- * 8 strands span origin→target at all times. They scatter from random directions,
- * converge to the path, then weave continuously into the core.
- * Shader: hue shifts along length + over time, white-hot near head.
+ * PROMPT — Plasma writhing threads.
+ * Electric blue-white with high-freq noise flicker and a traveling pulse per strand.
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
@@ -20,27 +18,26 @@ const VERT = /* glsl */`
 const FRAG = /* glsl */`
   uniform float uTime;
   uniform float uOpacity;
-  uniform float uHueBase;
+  uniform float uPhase;
   varying float vT;
-  vec3 hsl2rgb(float h, float s, float l) {
-    h = mod(h, 1.0);
-    vec3 rgb = clamp(abs(mod(h*6.0+vec3(0,4,2),6.0)-3.0)-1.0, 0.0, 1.0);
-    return l + s*(rgb-0.5)*(1.0-abs(2.0*l-1.0));
-  }
   void main() {
-    float hue   = mod(uHueBase + vT * 0.3 + uTime * 0.12, 1.0);
-    float core  = pow(1.0 - vT, 0.3);
-    float bloom = pow(vT, 0.5) * 0.6;
-    vec3  col   = hsl2rgb(hue, 1.0, 0.55 + bloom * 0.3);
-    col = mix(col, vec3(1.0), core * 0.4);
-    float alpha = (bloom + core * 0.5) * uOpacity;
-    gl_FragColor = vec4(col * (bloom + core * 0.5 + 0.05), alpha);
+    float flicker = 0.8 + 0.2 * sin(vT * 20.0 + uTime * 1.5);
+    float pulsePos = mod(uPhase + uTime * 0.08, 1.0);
+    float pulse    = exp(-pow((vT - pulsePos) / 0.08, 2.0)) * 0.8;
+    float base = pow(vT, 0.4) * 0.4;
+    float b    = (base + pulse) * flicker;
+    vec3 blue  = vec3(0.05, 0.2, 1.0);
+    vec3 cyan  = vec3(0.2,  0.9, 1.0);
+    vec3 white = vec3(1.0,  1.0, 1.0);
+    vec3 col   = mix(blue, cyan, vT);
+    col = mix(col, white, clamp(pulse / 0.8, 0.0, 1.0));
+    gl_FragColor = vec4(min(col * b, 1.0), min(b, 1.0) * uOpacity);
   }
 `
 
 function rand(a: number, b: number) { return Math.random() * (b - a) + a }
 
-export function buildPromptNeon(group: THREE.Group, p: SpawnParams): SecondaryEffect {
+export function buildPromptPlasma(group: THREE.Group, p: SpawnParams): SecondaryEffect {
   const strands = Array.from({ length: STRANDS }, (_, i) => {
     const posArr = new Float32Array(SEG * 3)
     const tArr   = new Float32Array(SEG)
@@ -50,7 +47,7 @@ export function buildPromptNeon(group: THREE.Group, p: SpawnParams): SecondaryEf
     geo.setAttribute('aT',       new THREE.BufferAttribute(tArr, 1))
     const mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
-      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uHueBase: { value: i / STRANDS } },
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uPhase: { value: i / STRANDS } },
       blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
     })
     group.add(new THREE.Line(geo, mat))
@@ -59,9 +56,9 @@ export function buildPromptNeon(group: THREE.Group, p: SpawnParams): SecondaryEf
     const f2  = 3.5 + Math.random() * 3.0
     const ph1 = Math.random() * Math.PI * 2
     const ph2 = Math.random() * Math.PI * 2
-    const amp = 4 + Math.random() * 6
-    const perp = new THREE.Vector3(Math.random()-.5, Math.random()-.5, Math.random()-.5).normalize()
-    const scatter = new THREE.Vector3((Math.random()-.5)*150, (Math.random()-.5)*150, (Math.random()-.5)*150)
+    const amp = 25 + Math.random() * 25
+    const perp    = new THREE.Vector3(Math.random()-.5, Math.random()-.5, Math.random()-.5).normalize()
+    const scatter = new THREE.Vector3((Math.random()-.5)*200, (Math.random()-.5)*200, (Math.random()-.5)*200)
     const windowStart = -(i / STRANDS) * 3.5 - Math.random() * 0.2
     const rollSpeed   = 0.8 + Math.random() * 0.6
 
@@ -72,7 +69,7 @@ export function buildPromptNeon(group: THREE.Group, p: SpawnParams): SecondaryEf
     entries: strands.map(s => ({ obj: new THREE.Line(s.geo, s.mat), mat: s.mat, meta: {} })),
     suppressDefaultTrail: true,
     trailTick(_prog, dt, elapsed) {
-      const speed = 2.5 + elapsed * 0.1
+      const speed = 0.3 + elapsed * 0.01
       let allDone = true
 
       for (const s of strands) {
@@ -92,12 +89,12 @@ export function buildPromptNeon(group: THREE.Group, p: SpawnParams): SecondaryEf
         if (count < 1) { s.geo.setDrawRange(0, 0); continue }
 
         for (let i = tailIdx; i <= headIdx; i++) {
-          const t        = i / (SEG - 1)
-          const ease     = applyEasing(p.pathConfig.easing, t)
-          const pt       = samplePath(p.pathConfig, p.origin, p.target, ease)
-          const scEnv    = Math.max(0, 1 - t / 0.5)
-          const wvEnv    = Math.min(1, t / 0.5)
-          const headPin  = 1 - Math.pow(t, 8)
+          const t       = i / (SEG - 1)
+          const ease    = applyEasing(p.pathConfig.easing, t)
+          const pt      = samplePath(p.pathConfig, p.origin, p.target, ease)
+          const scEnv   = Math.max(0, 1 - t / 0.5)
+          const wvEnv   = Math.min(1, t / 0.5)
+          const headPin = 1 - Math.pow(t, 8)
           const wv = (Math.sin(t * s.f1 * Math.PI * 2 + s.ph1 + elapsed * speed) * s.amp
                     + Math.sin(t * s.f2 * Math.PI * 2 + s.ph2 + elapsed * speed * 1.4) * s.amp * 0.3)
                     * wvEnv * headPin

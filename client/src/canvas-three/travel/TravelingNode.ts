@@ -253,6 +253,11 @@ export class TravelingNode {
       fx.applyFade(f)
     }
 
+    // Also allow custom effects to signal they are fully done
+    for (const fx of this.effects) {
+      if (fx.shouldMarkDone) { this.state = 'done'; break }
+    }
+
     if (this.trailFade <= 0) this.state = 'done'
     this.done = this.state === 'done'
   }
@@ -260,7 +265,8 @@ export class TravelingNode {
   private _tickSecondaries(prog: number, dt: number) {
     for (const fx of this.effects) {
       fx.tick(prog, dt, this.elapsed, this.state, this.head)
-      if (fx.shouldMarkDone) {
+      // suppressDefaultTrail effects own their own lifecycle — only checked in _tickFade
+      if (fx.shouldMarkDone && !fx.suppressDefaultTrail) {
         this.state = 'done'
         this.done = true
       }
@@ -276,6 +282,7 @@ export class TravelingNode {
         if ((e.obj as any).geometry) (e.obj as any).geometry.dispose()
         e.mat.dispose()
       }
+      fx.dispose?.()
     }
   }
 }

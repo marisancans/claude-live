@@ -107,6 +107,7 @@ export class PixiApp {
     const w = window.innerWidth
     const h = window.innerHeight
     this.app.renderer.resize(w, h)
+    this.backgroundLayer.resize(w, h)
   }
 
   /**

@@ -1,6 +1,6 @@
 import { Container, Text, Graphics, Sprite } from 'pixi.js'
 import type { Cluster } from '../../types'
-import { ORBIT_RADII, parseModelFamily, MODEL_COLORS } from '../../constants'
+import { orbitRadiusFor, parseModelFamily, MODEL_COLORS } from '../../constants'
 import { PlasmaCore } from '../shaders/PlasmaCore'
 import { getCoreGlowTexture, getPermissionRingTexture, spriteFromTexture } from '../textures/NodeTextures'
 
@@ -147,7 +147,7 @@ export class ClusterObject {
     for (let i = 0; i < this.data.ringCounts.length; i++) {
       if (this.data.ringCounts[i] > 0) {
         const g = new Graphics()
-        const radius = ORBIT_RADII[i] || ORBIT_RADII[ORBIT_RADII.length - 1]
+        const radius = orbitRadiusFor(i)
         g.circle(0, 0, radius).stroke({ width: 0.6, color: 0xffffff, alpha: 0.045 })
         this.container.addChildAt(g, 0)
         this.orbitRingGraphics.push(g)

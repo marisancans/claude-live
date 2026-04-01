@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { RawEvent, GraphNode, Cluster } from './types'
 import { createStore } from './store'
 import { PixiScene } from './canvas-pixi/PixiScene'
+import { ThreeScene } from './canvas-three/ThreeScene'
+import { EffectDemoScene } from './canvas-three/demo/EffectDemoScene'
 import { DebugPanel } from './DebugPanel'
 import { OperationsPanel } from './OperationsPanel'
 import { initAudio, playChordForEvent, setAudioEnabled, isAudioEnabled } from './audio'
@@ -188,6 +190,27 @@ export function App() {
     return saved === 'true'
   })
 
+  // Hash-based routing: #/three → Three.js renderer, default → PixiJS
+  const [route, setRoute] = useState(window.location.hash.slice(1) || '')
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash.slice(1) || '')
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  function loadHistory(sessionId: string, events: RawEvent[]) {
+    if (!Array.isArray(events) || events.length === 0) return
+    const ordered = [...events].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+    store.clearSession(sessionId)
+    for (const event of ordered) {
+      store.addEvent(event, true)
+    }
+    setClusters(new Map(store.getSessions()))
+    const last = ordered[ordered.length - 1]
+    setLastToolName(last.tool_name ?? last.hook_event_name ?? null)
+    setEventCount(store.getBuffer().length)
+  }
+
 
   // Initialize audio on mount
   useEffect(() => {
@@ -249,11 +272,6 @@ export function App() {
     const eventsUrl = '/events'
     let es: EventSource | null = null
     let cancelled = false
-    // Dedup: track recently seen events by tool_use_id or prompt hash to handle
-    // both hook and JSONL sources delivering the same event
-    const recentEventKeys = new Map<string, number>() // key → timestamp
-    const DEDUP_WINDOW_MS = 5000
-
     function connect() {
       if (cancelled) return
       es = new EventSource(eventsUrl)
@@ -270,29 +288,6 @@ export function App() {
           if (parsed.type === 'event') {
             const event: RawEvent = parsed.data
             if ((event.hook_event_name as string) === 'Diagnostic') return
-
-            // Dedup events from dual sources (hooks + JSONL tailing)
-            let dedupKey: string | null = null
-            if (event.tool_use_id) {
-              dedupKey = `${event.session_id}:${event.hook_event_name}:${event.tool_use_id}`
-            } else if (event.hook_event_name === 'UserPromptSubmit' && event.prompt) {
-              dedupKey = `${event.session_id}:prompt:${event.prompt.slice(0, 80)}`
-            } else if (event.hook_event_name === 'SessionStart') {
-              dedupKey = `${event.session_id}:start`
-            }
-            if (dedupKey) {
-              const now = Date.now()
-              if (recentEventKeys.has(dedupKey)) {
-                return // duplicate within window
-              }
-              recentEventKeys.set(dedupKey, now)
-              // Prune old entries periodically
-              if (recentEventKeys.size > 500) {
-                for (const [k, t] of recentEventKeys) {
-                  if (now - t > DEDUP_WINDOW_MS) recentEventKeys.delete(k)
-                }
-              }
-            }
 
             // When tab is hidden, update state silently (no animations/sounds)
             const tabHidden = document.hidden
@@ -386,32 +381,46 @@ export function App() {
     localStorage.setItem('claude-live-autofit-enabled', newState ? 'true' : 'false')
   }
 
+  if (route === '/demo') return <EffectDemoScene />
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <PixiScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      {route === '/three'
+        ? <ThreeScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+        : <PixiScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+      }
 
       {/* HUD */}
       <div className="hud">
-        <div className="hud-title">claude<span>live</span></div>
-        <div className="hud-stat">
-          <span className="hud-label">sse</span>
-          <span className="hud-value" style={{ color: wsStatus === 'connected' ? '#4ade80' : wsStatus === 'error' ? '#f87171' : '#fbbf24' }}>
-            {wsStatus}
-          </span>
-        </div>
-        <div className="hud-stat">
-          <span className="hud-label">events</span>
-          <span className="hud-value">{eventCount}</span>
-        </div>
-        <div className="hud-stat">
-          <span className="hud-label">sessions</span>
-          <span className="hud-value">{clusters.size}</span>
-        </div>
-        <div className="hud-stat">
-          <span className="hud-label">last</span>
-          <span className="hud-value hud-tool" style={{ color: TOOL_COLORS[lastToolName ?? ""] ?? "#888" }}>
-            {lastToolName ?? '—'}
-          </span>
+        <div className="hud-panel">
+          <div className="hud-title">claude<span>live</span></div>
+          <div className="hud-divider" />
+          <div className="hud-stats">
+            <div className="hud-stat">
+              <span className="hud-label">sse</span>
+              <span className="hud-value hud-value--mono" style={{ color: wsStatus === 'connected' ? '#4ade80' : wsStatus === 'error' ? '#f87171' : '#fbbf24' }}>
+                <span
+                  className="hud-dot"
+                  style={{ background: wsStatus === 'connected' ? '#4ade80' : wsStatus === 'error' ? '#f87171' : '#fbbf24' }}
+                />
+                {wsStatus}
+              </span>
+            </div>
+            <div className="hud-stat">
+              <span className="hud-label">events</span>
+              <span className="hud-value hud-value--mono">{eventCount}</span>
+            </div>
+            <div className="hud-stat">
+              <span className="hud-label">sessions</span>
+              <span className="hud-value hud-value--mono">{clusters.size}</span>
+            </div>
+            <div className="hud-stat">
+              <span className="hud-label">last</span>
+              <span className="hud-value hud-tool" style={{ color: TOOL_COLORS[lastToolName ?? ""] ?? "#9aa0ad" }}>
+                {lastToolName ?? '—'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -483,7 +492,12 @@ export function App() {
         )}
       </div>
 
-      <DebugPanel sessionIds={[...clusters.keys()]} isOpen={debugOpen} onClose={() => setDebugOpen(false)} />
+      <DebugPanel
+        sessionIds={[...clusters.keys()]}
+        isOpen={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        onLoadHistory={loadHistory}
+      />
       <OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>

@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js'
 import type { Cluster } from '../../types'
-import { ORBIT_RADII } from '../../constants'
+import { orbitRadiusFor } from '../../constants'
 const DASH_PX = 3
 
 /**
@@ -38,8 +38,8 @@ export class TrailObject {
         : node.life * 0.4 * Math.min(1, node.entry)
       if (baseAl <= 0.01) continue
 
-      const ring = Math.max(0, Math.min(node.orbitRing, ORBIT_RADII.length - 1))
-      const radius = ORBIT_RADII[ring]
+      const ring = Math.max(0, node.orbitRing)
+      const radius = orbitRadiusFor(ring)
       const dashArc = DASH_PX / radius
 
       const n = node.marks.length

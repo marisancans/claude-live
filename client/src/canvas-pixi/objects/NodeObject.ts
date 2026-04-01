@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, Sprite } from 'pixi.js'
 import type { GraphNode } from '../../types'
-import { ORBIT_RADII, parseModelFamily, MODEL_COLORS } from '../../constants'
+import { ORBIT_RADII, orbitRadiusFor, parseModelFamily, MODEL_COLORS } from '../../constants'
 import { PlasmaCore } from '../shaders/PlasmaCore'
 import {
   getCircleGlowTexture,
@@ -327,8 +327,8 @@ export class NodeObject {
       this.container.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius)
       return
     }
-    const ring = Math.max(0, Math.min(this.data.orbitRing, this.orbitRadii.length - 1))
-    let radius = this.orbitRadii[ring]
+    const ring = Math.max(0, this.data.orbitRing)
+    let radius = ring < this.orbitRadii.length ? this.orbitRadii[ring] : orbitRadiusFor(ring)
     if (this.compacting > 0.1) radius *= (1 - this.compacting * 0.4)
     else if (this.compacted > 0.1) radius *= (1 + this.compacted * 0.2)
     const angle = this.data.orbitAngle

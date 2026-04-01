@@ -116,12 +116,12 @@ export class SessionEndEffect {
     const eased = easeOutCubic(p)
     const flashPeak = p < 0.3 ? p / 0.3 : 1 - (p - 0.3) / 0.7 // rise then fall
 
-    // Blinding white-blue flash core
-    const flashAlpha = flashPeak * flashPeak
+    // White-blue flash core (capped to not obliterate aurora background)
+    const flashAlpha = Math.min(flashPeak * flashPeak, 0.65)
     if (flashAlpha > 0.01) {
       this.gfx.circle(0, 0, 5 + eased * 20).fill({ color: 0xFFFFFF, alpha: flashAlpha })
-      this.gfx.circle(0, 0, 15 + eased * 40).fill({ color: 0xD0E8FF, alpha: flashAlpha * 0.4 })
-      this.gfx.circle(0, 0, 30 + eased * 70).fill({ color: 0x8AAAD8, alpha: flashAlpha * 0.12 })
+      this.gfx.circle(0, 0, 15 + eased * 40).fill({ color: 0xD0E8FF, alpha: flashAlpha * 0.35 })
+      this.gfx.circle(0, 0, 30 + eased * 70).fill({ color: 0x8AAAD8, alpha: flashAlpha * 0.1 })
     }
 
     // 16 radial beams erupting outward, fading as flash dims

@@ -3,7 +3,7 @@ import type { Point } from './utils/spline'
 import { generateRandomSpline } from './utils/spline'
 import { playChordForEvent } from './audio'
 import { EventProcessor } from './events/EventProcessor'
-import { ORBIT_RADII, RING_CAPACITIES } from './constants'
+import { orbitRadiusFor, orbitSpeedFor, ringCapacityFor } from './constants'
 
 // Small deterministic radial offset per node so trails on the same ring don't overlap
 function radialJitter(key: string): number {
@@ -12,7 +12,6 @@ function radialJitter(key: string): number {
   return ((h >>> 0) % 15) - 7  // -7 to +7 px
 }
 
-const BUFFER_SIZE = 100
 const MAX_CLUSTERS = 6
 
 const TOOL_COLOR_HEX: Record<string, string> = {
@@ -40,49 +39,20 @@ function hexToInt(hex: string): number {
 }
 
 
-// Re-export for legacy imports
-const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
-
 const CANVAS_W = typeof window !== 'undefined' ? window.innerWidth : 1280
 const CANVAS_H = typeof window !== 'undefined' ? window.innerHeight : 800
 
 // Find which ring to assign a new node to, respecting per-ring capacities.
 // FIFO: if all rings are full, evict the oldest node to make room.
 function assignRing(cluster: Cluster): number {
-  // Find the first ring that isn't full yet
-  for (let i = 0; i < RING_CAPACITIES.length; i++) {
+  for (let i = 0; ; i++) {
     if (i >= cluster.ringCounts.length) {
       cluster.ringCounts[i] = 0
     }
-    if (cluster.ringCounts[i] < RING_CAPACITIES[i]) {
+    if (cluster.ringCounts[i] < ringCapacityFor(i)) {
       return i
     }
   }
-
-  // All rings full — evict oldest node (FIFO)
-  let oldestKey: string | null = null
-  let oldestTs = Infinity
-  for (const [key, node] of cluster.nodes) {
-    if (node.lastTimestamp < oldestTs) {
-      oldestTs = node.lastTimestamp
-      oldestKey = key
-    }
-  }
-  if (oldestKey) {
-    const evicted = cluster.nodes.get(oldestKey)!
-    const ring = evicted.orbitRing
-    cluster.nodes.delete(oldestKey)
-    if (ring >= 0 && ring < cluster.ringCounts.length) {
-      cluster.ringCounts[ring] = Math.max(0, cluster.ringCounts[ring] - 1)
-    }
-    // Remove edges referencing evicted node
-    cluster.edges = cluster.edges.filter(
-      e => e.fromKey !== oldestKey && e.toKey !== oldestKey
-    )
-    return ring // reuse the freed slot on same ring
-  }
-
-  return RING_CAPACITIES.length - 1
 }
 
 export function redistributeRing(cluster: Cluster, ring: number) {
@@ -127,29 +97,30 @@ export function redistributeRing(cluster: Cluster, ring: number) {
 }
 
 export function nodeKeyFor(event: RawEvent): string | null {
+  const id = String(event.id || `${event.session_id}-${event.timestamp}`)
   const t = event.tool_name
   if (!t) {
-    if (event.hook_event_name === 'Stop') return 'session:stop'
+    if (event.hook_event_name === 'Stop') return `session:stop:${id}`
     if (event.hook_event_name === 'Notification') {
       const msg = (event.tool_input as Record<string, string> | null)?.message || ''
-      return `notification:${msg.slice(0, 20)}`
+      return `notification:${msg.slice(0, 20)}:${id}`
     }
-    if (event.hook_event_name === 'PermissionRequest') return null // handled at cluster level
-    return null
+    if (event.hook_event_name === 'PermissionRequest') return `permission:${id}`
+    return `hook:${event.hook_event_name}:${id}`
   }
   const input = event.tool_input as Record<string, string> | null
   if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t)) {
     const fp = input?.file_path || input?.path || null
-    return fp ? `file:${fp}` : null
+    return fp ? `file:${fp}:${id}` : `file:unknown:${id}`
   }
   if (t === 'Bash') {
     const cmd = input?.command || ''
-    return `bash:${cmd}`
+    return `bash:${cmd}:${id}`
   }
   if (t === 'WebFetch') {
-    try { return `web:${new URL(input?.url || '').hostname}` } catch { return 'web:unknown' }
+    try { return `web:${new URL(input?.url || '').hostname}:${id}` } catch { return `web:unknown:${id}` }
   }
-  return `tool:${t}`
+  return `tool:${t}:${id}`
 }
 
 // Shorten MCP tool names: mcp__plugin_foo__bar__action → action
@@ -253,8 +224,11 @@ function nodeTypeFor(event: RawEvent): GraphNode['nodeType'] {
 
 // Calculate actual outer radius of a cluster based on its current nodes
 function getClusterOuterRadius(cluster: Cluster): number {
-  const lastActiveRing = Math.max(0, cluster.ringCounts.length - 1)
-  return ORBIT_RADII[Math.min(lastActiveRing, ORBIT_RADII.length - 1)]
+  let lastActiveRing = 0
+  for (let i = cluster.ringCounts.length - 1; i >= 0; i--) {
+    if (cluster.ringCounts[i] > 0) { lastActiveRing = i; break }
+  }
+  return orbitRadiusFor(lastActiveRing)
 }
 
 function clusterPosition(index: number, existing: Cluster[]): { x: number; y: number } {
@@ -272,7 +246,7 @@ function clusterPosition(index: number, existing: Cluster[]): { x: number; y: nu
     // Scale radius so clusters fit
     const avgRadius = existing.length > 0
       ? existing.reduce((sum, c) => sum + getClusterOuterRadius(c), 0) / existing.length
-      : ORBIT_RADII[0]
+      : orbitRadiusFor(0)
     const minR = (avgRadius * 4) / Math.sin(Math.PI / Math.max(MAX_CLUSTERS, 2))
     const r = Math.max(minR, Math.min(CANVAS_W, CANVAS_H) * 0.38)
     const x = CANVAS_W / 2 + Math.cos(angle) * r
@@ -294,6 +268,7 @@ export function createStore() {
   const buffer: RawEvent[] = []
   const sessions = new Map<string, Cluster>()
   const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
+  const pendingInputs  = new Map<string, Record<string, unknown> | null>()  // tool_use_id → tool_input
   function recomputeAges() {
     const lastIndex = new Map<string, Map<string, number>>()
     for (let i = 0; i < buffer.length; i++) {
@@ -320,7 +295,6 @@ export function createStore() {
 
   function addEvent(event: RawEvent, skipAnimations: boolean = false) {
     buffer.push(event)
-    if (buffer.length > BUFFER_SIZE) buffer.shift()
 
     if (!sessions.has(event.session_id)) {
       if (sessions.size >= MAX_CLUSTERS) {
@@ -384,9 +358,8 @@ export function createStore() {
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)
-      ;(c as any).ringSpeeds = ORBIT_SPEEDS.map((speed, i) =>
-        speed * (1 + (rj + (i * 2 - 1)) / 7 * 0.2)
-      )
+      ;(c as any).ringSpeedJitter = rj
+      ;(c as any).ringSpeeds = [] as number[]
       sessions.set(event.session_id, c)
     }
 
@@ -433,9 +406,10 @@ export function createStore() {
       (cluster as any).awaitingPermission = false
     }
 
-    // Track tool latency: store start timestamp on PreToolUse
+    // Track tool latency + input: store on PreToolUse, consume on PostToolUse
     if (event.hook_event_name === 'PreToolUse' && event.tool_use_id) {
       pendingTimings.set(event.tool_use_id, event.timestamp)
+      pendingInputs.set(event.tool_use_id, event.tool_input)
     }
 
     // SubagentStart: spawn satellite node orbiting close to core
@@ -568,6 +542,7 @@ export function createStore() {
     const isFile = type === 'file'
 
     // Compute tool latency for PostToolUse / PostToolUseFailure
+    // Also restore tool_input from PreToolUse (PostToolUse events have tool_input: null)
     let latencyStr = ''
     if ((event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure') && event.tool_use_id) {
       const startTs = pendingTimings.get(event.tool_use_id)
@@ -575,6 +550,10 @@ export function createStore() {
         const ms = event.timestamp - startTs
         latencyStr = ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed(1)}s`
         pendingTimings.delete(event.tool_use_id)
+      }
+      if (!event.tool_input && pendingInputs.has(event.tool_use_id)) {
+        event.tool_input = pendingInputs.get(event.tool_use_id) ?? null
+        pendingInputs.delete(event.tool_use_id)
       }
     }
 
@@ -584,8 +563,15 @@ export function createStore() {
       cluster.ringCounts[orbitRing]++
       // Use per-ring speed from cluster (all nodes on same ring share the same speed)
       const ringSpeeds = (cluster as any).ringSpeeds as number[] | undefined
-      const orbitSpeed = ringSpeeds ? ringSpeeds[orbitRing] : ORBIT_SPEEDS[orbitRing]
-      const orbitRadius = ORBIT_RADII[orbitRing]
+      const rj = (cluster as any).ringSpeedJitter ?? radialJitter(event.session_id)
+      let orbitSpeed = orbitSpeedFor(orbitRing)
+      if (ringSpeeds) {
+        if (ringSpeeds[orbitRing] == null) {
+          ringSpeeds[orbitRing] = orbitSpeedFor(orbitRing) * (1 + (rj + (orbitRing * 2 - 1)) / 7 * 0.2)
+        }
+        orbitSpeed = ringSpeeds[orbitRing]
+      }
+      const orbitRadius = orbitRadiusFor(orbitRing)
 
       // Place new node in the largest angular gap on this ring
       const ringNodes = [...cluster.nodes.values()].filter(n => n.orbitRing === orbitRing)
@@ -725,8 +711,29 @@ export function createStore() {
     if (!skipAnimations) EventProcessor.process(event, cluster, affectedNode)
   }
 
+  function replayEvents(events: RawEvent[]) {
+    for (const event of events) {
+      const cluster = sessions.get(event.session_id)
+      if (!cluster) continue
+      const nk = nodeKeyFor(event)
+      const affectedNode = nk ? cluster.nodes.get(nk) ?? null : null
+      EventProcessor.process(event, cluster, affectedNode)
+    }
+  }
+
+  function clearSession(sessionId: string) {
+    if (!sessionId) return
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      if (buffer[i].session_id === sessionId) buffer.splice(i, 1)
+    }
+    sessions.delete(sessionId)
+    recomputeAges()
+  }
+
   return {
     addEvent,
+    clearSession,
+    replayEvents,
     getBuffer: () => [...buffer],
     getSessions: () => sessions,
   }

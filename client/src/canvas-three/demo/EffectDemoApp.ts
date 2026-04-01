@@ -164,7 +164,7 @@ export class EffectDemoApp {
 
   private _clearNode() {
     if (this.currentNode) {
-      this.nodeGroup.remove(this.currentNode.group)
+this.nodeGroup.remove(this.currentNode.group)
       this.currentNode.dispose()
       this.currentNode = null
     }

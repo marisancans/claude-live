@@ -282,11 +282,11 @@ export class CompactionEffect {
 
     // Multiple concentric flash layers (inside out)
     const flashLayers = [
-      { r: 3, color: 0xFFFFFF, alpha: 1.0 },
-      { r: 12, color: 0xFFFFF0, alpha: 0.9 },
-      { r: 25, color: 0xFFF8E0, alpha: 0.6 },
-      { r: 50, color: 0xFFE8B0, alpha: 0.3 },
-      { r: 80, color: 0xFFD080, alpha: 0.12 },
+      { r: 3, color: 0xFFFFFF, alpha: 0.7 },
+      { r: 12, color: 0xFFFFF0, alpha: 0.6 },
+      { r: 25, color: 0xFFF8E0, alpha: 0.4 },
+      { r: 50, color: 0xFFE8B0, alpha: 0.2 },
+      { r: 80, color: 0xFFD080, alpha: 0.08 },
     ]
 
     for (const layer of flashLayers) {

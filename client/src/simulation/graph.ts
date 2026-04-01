@@ -1,8 +1,5 @@
 import type { Cluster } from '../types'
 import { redistributeRing } from '../store'
-import { ORBIT_RADII, RING_CAPACITIES } from '../constants'
-const MARK_PX_SPACING = 5   // pixels between stamp centers (uniform across all rings)
-const MARK_MAX = 12         // half trail length
 
 export function tickSimulation(clusters: Map<string, Cluster>) {
   // Cluster positions are managed by physics in PixiScene — do not overwrite here
@@ -44,16 +41,6 @@ export function tickSimulation(clusters: Map<string, Cluster>) {
           x: node.x,
           y: node.y
         })
-      }
-
-      // Stamp trail marks at uniform pixel intervals (skip agent satellites)
-      if (node.orbitRing >= 0) {
-        const spacing = MARK_PX_SPACING / node.orbitRadius // radians for constant px gap
-        const last = node.marks.length > 0 ? node.marks[node.marks.length - 1] : null
-        if (last === null || Math.abs(node.orbitAngle - last) >= spacing) {
-          node.marks.push(node.orbitAngle)
-          if (node.marks.length > MARK_MAX) node.marks.shift()
-        }
       }
 
       // Decay timers

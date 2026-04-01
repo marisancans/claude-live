@@ -28,16 +28,23 @@ const MIME = {
 }
 
 const clients = new Set()
+const eventHistory = [] // all events seen since server start
+const MAX_HISTORY = 5000
 
 function broadcast(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`
   for (const res of clients) {
     try { res.write(msg) } catch { clients.delete(res) }
   }
+  // Buffer for history API
+  if (data.type === 'event') {
+    eventHistory.push(data.data)
+    if (eventHistory.length > MAX_HISTORY) eventHistory.splice(0, eventHistory.length - MAX_HISTORY)
+  }
 }
 
 const server = createServer((req, res) => {
-  // POST /hook — receive event, broadcast to SSE clients
+  // POST /hook — used by debug panel to inject test events
   if (req.method === 'POST' && req.url === '/hook') {
     let body = ''
     req.on('data', c => body += c)
@@ -60,6 +67,24 @@ const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: true, version: VERSION, clients: clients.size, port: PORT }))
+    return
+  }
+
+  // GET /api/history?session=ID — events for a specific session since last compact
+  if (req.method === 'GET' && req.url.startsWith('/api/history')) {
+    const url = new URL(req.url, 'http://localhost')
+    const sessionFilter = url.searchParams.get('session')
+    let events = sessionFilter
+      ? eventHistory.filter(e => e.session_id === sessionFilter)
+      : eventHistory
+    // Only return events since the last PostCompact — history before that is irrelevant
+    let lastCompact = -1
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].hook_event_name === 'PostCompact') { lastCompact = i; break }
+    }
+    if (lastCompact >= 0) events = events.slice(lastCompact + 1)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(events))
     return
   }
 

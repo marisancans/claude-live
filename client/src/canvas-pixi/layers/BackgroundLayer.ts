@@ -179,7 +179,9 @@ export class BackgroundLayer {
   app: Application
 
   private auroras: AuroraData[] = []
+  private auroraJitters: number[] = [] // stored rand(-80,80) offsets for resize recomputation
   private stars: StarData[] = []
+  private starRelativePositions: { rx: number; ry: number }[] = [] // 0-1 normalized positions for resize
   private vigSprite: Sprite | null = null
   private elapsed = 0
 
@@ -211,7 +213,9 @@ export class BackgroundLayer {
       const s = new Sprite(tex)
       s.anchor.set(0.5)
 
-      const baseX = curtainSpacing * (i + 1) + rand(-80, 80)
+      const jitter = rand(-80, 80)
+      this.auroraJitters.push(jitter)
+      const baseX = curtainSpacing * (i + 1) + jitter
       s.x = baseX
       s.y = H / 2
 
@@ -251,8 +255,10 @@ export class BackgroundLayer {
     for (let i = 0; i < smallCount; i++) {
       const s = new Sprite(starTex)
       s.anchor.set(0.5)
-      s.x = rand(0, W)
-      s.y = rand(0, H)
+      const rx = Math.random(), ry = Math.random()
+      this.starRelativePositions.push({ rx, ry })
+      s.x = rx * W
+      s.y = ry * H
       s.scale.set(rand(0.1, 0.25))
       const ba = rand(0.35, 0.75)
       s.alpha = ba
@@ -272,8 +278,10 @@ export class BackgroundLayer {
     for (let i = 0; i < largerCount; i++) {
       const s = new Sprite(starTex)
       s.anchor.set(0.5)
-      s.x = rand(0, W)
-      s.y = rand(0, H)
+      const rx = Math.random(), ry = Math.random()
+      this.starRelativePositions.push({ rx, ry })
+      s.x = rx * W
+      s.y = ry * H
       s.scale.set(rand(0.25, 0.4))
       const ba = rand(0.5, 0.8)
       s.alpha = ba
@@ -319,6 +327,44 @@ export class BackgroundLayer {
     vig.height = H
     layer.addChild(vig)
     this.vigSprite = vig
+  }
+
+  /**
+   * Reposition all background sprites for a new viewport size.
+   * Called from PixiApp.onResize() after renderer.resize().
+   */
+  resize(w: number, h: number) {
+    // Reposition auroras using stored jitter offsets
+    const newSpacing = w / (AURORA_CONFIGS.length + 1)
+    for (let i = 0; i < this.auroras.length; i++) {
+      const jitter = this.auroraJitters[i] ?? 0
+      const newBaseX = newSpacing * (i + 1) + jitter
+      this.auroras[i].baseX = newBaseX
+      this.auroras[i].sprite.x = newBaseX
+      this.auroras[i].sprite.y = h / 2
+      // Rescale height to fill new viewport
+      const currentScaleX = this.auroras[i].sprite.scale.x
+      this.auroras[i].sprite.scale.set(currentScaleX, h / 800)
+    }
+
+    // Reposition stars using stored normalized positions
+    for (let i = 0; i < this.stars.length; i++) {
+      const rel = this.starRelativePositions[i]
+      if (rel) {
+        this.stars[i].sprite.x = rel.rx * w
+        this.stars[i].sprite.y = rel.ry * h
+      }
+    }
+
+    // Rebuild vignette texture for new size
+    if (this.vigSprite) {
+      const tex = vignetteTex(w, h)
+      this.vigSprite.texture = tex
+      this.vigSprite.x = 0
+      this.vigSprite.y = 0
+      this.vigSprite.width = w
+      this.vigSprite.height = h
+    }
   }
 
   tick(dt: number) {

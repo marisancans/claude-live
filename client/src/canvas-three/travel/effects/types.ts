@@ -19,6 +19,8 @@ export interface SecondaryEffect {
   onStall?(stallPos: THREE.Vector3): void
   /** When true, TravelingNode should set done=true immediately */
   shouldMarkDone?: boolean
+  /** Called by TravelingNode.dispose() — clean up geometry/materials not in entries[] */
+  dispose?(): void
   /**
    * When true, TravelingNode hides its default trail entirely.
    * The effect is responsible for drawing the trail via its own geometry.

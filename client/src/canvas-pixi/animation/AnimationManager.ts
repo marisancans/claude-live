@@ -361,8 +361,8 @@ export class AnimationManager {
     this.worldLayer.container.addChild(effect.container)
     this.miscEffects.push(effect)
 
-    // Keep camera looking at the explosion site for the effect duration
-    this.worldLayer.cameraController.pinPoint(worldX, worldY, 2.5)
+    // Keep camera looking at the explosion site briefly (short to avoid jarring zoom)
+    this.worldLayer.cameraController.pinPoint(worldX, worldY, 0.8)
   }
 
   tick(dt: number) {

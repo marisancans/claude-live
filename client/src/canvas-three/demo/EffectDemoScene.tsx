@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { EffectDemoApp } from './EffectDemoApp'
 import { PROMPT_VARIATIONS, type EffectVariation } from './variations/prompt'
+import { GLOB_VARIATIONS } from './variations/glob'
 
 interface ToolGroup {
   label: string
@@ -14,6 +15,7 @@ interface ToolGroup {
 
 const TOOL_GROUPS: ToolGroup[] = [
   { label: 'Prompt', color: '#93c5fd', variations: PROMPT_VARIATIONS },
+  { label: 'Glob',   color: '#a78bfa', variations: GLOB_VARIATIONS   },
 ]
 
 export function EffectDemoScene() {

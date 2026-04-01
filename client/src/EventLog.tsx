@@ -70,6 +70,7 @@ export function EventLog({ entries }: Props) {
                 <span className="event-log-tool" style={{ color: entry.colorHex }}>{entry.tool}</span>
                 {entry.file && <span className="event-log-file">{entry.file}</span>}
                 <span className="event-log-session">{entry.sessionLabel}</span>
+                <span className="event-log-id">{entry.id.slice(-8)}</span>
               </div>
             )
           })}
@@ -95,6 +96,7 @@ export function EventLog({ entries }: Props) {
               <span className="event-log-tool" style={{ color: entry.colorHex }}>{entry.tool}</span>
               {entry.file && <span className="event-log-file">{entry.file}</span>}
               <span className="event-log-session">{entry.sessionLabel}</span>
+              <span className="event-log-id">{entry.id}</span>
             </div>
           ))}
         </div>
