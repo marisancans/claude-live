@@ -12,15 +12,23 @@ export function randDir(): THREE.Vector3 {
   )
 }
 
-/** Exponential scatter — biased toward larger radii, flattened Y (galaxy disk). */
+/** Very noisy scatter — broken symmetry, highly irregular jitter. */
 export function scatter(rMin: number, rMax: number): THREE.Vector3 {
   const dir = randDir()
-  const r = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.5)
+  // Skew radius more toward edges for a hollow-ish, wispy effect
+  const r = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.3)
+  
+  // Chaotic jitter: vary each axis independently with wider ranges
+  // Reduced the Y flattening to make it less 'disk-like' but still slightly flattened
   return new THREE.Vector3(
-    dir.x * r * rand(0.8, 1.4),
-    dir.y * r * rand(0.1, 0.35),
-    dir.z * r * rand(0.9, 1.5),
-  )
+    dir.x * r * rand(0.6, 1.8),
+    dir.y * r * rand(0.3, 0.7), 
+    dir.z * r * rand(0.6, 1.8),
+  ).add(new THREE.Vector3(
+    (Math.random() - 0.5) * 40,
+    (Math.random() - 0.5) * 20,
+    (Math.random() - 0.5) * 40
+  ))
 }
 
 export function perpTo(v: THREE.Vector3): THREE.Vector3 {
