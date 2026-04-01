@@ -74,7 +74,7 @@ export function buildPromptPlasma(group: THREE.Group, p: SpawnParams): Secondary
 
       for (const s of strands) {
         const rate = s.window >= 1
-          ? (1.0 / (1.5 * s.rollSpeed))
+          ? (1.0 / (4.0 * s.rollSpeed))
           : ((1 - s.windowStart) / p.travelTime)
         s.window = Math.min(2, s.window + dt * rate)
         const w = s.window
