@@ -164,21 +164,21 @@ export class ThreeApp {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
-      sv.particles.spawnBurst('response', 8)
+      sv.particles.spawn('response', '#aad4ff')
     }
 
     const onCompactPre = (e: { sessionId: string }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
-      sv.particles.spawnBurst('compact:pre', 6)
+      sv.particles.spawn('compact:pre', '#FFD060')
     }
 
     const onCompactPost = (e: { sessionId: string }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
-      sv.particles.spawnBurst('compact:post', 10)
+      sv.particles.spawn('compact:post', '#FFE080')
     }
 
     const onSessionEnd = (e: { sessionId: string }) => {

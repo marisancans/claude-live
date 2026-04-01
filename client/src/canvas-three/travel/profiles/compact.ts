@@ -1,9 +1,6 @@
 /**
- * COMPACT PRE — Implosion. Used 6× via spawnBurst.
- * Gold streaks converging fast on core.
- *
- * COMPACT POST — Supernova. Used 10× via spawnBurst.
- * Node 0 gets the explosion ring.
+ * COMPACT PRE — Single implosion node with 6 internal converging streaks.
+ * COMPACT POST — Single supernova node with 10 internal expanding streaks + ring.
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
@@ -11,32 +8,32 @@ import { rand, scatter } from './helpers'
 
 export function profileCompactPre(): SpawnParams {
   return {
-    origin: scatter(55, 140),
-    target: scatter(1, 5),
+    origin: scatter(80, 150),
+    target: scatter(2, 8),
     color: new THREE.Color('#FFD060'),
     colorEnd: new THREE.Color('#ffffff'),
-    travelTime: rand(1.0, 2.0),
-    trailLength: 0.65,
-    trailBrightness: 1.5,
-    trailFadeTime: 6.0,
-    headSize: 6,
+    travelTime: rand(0.8, 1.5),
+    trailLength: 0,
+    trailBrightness: 0,
+    trailFadeTime: 5.0,
+    headSize: 0,
     pathConfig: { type: 'linear', easing: 'easeInPow25' },
     _tool: 'compact:pre',
   }
 }
 
-export function profileCompactPost(index: number): SpawnParams {
+export function profileCompactPost(_index: number): SpawnParams {
   return {
-    origin: new THREE.Vector3(rand(-2, 2), rand(-2, 2), rand(-2, 2)),
-    target: scatter(50, 120),
+    origin: scatter(1, 5),
+    target: scatter(70, 160),
     color: new THREE.Color('#FFE080'),
     colorEnd: new THREE.Color('#FFE080'),
-    travelTime: rand(2.0, 4.5),
-    trailLength: 0.68,
-    trailBrightness: 1.8,
-    trailFadeTime: 18.0,
-    headSize: rand(5, 9),
+    travelTime: rand(2.5, 4.0),
+    trailLength: 0,
+    trailBrightness: 0,
+    trailFadeTime: 15.0,
+    headSize: 0,
     pathConfig: { type: 'linear', easing: 'easeOutQuart' },
-    _tool: index === 0 ? 'compact:post:first' : 'compact:post',
+    _tool: 'compact:post',
   }
 }

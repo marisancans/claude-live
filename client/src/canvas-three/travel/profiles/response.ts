@@ -1,23 +1,23 @@
 /**
- * RESPONSE — Nova burst. Used 8× via spawnBurst.
- * Node 0 gets the ring secondary.
+ * RESPONSE — Single nova node with 8 internal burst particles.
+ * Radiates outward with fading streaks.
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
 import { rand, scatter } from './helpers'
 
-export function profileResponse(index: number): SpawnParams {
+export function profileResponse(_index: number): SpawnParams {
   return {
-    origin: new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)),
-    target: scatter(70, 160),
+    origin: scatter(1, 4),
+    target: scatter(80, 180),
     color: new THREE.Color('#7eb8f0'),
     colorEnd: new THREE.Color('#aad4ff'),
-    travelTime: rand(1.5, 3.0),
-    trailLength: 0.75,
-    trailBrightness: 2.0,
-    trailFadeTime: 16.0,
-    headSize: 6,
+    travelTime: rand(2.0, 3.5),
+    trailLength: 0,
+    trailBrightness: 0,
+    trailFadeTime: 12.0,
+    headSize: 0,
     pathConfig: { type: 'linear', easing: 'easeOutQuart' },
-    _tool: index === 0 ? 'response:first' : 'response',
+    _tool: 'response',
   }
 }
