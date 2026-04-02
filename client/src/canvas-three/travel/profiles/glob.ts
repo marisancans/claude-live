@@ -34,4 +34,3 @@ export function profileGlob(resultCount = 0): SpawnParams {
     _tool: 'Glob',
   }
 }
-

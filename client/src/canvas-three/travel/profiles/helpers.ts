@@ -25,9 +25,9 @@ export function scatter(rMin: number, rMax: number): THREE.Vector3 {
   const z = (Math.random() - 0.5) * 2
 
   // Each axis gets its own independent radius sample — creates ellipsoidal clumping
-  const rx = rMin + (rMax - rMin) * Math.pow(Math.random(), 1.8)
-  const ry = rMin + (rMax - rMin) * Math.pow(Math.random(), 1.8)
-  const rz = rMin + (rMax - rMin) * Math.pow(Math.random(), 1.8)
+  const rx = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.6)
+  const ry = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.6)
+  const rz = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.6)
 
   // Strong Y compression — flat disk-ish but not uniform
   return new THREE.Vector3(

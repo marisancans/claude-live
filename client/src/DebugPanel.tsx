@@ -45,7 +45,15 @@ export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props
   const fileIdx = useRef(0)
   const cmdIdx = useRef(0)
   const eventIdx = useRef(0)
-  const agentId = useRef('agent-' + Math.random().toString(36).slice(2, 7))
+  const startedAgents = useRef<string[]>([])
+  function nextAgentId() {
+    const id = 'agent-' + Math.random().toString(36).slice(2, 7)
+    startedAgents.current.push(id)
+    return id
+  }
+  function lastAgentId() {
+    return startedAgents.current.pop() || 'none'
+  }
 
   function nextFile() {
     return FILE_PATHS[fileIdx.current++ % FILE_PATHS.length]
@@ -158,13 +166,13 @@ export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props
       postHook({ session_id: sessionId, hook_event_name: 'PermissionRequest', tool_input: { message: `Allow bash command execution? #${id}` } })
     } },
     { label: 'Stop',        color: '#888888', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Stop' }) },
-    { label: 'SubStart',    color: '#c084fc', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStart', agent_id: agentId.current, agent_type: 'general-purpose' }) },
-    { label: 'SubStop',     color: '#7c3aed', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStop',  agent_id: agentId.current }) },
+    { label: 'SubStart',    color: '#c084fc', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStart', agent_id: nextAgentId(), agent_type: 'general-purpose' }) },
+    { label: 'SubStop',     color: '#7c3aed', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStop',  agent_id: lastAgentId() }) },
     { label: 'SessEnd',     color: '#ef4444', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SessionEnd' }) },
     { label: 'Fail',        color: '#f87171', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostToolUseFailure', tool_name: 'Read', tool_input: { file_path: nextFile() }, error: 'File not found' }) },
     { label: 'Compact↓',   color: '#94a3b8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PreCompact', trigger: 'manual' }) },
     { label: 'Compact↑',   color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostCompact' }) },
-    { label: 'Prompt',      color: '#b0c8f0', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the login bug on the dashboard page' }) },
+    { label: 'Prompt',      color: '#b0c8f0', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: `Fix the login bug on the dashboard page #${nextEventId()}` }) },
     { label: 'Response',    color: '#7eb8f0', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Stop', last_assistant_message: 'Here is the fix for the login bug. Updated auth middleware to handle token refresh correctly.' }) },
   ]
 
