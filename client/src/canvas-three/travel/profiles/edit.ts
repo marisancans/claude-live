@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter, perpTo, ZERO } from './helpers'
+import { rand, scatter, perpTo, ZERO, nearCore } from './helpers'
 
 export function profileEdit(
   filePos?: THREE.Vector3,
@@ -20,7 +20,7 @@ export function profileEdit(
 
   const returnEcho: SpawnParams = {
     origin: target.clone(),
-    target: scatter(2, 7),
+    target: nearCore(),
     color: new THREE.Color('#a0d0ff'),
     colorEnd: new THREE.Color('#ffffff'),
     travelTime: rand(0.9, 1.4),

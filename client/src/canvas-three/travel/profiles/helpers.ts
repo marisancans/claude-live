@@ -39,3 +39,12 @@ export function perpTo(v: THREE.Vector3): THREE.Vector3 {
 }
 
 export const ZERO = new THREE.Vector3(0, 0, 0)
+
+/** Small jitter near the session core (0,0,0). Use for targets that should land at core. */
+export function nearCore(jitter = 4): THREE.Vector3 {
+  return new THREE.Vector3(
+    (Math.random() - 0.5) * jitter,
+    (Math.random() - 0.5) * jitter,
+    (Math.random() - 0.5) * jitter,
+  )
+}

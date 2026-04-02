@@ -4,12 +4,12 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter } from './helpers'
+import { rand, scatter, nearCore } from './helpers'
 
 export function profileCompactPre(): SpawnParams {
   return {
     origin: scatter(80, 150),
-    target: scatter(2, 8),
+    target: nearCore(),
     color: new THREE.Color('#FFD060'),
     colorEnd: new THREE.Color('#ffffff'),
     travelTime: rand(0.8, 1.5),
@@ -24,7 +24,7 @@ export function profileCompactPre(): SpawnParams {
 
 export function profileCompactPost(_index: number): SpawnParams {
   return {
-    origin: scatter(1, 5),
+    origin: nearCore(),
     target: scatter(70, 160),
     color: new THREE.Color('#FFE080'),
     colorEnd: new THREE.Color('#FFE080'),

@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter, randDir, perpTo, ZERO } from './helpers'
+import { rand, scatter, randDir, perpTo, ZERO, nearCore } from './helpers'
 
 export function profileGrep(
   filePos?: THREE.Vector3,
@@ -29,7 +29,7 @@ export function profileGrep(
 
   const returnPing: SpawnParams = {
     origin: arcTarget.clone(),
-    target: scatter(2, 7),
+    target: nearCore(),
     color: new THREE.Color('#e879f9'),
     colorEnd: new THREE.Color('#ffffff'),
     travelTime: rand(0.7, 1.1),

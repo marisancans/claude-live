@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter, perpTo, ZERO } from './helpers'
+import { rand, scatter, perpTo, ZERO, nearCore } from './helpers'
 
 export function profileWebFetch(
   _toolInput?: Record<string, unknown> | null,
@@ -28,7 +28,7 @@ export function profileWebFetch(
   const echoPerp = perpTo(dir.clone().negate())
   const echo: SpawnParams = {
     origin: target.clone(),
-    target: scatter(3, 12),
+    target: nearCore(),
     color: new THREE.Color('#f43f5e'),
     colorEnd: new THREE.Color('#fb7185'),
     travelTime: rand(4, 7),

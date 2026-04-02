@@ -4,11 +4,11 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter } from './helpers'
+import { rand, scatter, nearCore } from './helpers'
 
 export function profileResponse(_index: number): SpawnParams {
   return {
-    origin: scatter(1, 4),
+    origin: nearCore(),
     target: scatter(80, 180),
     color: new THREE.Color('#7eb8f0'),
     colorEnd: new THREE.Color('#aad4ff'),

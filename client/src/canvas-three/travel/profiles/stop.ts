@@ -3,11 +3,11 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter } from './helpers'
+import { rand, scatter, nearCore } from './helpers'
 
 export function profileStop(): SpawnParams {
   const origin = scatter(15, 45)
-  const target = scatter(1, 4)
+  const target = nearCore()
   const c1 = origin.clone().lerp(target, 0.5)
   c1.y -= rand(12, 25) // gravity sag
   return {

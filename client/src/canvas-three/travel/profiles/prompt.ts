@@ -4,12 +4,12 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter } from './helpers'
+import { rand, scatter, nearCore } from './helpers'
 
 export function profilePrompt(_index: number): SpawnParams {
   return {
     origin: scatter(250, 400),
-    target: scatter(1, 4),
+    target: nearCore(),
     color: new THREE.Color('#c8e0ff'),
     colorEnd: new THREE.Color('#ffffff'),
     travelTime: rand(2.0, 3.5),

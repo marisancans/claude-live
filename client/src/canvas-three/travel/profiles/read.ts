@@ -15,7 +15,7 @@
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
-import { rand, scatter } from './helpers'
+import { rand, scatter, nearCore } from './helpers'
 
 export function profileRead(
   filePos?: THREE.Vector3,
@@ -23,7 +23,7 @@ export function profileRead(
   toolResponse?: Record<string, unknown> | null,
 ): SpawnParams {
   const fileOrigin = filePos?.clone() ?? scatter(40, 100)
-  const coreTarget = scatter(1, 6)
+  const coreTarget = nearCore()
 
   // Data stream: file → core
   // headSize=0 — no round blob. The trail is the data, the diamond effect is the head.
