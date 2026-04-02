@@ -14,7 +14,6 @@ import type { Cluster } from '../types'
 import { BackgroundLayer } from './layers/BackgroundLayer'
 import { SessionCore } from './objects/SessionCore'
 import { ParticleCloud } from './objects/ParticleCloud'
-import { FileNodeWeb } from './objects/FileNodeWeb'
 import { eventBus } from '../events/EventBus'
 import { TOOL_COLOR_HEX, DEFAULT_HEX } from '../constants'
 import { profileGlob } from './travel/profiles/glob'
@@ -23,9 +22,6 @@ interface SessionVisual {
   group: THREE.Group
   core: SessionCore
   particles: ParticleCloud
-  web: FileNodeWeb
-  /** Stable 3D positions for file paths — same file → same point in space */
-  filePositions: Map<string, THREE.Vector3>
 }
 
 export class ThreeApp {
@@ -100,44 +96,13 @@ export class ThreeApp {
     this.setupEventListeners()
   }
 
-  /**
-   * Returns a stable position for a file path within a session.
-   * First access creates and caches a random-but-consistent position.
-   * All operations on the same file will use the same 3D anchor point.
-   */
-  private getFilePos(sv: SessionVisual, filePath: string): THREE.Vector3 {
-    if (sv.filePositions.has(filePath)) return sv.filePositions.get(filePath)!
-    // Stable scatter: bias toward mid-range distances, flattened Y
-    const angle = Math.random() * Math.PI * 2
-    const elevation = (Math.random() - 0.5) * 0.3
-    const r = 40 + Math.pow(Math.random(), 0.6) * 120
-    const pos = new THREE.Vector3(
-      Math.cos(angle) * r,
-      elevation * r * 0.25,
-      Math.sin(angle) * r,
-    )
-    sv.filePositions.set(filePath, pos)
-    sv.web.register(filePath, pos)
-    return pos
-  }
-
   private setupEventListeners() {
     const onToolUsed = (e: { sessionId: string; tool: string; colorHex: string; nodeKey?: string; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
 
-      // Resolve file anchor for file-targeting tools
-      const filePath = e.toolInput?.file_path as string | undefined
-      const filePos = filePath ? this.getFilePos(sv, filePath) : undefined
-      if (filePath) sv.web.hit(filePath)
-      if (['Read','Edit','Write','Grep'].includes(e.tool)) {
-        console.log('[ThreeApp] file-tool', e.tool, '| file_path=', filePath, '| toolInput keys=', e.toolInput ? Object.keys(e.toolInput) : 'null')
-      }
-
-      if (e.tool === 'Bash') {
-        sv.particles.spawn('Bash', e.colorHex, undefined, e.toolInput, e.toolResponse)
-      } else if (e.tool === 'Glob') {
+      if (e.tool === 'Glob') {
         const responseText = typeof e.toolResponse?.content === 'string'
           ? (e.toolResponse.content as string) : ''
         const resultCount = responseText
@@ -149,7 +114,7 @@ export class ThreeApp {
         const params = profileGlob(resultCount)
         sv.particles.spawnRaw(params)
       } else {
-        sv.particles.spawn(e.tool, e.colorHex, filePos, e.toolInput, e.toolResponse, filePath)
+        sv.particles.spawn(e.tool, e.colorHex, undefined, e.toolInput, e.toolResponse)
       }
     }
 
@@ -225,12 +190,8 @@ export class ThreeApp {
           Math.sin(angle) * spread
         )
 
-        const web = new FileNodeWeb(group)
-        particles.onSettle = (_pos, _color, filePath) => {
-          if (filePath) web.addStar(filePath)
-        }
         this.scene.add(group)
-        this.sessions.set(id, { group, core, particles, web, filePositions: new Map() })
+        this.sessions.set(id, { group, core, particles })
 
         // Load history for this session
         this.loadSessionHistory(id, particles)
@@ -245,7 +206,6 @@ export class ThreeApp {
         this.scene.remove(sv.group)
         sv.core.dispose()
         sv.particles.dispose()
-        sv.web.dispose()
         this.sessions.delete(id)
       }
     }
@@ -290,7 +250,6 @@ export class ThreeApp {
     for (const sv of this.sessions.values()) {
       sv.core.tick(clampedDt, this.elapsed)
       sv.particles.tick(clampedDt)
-      sv.web.tick(clampedDt)
     }
 
     try {

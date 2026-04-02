@@ -20,6 +20,22 @@ const MAX_ANCHORS = 256
 // Shared cluster-line geometry pool
 const MAX_LINES = 4096
 
+let _anchorTex: THREE.CanvasTexture | null = null
+function anchorTex(): THREE.CanvasTexture {
+  if (_anchorTex) return _anchorTex
+  const sz = 64, c = document.createElement('canvas')
+  c.width = c.height = sz
+  const ctx = c.getContext('2d')!
+  const h = sz / 2
+  const g = ctx.createRadialGradient(h, h, 0, h, h, h)
+  g.addColorStop(0,    'rgba(255,255,255,1)')
+  g.addColorStop(0.3,  'rgba(255,255,255,0.6)')
+  g.addColorStop(0.7,  'rgba(255,255,255,0.1)')
+  g.addColorStop(1,    'rgba(255,255,255,0)')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, sz, sz)
+  return (_anchorTex = new THREE.CanvasTexture(c))
+}
+
 interface FileCluster {
   filePath: string
   anchor: THREE.Vector3       // stable position from getFilePos
@@ -52,12 +68,14 @@ export class FileNodeWeb {
 
     this.anchorMat = new THREE.PointsMaterial({
       vertexColors: true,
-      size: 8,
+      map: anchorTex(),
+      size: 6,
       sizeAttenuation: false,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
-      opacity: 1.0,
+      opacity: 0.85,
+      alphaTest: 0.01,
     })
     group.add(new THREE.Points(this.anchorGeo, this.anchorMat))
   }
