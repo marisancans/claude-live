@@ -58,7 +58,7 @@ export class ThreeApp {
 
     // ── Camera ──
     this.camera = new THREE.PerspectiveCamera(60, W / H, 1, 5000)
-    this.camera.position.set(0, 80, 250)
+    this.camera.position.set(0, 80, 300)
 
     // ── OrbitControls ──
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
@@ -67,7 +67,7 @@ export class ThreeApp {
     this.controls.autoRotate = true
     this.controls.autoRotateSpeed = 0.3
     this.controls.minDistance = 50
-    this.controls.maxDistance = 600
+    this.controls.maxDistance = 800
     this.controls.target.set(0, 0, 0)
 
     // ── Background (stars + aurora in 3D) ──
@@ -222,36 +222,23 @@ export class ThreeApp {
       .then(r => r.json())
       .then((events: any[]) => {
         if (events.length === 0) return
-        // Cap at 120, sample evenly if too many
-        const toSpawn = Math.min(events.length, 120)
+        // Cap at 250, sample evenly if too many
+        const toSpawn = Math.min(events.length, 250)
         const step = events.length / toSpawn
-
-        // Stagger spawn over multiple frames to avoid frame drops
-        let spawnedSoFar = 0
-        const batchSize = 15 // spawn 15 per frame
-        const spawnBatch = () => {
-          const endIdx = Math.min(spawnedSoFar + batchSize, toSpawn)
-          for (let i = spawnedSoFar; i < endIdx; i++) {
-            const evt = events[Math.floor(i * step)]
-            const tool = evt.tool_name || evt.hook_event_name || 'Read'
-            const colorHex = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
-            const color = new THREE.Color(colorHex)
-            // Place a settled star directly — no travel animation for history
-            // Independent axes with power-law bias so density clumps near center, not a shell
-            const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
-            const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.1 + Math.random() * 0.4)
-            const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
-            const pos = new THREE.Vector3(rx, ry, rz)
-            particles.addHistoryStar(pos, color)
-          }
-          spawnedSoFar = endIdx
-          if (spawnedSoFar < toSpawn) {
-            requestAnimationFrame(spawnBatch)
-          } else {
-            console.log(`[Three] Session ${sessionId.slice(0, 8)}: ${toSpawn} history stars from ${events.length} events (staggered)`)
-          }
+        for (let i = 0; i < toSpawn; i++) {
+          const evt = events[Math.floor(i * step)]
+          const tool = evt.tool_name || evt.hook_event_name || 'Read'
+          const colorHex = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
+          const color = new THREE.Color(colorHex)
+          // Place a settled star directly — no travel animation for history
+          // Independent axes with power-law bias so density clumps near center, not a shell
+          const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
+          const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.1 + Math.random() * 0.4)
+          const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
+          const pos = new THREE.Vector3(rx, ry, rz)
+          particles.addHistoryStar(pos, color)
         }
-        spawnBatch()
+        console.log(`[Three] Session ${sessionId.slice(0, 8)}: ${toSpawn} history stars from ${events.length} events`)
       })
       .catch(() => {})
   }
@@ -273,9 +260,7 @@ export class ThreeApp {
     let minY = Infinity, maxY = -Infinity
     let minZ = Infinity, maxZ = -Infinity
 
-    for (const [sessionId, sv] of this.sessions) {
-      const cluster = this.clustersRef.current.get(sessionId)
-      if (cluster?.stopping) continue // Skip clusters that are dissolving
+    for (const sv of this.sessions.values()) {
       const p = sv.group.position
       const r = 140 // approximate scatter radius
       minX = Math.min(minX, p.x - r); maxX = Math.max(maxX, p.x + r)
@@ -288,7 +273,7 @@ export class ThreeApp {
     const cz = (minZ + maxZ) / 2
     const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ)
     const fov = this.camera.fov * (Math.PI / 180)
-    const dist = Math.max(Math.min((size / 2) / Math.tan(fov / 2) * 1.1, 400), 100)
+    const dist = Math.max((size / 2) / Math.tan(fov / 2) * 1.3, 80)
 
     // Smoothly lerp target and camera distance
     this.controls.target.lerp(new THREE.Vector3(cx, cy, cz), 0.02)

@@ -111,17 +111,13 @@ export class CameraController {
   }
 
   /**
-   * Calculate bounding box of active (non-stopping) clusters (plus any pinned points).
-   * Excludes stopped clusters to keep zoom focused on live sessions.
+   * Calculate bounding box of all clusters (plus any pinned points).
    */
   private calculateBounds(clusters: Map<string, Cluster>) {
     let minX = Infinity, maxX = -Infinity
     let minY = Infinity, maxY = -Infinity
 
     for (const cluster of clusters.values()) {
-      // Skip clusters that are stopping/dissolved
-      if (cluster.stopping) continue
-
       let ext = orbitRadiusFor(0) + NODE_VISUAL_RADIUS
       for (let i = cluster.ringCounts.length - 1; i >= 0; i--) {
         if (cluster.ringCounts[i] > 0) { ext = orbitRadiusFor(i) + NODE_VISUAL_RADIUS; break }
@@ -141,7 +137,7 @@ export class CameraController {
       maxY = Math.max(maxY, pt.y)
     }
 
-    const padding = 5
+    const padding = 60
     return {
       minX: minX - padding,
       maxX: maxX + padding,
@@ -166,7 +162,7 @@ export class CameraController {
       targetScale = this.app.renderer.height / boundsHeight
     }
 
-    targetScale = Math.max(0.3, Math.min(8.0, targetScale * 0.95))
+    targetScale = Math.max(0.3, Math.min(3.0, targetScale * 0.92))
 
     const centerX = (bounds.minX + bounds.maxX) / 2
     const centerY = (bounds.minY + bounds.maxY) / 2
