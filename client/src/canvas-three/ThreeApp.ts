@@ -14,6 +14,7 @@ import type { Cluster } from '../types'
 import { BackgroundLayer } from './layers/BackgroundLayer'
 import { SessionCore } from './objects/SessionCore'
 import { ParticleCloud } from './objects/ParticleCloud'
+import { SubagentVisual } from './objects/SubagentVisual'
 import { eventBus } from '../events/EventBus'
 import { TOOL_COLOR_HEX, DEFAULT_HEX } from '../constants'
 import { profileGlob } from './travel/profiles/glob'
@@ -22,6 +23,7 @@ interface SessionVisual {
   group: THREE.Group
   core: SessionCore
   particles: ParticleCloud
+  subagents: Map<string, SubagentVisual>
 }
 
 export class ThreeApp {
@@ -99,10 +101,16 @@ export class ThreeApp {
   }
 
   private setupEventListeners() {
-    const onToolUsed = (e: { sessionId: string; tool: string; colorHex: string; nodeKey?: string; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }) => {
+    const onToolUsed = (e: { sessionId: string; tool: string; colorHex: string; nodeKey?: string; agentId?: string | null; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
-      sv.core.triggerActivity()
+      
+      // Pulse the subagent if this tool was called by an agent, else pulse core
+      if (e.agentId && sv.subagents.has(e.agentId)) {
+        sv.subagents.get(e.agentId)!.triggerActivity()
+      } else {
+        sv.core.triggerActivity()
+      }
 
       if (e.tool === 'Glob') {
         const responseText = typeof e.toolResponse?.content === 'string'
@@ -154,12 +162,37 @@ export class ThreeApp {
       sv.particles.spawn('Stop')
     }
 
+    const onSubagentStart = (e: { sessionId: string; agentId: string; agentType: string }) => {
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      if (!sv.subagents.has(e.agentId)) {
+        const sa = new SubagentVisual()
+        sv.subagents.set(e.agentId, sa)
+        sv.group.add(sa.group)
+        // give it a starting pulse
+        sa.triggerActivity()
+      }
+    }
+
+    const onSubagentStop = (e: { sessionId: string; agentId: string }) => {
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      const sa = sv.subagents.get(e.agentId)
+      if (sa) {
+        sv.group.remove(sa.group)
+        sa.dispose()
+        sv.subagents.delete(e.agentId)
+      }
+    }
+
     eventBus.on('tool:used', onToolUsed)
     eventBus.on('prompt:submitted', onPrompt)
     eventBus.on('response:received', onResponse)
     eventBus.on('compact:pre', onCompactPre)
     eventBus.on('compact:post', onCompactPost)
     eventBus.on('session:end', onSessionEnd)
+    eventBus.on('subagent:start', onSubagentStart)
+    eventBus.on('subagent:stop', onSubagentStop)
 
     this.eventUnsubs.push(
       () => eventBus.off('tool:used', onToolUsed),
@@ -168,6 +201,8 @@ export class ThreeApp {
       () => eventBus.off('compact:pre', onCompactPre),
       () => eventBus.off('compact:post', onCompactPost),
       () => eventBus.off('session:end', onSessionEnd),
+      () => eventBus.off('subagent:start', onSubagentStart),
+      () => eventBus.off('subagent:stop', onSubagentStop),
     )
   }
 
@@ -193,7 +228,7 @@ export class ThreeApp {
         )
 
         this.scene.add(group)
-        this.sessions.set(id, { group, core, particles })
+        this.sessions.set(id, { group, core, particles, subagents: new Map() })
 
         // Load history for this session
         this.loadSessionHistory(id, particles)
@@ -208,6 +243,8 @@ export class ThreeApp {
         this.scene.remove(sv.group)
         sv.core.dispose()
         sv.particles.dispose()
+        for (const sa of sv.subagents.values()) sa.dispose()
+        sv.subagents.clear()
         this.sessions.delete(id)
       }
     }
@@ -231,10 +268,10 @@ export class ThreeApp {
           const colorHex = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
           const color = new THREE.Color(colorHex)
           // Place a settled star directly — no travel animation for history
-          // Independent axes with power-law bias so density clumps near center, not a shell
-          const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
-          const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.1 + Math.random() * 0.4)
-          const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
+          // Independent axes with power-law bias so density clumps less near center.
+          const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.4 + Math.random() * 2.1)
+          const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.1 + Math.random() * 0.4)
+          const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.4 + Math.random() * 2.1)
           const pos = new THREE.Vector3(rx, ry, rz)
           particles.addHistoryStar(pos, color)
         }
@@ -296,6 +333,9 @@ export class ThreeApp {
     for (const sv of this.sessions.values()) {
       sv.core.tick(clampedDt, this.elapsed)
       sv.particles.tick(clampedDt)
+      for (const sa of sv.subagents.values()) {
+        sa.tick(clampedDt, this.elapsed)
+      }
     }
 
     try {
@@ -321,6 +361,7 @@ export class ThreeApp {
     for (const sv of this.sessions.values()) {
       sv.core.dispose()
       sv.particles.dispose()
+      for (const sa of sv.subagents.values()) sa.dispose()
     }
     this.sessions.clear()
     this.bgLayer.dispose()

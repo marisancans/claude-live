@@ -7,6 +7,10 @@ const EffectDemoScene = lazy(() =>
   import('./canvas-three/demo/EffectDemoScene').then(m => ({ default: m.EffectDemoScene }))
 )
 
+const AgentDemoScene = lazy(() =>
+  import('./canvas-three/demo/AgentDemoScene').then(m => ({ default: m.AgentDemoScene }))
+)
+
 function getRoute(): string {
   return window.location.hash.replace(/^#\/?/, '') || 'pixi'
 }
@@ -21,13 +25,19 @@ function Root() {
   }, [])
 
   if (route === 'three') {
-    // Render the main App but with the Three.js engine
     return <App engine="three" />
+  }
+  if (route === 'effect-demo') {
+    return (
+      <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
+        <EffectDemoScene />
+      </Suspense>
+    )
   }
   if (route === 'demo') {
     return (
       <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
-        <EffectDemoScene />
+        <AgentDemoScene />
       </Suspense>
     )
   }
