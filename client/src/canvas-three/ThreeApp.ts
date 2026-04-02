@@ -36,6 +36,8 @@ export class ThreeApp {
   private clustersRef: MutableRefObject<Map<string, Cluster>>
   private elapsed = 0
   private eventUnsubs: (() => void)[] = []
+  private _autofit = true
+  private _autoRotate = true
 
   constructor(container: HTMLElement, clustersRef: MutableRefObject<Map<string, Cluster>>) {
     this.container = container
@@ -241,12 +243,54 @@ export class ThreeApp {
       .catch(() => {})
   }
 
+  setAutofit(enabled: boolean) {
+    this._autofit = enabled
+  }
+
+  setAutoRotate(enabled: boolean) {
+    this._autoRotate = enabled
+    this.controls.autoRotate = enabled
+  }
+
+  private _fitCamera() {
+    if (this.sessions.size === 0) return
+
+    // Compute bounding sphere across all session group positions + particle scatter radius
+    let minX = Infinity, maxX = -Infinity
+    let minY = Infinity, maxY = -Infinity
+    let minZ = Infinity, maxZ = -Infinity
+
+    for (const sv of this.sessions.values()) {
+      const p = sv.group.position
+      const r = 140 // approximate scatter radius
+      minX = Math.min(minX, p.x - r); maxX = Math.max(maxX, p.x + r)
+      minY = Math.min(minY, p.y - r); maxY = Math.max(maxY, p.y + r)
+      minZ = Math.min(minZ, p.z - r); maxZ = Math.max(maxZ, p.z + r)
+    }
+
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    const cz = (minZ + maxZ) / 2
+    const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ)
+    const fov = this.camera.fov * (Math.PI / 180)
+    const dist = Math.max((size / 2) / Math.tan(fov / 2) * 1.3, 80)
+
+    // Smoothly lerp target and camera distance
+    this.controls.target.lerp(new THREE.Vector3(cx, cy, cz), 0.02)
+    const camDir = this.camera.position.clone().sub(this.controls.target).normalize()
+    const desiredPos = this.controls.target.clone().addScaledVector(camDir, dist)
+    this.camera.position.lerp(desiredPos, 0.02)
+  }
+
   tick(dt: number) {
     const clampedDt = Math.min(dt, 0.05)
     this.elapsed += clampedDt
 
     this.syncSessions(this.clustersRef.current)
     this.bgLayer.tick(clampedDt)
+
+    if (this._autofit) this._fitCamera()
+
     this.controls.update()
 
     for (const sv of this.sessions.values()) {

@@ -12,13 +12,22 @@ interface Props {
   onHover: (node: GraphNode | null, cluster: Cluster | null) => void
   onSelect: (node: GraphNode | null, cluster: Cluster | null) => void
   autofitEnabled: boolean
+  autoRotateEnabled: boolean
 }
 
-export function ThreeScene({ clusters, onHover, onSelect, autofitEnabled }: Props) {
+export function ThreeScene({ clusters, onHover, onSelect, autofitEnabled, autoRotateEnabled }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<ThreeApp | null>(null)
   const clustersRef = useRef(clusters)
   clustersRef.current = clusters
+
+  useEffect(() => {
+    if (appRef.current) appRef.current.setAutofit(autofitEnabled)
+  }, [autofitEnabled])
+
+  useEffect(() => {
+    if (appRef.current) appRef.current.setAutoRotate(autoRotateEnabled)
+  }, [autoRotateEnabled])
 
   useEffect(() => {
     const container = containerRef.current
@@ -28,6 +37,8 @@ export function ThreeScene({ clusters, onHover, onSelect, autofitEnabled }: Prop
     let lastTime = performance.now()
 
     const app = new ThreeApp(container, clustersRef)
+    app.setAutofit(autofitEnabled)
+    app.setAutoRotate(autoRotateEnabled)
     appRef.current = app
 
     const animate = () => {

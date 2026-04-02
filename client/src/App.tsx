@@ -184,11 +184,13 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
     return saved === 'true'
   })
   const [autofitEnabled, setAutofitEnabledState] = useState(() => {
-    // Load from localStorage
     const saved = localStorage.getItem('claude-live-autofit-enabled')
     return saved === 'true'
   })
-
+  const [autoRotateEnabled, setAutoRotateEnabledState] = useState(() => {
+    const saved = localStorage.getItem('claude-live-autorotate-enabled')
+    return saved !== 'false' // default on
+  })
 
   // Initialize audio on mount
   useEffect(() => {
@@ -200,6 +202,10 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
   useEffect(() => {
     localStorage.setItem('claude-live-autofit-enabled', autofitEnabled ? 'true' : 'false')
   }, [autofitEnabled])
+
+  useEffect(() => {
+    localStorage.setItem('claude-live-autorotate-enabled', autoRotateEnabled ? 'true' : 'false')
+  }, [autoRotateEnabled])
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => { setMouseX(e.clientX); setMouseY(e.clientY) }
@@ -386,11 +392,16 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
     setAutofitEnabledState(newState)
     localStorage.setItem('claude-live-autofit-enabled', newState ? 'true' : 'false')
   }
+  const toggleAutoRotate = () => {
+    const newState = !autoRotateEnabled
+    setAutoRotateEnabledState(newState)
+    localStorage.setItem('claude-live-autorotate-enabled', newState ? 'true' : 'false')
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {engine === 'three'
-        ? <ThreeScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
+        ? <ThreeScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} autoRotateEnabled={autoRotateEnabled} />
         : <PixiScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
       }
 
@@ -409,6 +420,11 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
         <button className="hud-ctrl-btn" onClick={toggleAutofit} title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'} aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}>
           <AutofitIcon enabled={autofitEnabled} />
         </button>
+        {engine === 'three' && (
+          <button className="hud-ctrl-btn" onClick={toggleAutoRotate} title={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} aria-label={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} style={{ opacity: autoRotateEnabled ? 1 : 0.4 }}>
+            ⟳
+          </button>
+        )}
         <button className="hud-ctrl-btn" onClick={() => setOperationsOpen(true)} title="Operations" aria-label="Operations">?</button>
         <button className="hud-ctrl-btn" onClick={() => setDebugOpen(true)} title="Debug" aria-label="Debug">⚙</button>
       </div>
