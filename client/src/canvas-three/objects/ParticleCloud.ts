@@ -165,7 +165,16 @@ export class ParticleCloud {
 
   private _addStar(pos: THREE.Vector3, color: THREE.Color) {
     if (this.stars.length >= MAX_STARS) this.stars.shift()
-    this.stars.push({ pos: pos.clone(), col: color.clone() })
+    // If the node settled near core (inbound tools), scatter the star outward
+    // so settled dots form a wispy cloud rather than a pile at origin
+    let starPos = pos.clone()
+    if (starPos.length() < 20) {
+      const rx = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 1.8) * 100) * (0.4 + Math.random() * 2.1)
+      const ry = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 1.8) * 100) * (0.1 + Math.random() * 0.4)
+      const rz = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 1.8) * 100) * (0.4 + Math.random() * 2.1)
+      starPos = new THREE.Vector3(rx, ry, rz)
+    }
+    this.stars.push({ pos: starPos, col: color.clone() })
     const n = this.stars.length
     for (let i = 0; i < n; i++) {
       const s = this.stars[i]
