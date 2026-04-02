@@ -229,9 +229,11 @@ export class ThreeApp {
           const colorHex = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
           const color = new THREE.Color(colorHex)
           // Place a settled star directly — no travel animation for history
-          const angle = Math.random() * Math.PI * 2
-          const r = 20 + Math.random() * 120
-          const pos = new THREE.Vector3(Math.cos(angle) * r, (Math.random() - 0.5) * 20, Math.sin(angle) * r)
+          // Independent axes with power-law bias so density clumps near center, not a shell
+          const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
+          const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.1 + Math.random() * 0.4)
+          const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 1.8) * 120) * (0.4 + Math.random() * 2.1)
+          const pos = new THREE.Vector3(rx, ry, rz)
           particles.addHistoryStar(pos, color)
         }
         console.log(`[Three] Session ${sessionId.slice(0, 8)}: ${toSpawn} history stars from ${events.length} events`)
