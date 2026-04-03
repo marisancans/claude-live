@@ -140,6 +140,10 @@ export function buildBranches(
       pulse: 0,
       contamination: 0,
       pulseColor: new THREE.Color('#e8a88a'),
+      growthProgress: 1,
+      growthTarget: 1,
+      growthStartTime: 0,
+      growthDuration: 0,
     })
   }
 

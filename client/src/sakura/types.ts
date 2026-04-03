@@ -95,6 +95,13 @@ export interface TreeLayout {
   maxDepth: number
 }
 
+export interface GrowthAction {
+  type: 'branch' | 'blossom'
+  path: string
+  parentPath: string | null
+  spec: TreeBranch | BlossomAnchor
+}
+
 // --- Visuals ---
 
 export interface BranchVisual {
@@ -105,6 +112,10 @@ export interface BranchVisual {
   pulse: number
   contamination: number
   pulseColor: THREE.Color
+  growthProgress: number     // 0 = not born, 1 = fully grown
+  growthTarget: number       // what we're animating toward
+  growthStartTime: number    // when growth began (elapsed time)
+  growthDuration: number     // 2-3 seconds
 }
 
 export interface JunctionVisual {
@@ -128,6 +139,7 @@ export interface ColonyVisual {
   contamination: number
   boost: number
   idleOffset: number
+  treeBuilder?: any  // IncrementalTreeBuilder instance
 }
 
 // --- Debug panel ---
