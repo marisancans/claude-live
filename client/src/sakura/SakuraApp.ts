@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
-import { buildBranches, disposeBranches, updateBranchUniforms, makeBarkMaterial } from './BranchRenderer'
+import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
 import { PetalSystem } from './PetalSystem'
 import { SignalSystem } from './SignalSystem'
 import { WindField } from './WindField'
@@ -49,8 +49,6 @@ export class SakuraApp {
   private sky: THREE.Mesh
   private skyMaterial: THREE.ShaderMaterial
   private ground: THREE.Mesh
-  private rootTrunk: THREE.Mesh
-  private rootTrunkMat: THREE.ShaderMaterial
   private elapsed = 0
   private resizeHandler: () => void
 
@@ -144,16 +142,6 @@ export class SakuraApp {
     this.ground.position.y = -4
     this.scene.add(this.ground)
 
-    // Permanent root trunk
-    const rootTrunkGeom = new THREE.CylinderGeometry(7, 8.5, 15, 12, 4)
-    const rootTrunkMat = makeBarkMaterial(0.5)
-    rootTrunkMat.uniforms.uHeat.value = 0.15
-    const rootTrunk = new THREE.Mesh(rootTrunkGeom, rootTrunkMat)
-    rootTrunk.position.y = 7.5 // half height, so base at y=0
-    this.scene.add(rootTrunk)
-    this.rootTrunk = rootTrunk
-    this.rootTrunkMat = rootTrunkMat
-
     // Atmosphere particles
     this.atmosphere = this.createAtmosphere()
     this.scene.add(this.atmosphere)
@@ -208,19 +196,8 @@ export class SakuraApp {
         this.scene.add(colony.group)
       }
 
-      // Position colonies sprouting from top of root trunk (y=15)
-      const total = withTrees.length
-      if (total <= 1) {
-        colony.group.position.set(0, 15, 0)
-      } else {
-        const angle = (index / total) * Math.PI * 2
-        const radius = 20 + total * 8
-        colony.group.position.set(
-          Math.cos(angle) * radius,
-          15,
-          Math.sin(angle) * radius,
-        )
-      }
+      // All colonies share one root position
+      colony.group.position.set(0, 0, 0)
 
       colony.activity = projectState.activity
       colony.rootPath = tree.rootPath
@@ -282,8 +259,6 @@ export class SakuraApp {
     // Atmosphere drift
     this.atmosphere.rotation.y += dt * 0.001
     this.skyMaterial.uniforms.uTime.value = this.elapsed
-    this.rootTrunkMat.uniforms.uTime.value = this.elapsed
-
     const now = Date.now()
     for (const colony of this.colonies.values()) {
       const heat = projectHeat(colony.activity, now)
@@ -341,8 +316,6 @@ export class SakuraApp {
     this.skyMaterial.dispose()
     this.ground.geometry.dispose()
     ;(this.ground.material as THREE.MeshStandardMaterial).dispose()
-    this.rootTrunk.geometry.dispose()
-    this.rootTrunkMat.dispose()
     this.controls.dispose()
     this.composer.dispose()
     this.renderer.dispose()
