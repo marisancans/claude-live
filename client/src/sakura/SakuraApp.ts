@@ -7,6 +7,8 @@ import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { createColorGradingPass } from './postprocessing/ColorGradingPass'
 import { createFilmGrainPass, updateFilmGrain } from './postprocessing/FilmGrainPass'
+import { createGodRaysPass } from './postprocessing/GodRaysPass'
+import { createChromaticAberrationPass } from './postprocessing/ChromaticAberrationPass'
 import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
@@ -93,6 +95,8 @@ export class SakuraApp {
       maxblur: 0.006,
     })
     this.composer.addPass(bokeh)
+    this.composer.addPass(createGodRaysPass())
+    this.composer.addPass(createChromaticAberrationPass())
     this.composer.addPass(createColorGradingPass())
     this.filmGrainPass = createFilmGrainPass()
     this.composer.addPass(this.filmGrainPass)
@@ -201,6 +205,22 @@ export class SakuraApp {
     this.atmosphere = this.createAtmosphere()
     this.scene.add(this.atmosphere)
 
+    // Horizontal fog layers at different heights for painterly depth
+    for (let i = 0; i < 3; i++) {
+      const y = -2 + i * 30
+      const fogMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color('#1a1015'),
+        transparent: true,
+        opacity: 0.04 - i * 0.01,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      const fogPlane = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), fogMat)
+      fogPlane.rotation.x = -Math.PI / 2
+      fogPlane.position.y = y
+      this.scene.add(fogPlane)
+    }
+
     // Add petal system to scene
     this.scene.add(this.petalSystem.mesh)
     this.scene.add(this.petalSystem.glowGroup)
@@ -212,37 +232,41 @@ export class SakuraApp {
   }
 
   private createAtmosphere() {
-    const count = 1200
+    // Large dust motes that catch the key light
+    const count = 200
     const positions = new Float32Array(count * 3)
+    const sizes = new Float32Array(count)
     for (let i = 0; i < count; i++) {
-      const radius = 100 + Math.random() * 400
+      const radius = 20 + Math.random() * 200
       const theta = Math.random() * Math.PI * 2
-      const phi = Math.acos(1 - Math.random() * 1.2)
-      positions[i * 3] = Math.cos(theta) * Math.sin(phi) * radius
-      positions[i * 3 + 1] = -10 + Math.random() * 180
-      positions[i * 3 + 2] = Math.sin(theta) * Math.sin(phi) * radius
+      const y = -5 + Math.random() * 140
+      positions[i * 3] = Math.cos(theta) * radius
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = Math.sin(theta) * radius
+      sizes[i] = 2.0 + Math.random() * 5.0
     }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    // Generate soft circular particle texture
-    const particleCanvas = document.createElement('canvas')
-    particleCanvas.width = 32
-    particleCanvas.height = 32
-    const pCtx = particleCanvas.getContext('2d')!
-    const grad = pCtx.createRadialGradient(16, 16, 0, 16, 16, 16)
-    grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
-    grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.6)')
-    grad.addColorStop(1, 'rgba(255, 255, 255, 0)')
-    pCtx.fillStyle = grad
-    pCtx.fillRect(0, 0, 32, 32)
-    const particleTexture = new THREE.CanvasTexture(particleCanvas)
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
+
+    // Soft circle texture
+    const c = document.createElement('canvas')
+    c.width = 64; c.height = 64
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 30)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.3, 'rgba(255,255,255,0.5)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 64, 64)
+    const dustTex = new THREE.CanvasTexture(c)
 
     return new THREE.Points(geometry, new THREE.PointsMaterial({
-      map: particleTexture,
-      color: '#ffd8e2',
+      map: dustTex,
+      color: '#ffe8d0',
       transparent: true,
-      opacity: 0.15,
-      size: 2.4,
+      opacity: 0.25,
+      size: 4,
       sizeAttenuation: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
