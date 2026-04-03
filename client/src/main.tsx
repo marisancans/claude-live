@@ -11,6 +11,14 @@ const AgentDemoScene = lazy(() =>
   import('./canvas-three/demo/AgentDemoScene').then(m => ({ default: m.AgentDemoScene }))
 )
 
+const MyceliumPage = lazy(() =>
+  import('./mycelium/MyceliumPage').then(m => ({ default: m.MyceliumPage }))
+)
+
+const SakuraPage = lazy(() =>
+  import('./sakura/SakuraPage').then(m => ({ default: m.SakuraPage }))
+)
+
 function getRoute(): string {
   return window.location.hash.replace(/^#\/?/, '') || 'pixi'
 }
@@ -38,6 +46,20 @@ function Root() {
     return (
       <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
         <AgentDemoScene />
+      </Suspense>
+    )
+  }
+  if (route === 'mycelium') {
+    return (
+      <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
+        <MyceliumPage />
+      </Suspense>
+    )
+  }
+  if (route === 'sakura') {
+    return (
+      <Suspense fallback={<div style={{ background: '#0e0a08', width: '100vw', height: '100vh' }} />}>
+        <SakuraPage />
       </Suspense>
     )
   }

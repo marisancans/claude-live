@@ -421,6 +421,28 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
           <AutofitIcon enabled={autofitEnabled} />
         </button>
         {engine === 'three' && (
+          <a
+            className="hud-ctrl-btn"
+            href="#/mycelium"
+            title="Mycelium"
+            aria-label="Open mycelium scene"
+            style={{ width: 'auto', padding: '0 10px', textDecoration: 'none', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+          >
+            myc
+          </a>
+        )}
+        {engine === 'three' && (
+          <a
+            className="hud-ctrl-btn"
+            href="#/sakura"
+            title="Sakura"
+            aria-label="Open sakura tree"
+            style={{ width: 'auto', padding: '0 10px', textDecoration: 'none', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+          >
+            sak
+          </a>
+        )}
+        {engine === 'three' && (
           <button className="hud-ctrl-btn" onClick={toggleAutoRotate} title={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} aria-label={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} style={{ opacity: autoRotateEnabled ? 1 : 0.4 }}>
             ⟳
           </button>
