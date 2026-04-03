@@ -76,10 +76,11 @@ function createPetalAlpha(): THREE.CanvasTexture {
   ctx.bezierCurveTo(cx - 48, cy * 1.1, cx - 42, cy * 0.3, cx, cy * 0.15)
   ctx.closePath()
 
-  // Solid white inside, feathered edge
-  const grad = ctx.createRadialGradient(cx, cy * 0.8, 0, cx, cy * 0.8, size * 0.48)
+  // Solid white inside, sharp cutoff at petal edge
+  const grad = ctx.createRadialGradient(cx, cy * 0.8, 0, cx, cy * 0.8, size * 0.46)
   grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
-  grad.addColorStop(0.75, 'rgba(255, 255, 255, 1)')
+  grad.addColorStop(0.85, 'rgba(255, 255, 255, 1)')
+  grad.addColorStop(0.95, 'rgba(255, 255, 255, 0.5)')
   grad.addColorStop(1, 'rgba(255, 255, 255, 0)')
   ctx.fillStyle = grad
   ctx.fill()
@@ -117,9 +118,8 @@ export class PetalSystem {
     this.material = new THREE.MeshStandardMaterial({
       map: petalMap,
       alphaMap: petalAlpha,
-      alphaTest: 0.2,
-      transparent: true,
-      opacity: 0.95,
+      alphaTest: 0.5,
+      transparent: false,
       side: THREE.DoubleSide,
       roughness: 0.6,
       metalness: 0.0,

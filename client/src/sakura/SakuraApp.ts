@@ -207,11 +207,25 @@ export class SakuraApp {
     }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    // Generate soft circular particle texture
+    const particleCanvas = document.createElement('canvas')
+    particleCanvas.width = 32
+    particleCanvas.height = 32
+    const pCtx = particleCanvas.getContext('2d')!
+    const grad = pCtx.createRadialGradient(16, 16, 0, 16, 16, 16)
+    grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
+    grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.6)')
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)')
+    pCtx.fillStyle = grad
+    pCtx.fillRect(0, 0, 32, 32)
+    const particleTexture = new THREE.CanvasTexture(particleCanvas)
+
     return new THREE.Points(geometry, new THREE.PointsMaterial({
+      map: particleTexture,
       color: '#ffd8e2',
       transparent: true,
-      opacity: 0.12,
-      size: 1.6,
+      opacity: 0.15,
+      size: 2.4,
       sizeAttenuation: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
