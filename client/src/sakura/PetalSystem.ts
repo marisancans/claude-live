@@ -109,6 +109,37 @@ function createPetalAlpha(): THREE.CanvasTexture {
   return texture
 }
 
+function createCrossedQuadGeometry(width: number, height: number): THREE.BufferGeometry {
+  const hw = width / 2
+  const hh = height / 2
+  const positions = new Float32Array([
+    // Plane 1: facing Z
+    -hw, -hh, 0,   hw, -hh, 0,   hw, hh, 0,   -hw, hh, 0,
+    // Plane 2: facing X (rotated 90 deg around Y)
+    0, -hh, -hw,   0, -hh, hw,   0, hh, hw,   0, hh, -hw,
+  ])
+  const normals = new Float32Array([
+    0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,
+    1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,
+  ])
+  const uvs = new Float32Array([
+    0, 0,  1, 0,  1, 1,  0, 1,
+    0, 0,  1, 0,  1, 1,  0, 1,
+  ])
+  const indices = [
+    0, 1, 2,  0, 2, 3,  // plane 1 front
+    0, 2, 1,  0, 3, 2,  // plane 1 back
+    4, 5, 6,  4, 6, 7,  // plane 2 front
+    4, 6, 5,  4, 7, 6,  // plane 2 back
+  ]
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geo.setIndex(indices)
+  return geo
+}
+
 export class PetalSystem {
   readonly mesh: THREE.InstancedMesh
   private material: THREE.ShaderMaterial
@@ -129,8 +160,8 @@ export class PetalSystem {
   constructor() {
     this.capacity = INITIAL_CAPACITY
 
-    // Larger plane + alpha-tested canvas texture = soft petal silhouette
-    const geometry = new THREE.PlaneGeometry(3.0, 3.6)
+    // Crossed-quad geometry — two perpendicular planes sharing a center, visible from every angle
+    const geometry = createCrossedQuadGeometry(2.8, 3.4)
     const petalMap = createPetalTexture()
     const petalAlpha = createPetalAlpha()
 
