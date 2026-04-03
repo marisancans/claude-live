@@ -196,7 +196,7 @@ export function buildTreeLayout(tree: ProjectTreeNode, seedKey: string): TreeLay
         .multiplyScalar(continuation + weightFactor * 0.28)
         .add(new THREE.Vector3(0, 1, 0).multiplyScalar(upward))
         .add(basis.v.clone().multiplyScalar(lateral))
-        .add(basis.u.clone().multiplyScalar(roll * (0.15 + canopy * 0.42 + Math.abs(ratio) * 0.18)))
+        .add(basis.u.clone().multiplyScalar(roll * (0.4 + canopy * 0.7 + Math.abs(ratio) * 0.3)))
         .add(lean.clone().multiplyScalar(0.18 + canopy * 0.26))
         .add(new THREE.Vector3(0, -1, 0).multiplyScalar(droop))
         .normalize()
