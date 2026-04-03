@@ -72,6 +72,7 @@ export function SakuraPage() {
   const recentKeysRef = useRef(new Map<string, number>())
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
+  const [hudOpen, setHudOpen] = useState(false)
   const [replayStatus, setReplayStatus] = useState('idle')
   const replayTimerRef = useRef<number | null>(null)
 
@@ -248,8 +249,17 @@ export function SakuraPage() {
         letterSpacing: '0.08em', textTransform: 'uppercase', backdropFilter: 'blur(16px)',
       }}>back to three</a>
 
-      <div style={{
-        position: 'absolute', top: 18, right: 18, zIndex: 20, width: 300,
+      <button onClick={() => setHudOpen(o => !o)} style={{
+        position: 'absolute', top: 18, right: 18, zIndex: 21,
+        padding: '8px 12px', border: '1px solid rgba(196,149,106,0.28)',
+        background: 'rgba(14,10,8,0.7)', color: '#c4956a',
+        fontFamily: 'IBM Plex Mono, monospace', fontSize: 10,
+        letterSpacing: '0.1em', textTransform: 'uppercase', cursor: 'pointer',
+        backdropFilter: 'blur(16px)',
+      }}>{hudOpen ? 'hide' : 'info'}</button>
+
+      {hudOpen && <div style={{
+        position: 'absolute', top: 52, right: 18, zIndex: 20, width: 300,
         padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)',
         background: 'linear-gradient(180deg, rgba(14,10,8,0.76), rgba(10,7,5,0.9))',
         backdropFilter: 'blur(18px)', boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
@@ -282,7 +292,7 @@ export function SakuraPage() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       <SakuraDebugPanel
         isOpen={debugOpen}
