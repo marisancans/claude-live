@@ -20,7 +20,7 @@ export class WindField {
     this.directionZ = Math.sin(this.baseAngle)
 
     // Base strength oscillates
-    this.strength = 0.1 + 0.15 * (0.5 + 0.5 * Math.sin(this.phase * (Math.PI * 2 / 8)))
+    this.strength = 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(this.phase * (Math.PI * 2 / 8)))
     this.phase += dt
 
     // Turbulence — high-frequency jitter

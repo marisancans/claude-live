@@ -202,17 +202,30 @@ export class PetalSystem {
     this.mesh.instanceMatrix.needsUpdate = true
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
-    // Small subtle center — much dimmer than before so petals show
+    // Soft blossom cloud sprite — gives canopy volume at distance
+    const cloudMat = new THREE.SpriteMaterial({
+      color: '#ffd4e2',
+      transparent: true,
+      opacity: 0.08,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+    })
+    const cloud = new THREE.Sprite(cloudMat)
+    cloud.position.copy(anchor.position)
+    cloud.scale.setScalar(anchor.scale * 8)
+    this.glowGroup.add(cloud)
+
+    // Tiny warm center glow
     const glowMat = new THREE.SpriteMaterial({
       color: '#ffeecc',
       transparent: true,
-      opacity: 0.06,
+      opacity: 0.04,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
     const glow = new THREE.Sprite(glowMat)
     glow.position.copy(anchor.position)
-    glow.scale.setScalar(anchor.scale * 2.5)
+    glow.scale.setScalar(anchor.scale * 1.5)
     this.glowGroup.add(glow)
 
     return indices
@@ -305,15 +318,15 @@ export class PetalSystem {
   }
 
   private driftTimer = 0
-  private driftInterval = 3
+  private driftInterval = 1.5
 
-  /** Randomly detach 1-3 petals for ambient life */
+  /** Constant gentle petal rain */
   ambientDrift(dt: number) {
     this.driftTimer += dt
     if (this.driftTimer < this.driftInterval || this.count === 0) return
     this.driftTimer = 0
-    this.driftInterval = 2 + Math.random() * 4
-    const driftCount = 1 + Math.floor(Math.random() * 3)
+    this.driftInterval = 0.8 + Math.random() * 2.0
+    const driftCount = 1 + Math.floor(Math.random() * 4)
     const candidates: number[] = []
     for (let i = 0; i < this.count && candidates.length < driftCount * 5; i++) {
       if (this.states[i] === STATE_ANCHORED) candidates.push(i)

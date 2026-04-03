@@ -180,6 +180,9 @@ export class SakuraApp {
     this.ground.position.y = -4
     this.scene.add(this.ground)
 
+    // Fallen petal scatter on ground — static decoration
+    this.createGroundPetals()
+
     // Atmosphere particles
     this.atmosphere = this.createAtmosphere()
     this.scene.add(this.atmosphere)
@@ -230,6 +233,28 @@ export class SakuraApp {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }))
+  }
+
+  private createGroundPetals() {
+    // Scatter small pink petal sprites on the ground near the tree base
+    const count = 60
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const radius = 5 + Math.random() * 45
+      const x = Math.cos(angle) * radius
+      const z = Math.sin(angle) * radius
+      const pinkness = 0.3 + Math.random() * 0.5
+      const mat = new THREE.SpriteMaterial({
+        color: new THREE.Color(1.0, 0.75 + (1 - pinkness) * 0.25, 0.82 + (1 - pinkness) * 0.18),
+        transparent: true,
+        opacity: 0.15 + Math.random() * 0.15,
+        depthWrite: false,
+      })
+      const sprite = new THREE.Sprite(mat)
+      sprite.position.set(x, -3.5 + Math.random() * 0.5, z)
+      sprite.scale.setScalar(0.6 + Math.random() * 1.0)
+      this.scene.add(sprite)
+    }
   }
 
   syncProjects(projects: ProjectVisualState[]) {

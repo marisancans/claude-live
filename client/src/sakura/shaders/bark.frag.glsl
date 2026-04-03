@@ -42,46 +42,85 @@ float fbm(vec2 p) {
 
 void main() {
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
-  float fresnel = pow(1.0 - max(dot(viewDir, normalize(vWorldNormal)), 0.0), 2.2);
+  vec3 norm = normalize(vWorldNormal);
+  float fresnel = pow(1.0 - max(dot(viewDir, norm), 0.0), 2.2);
 
-  // Bark texturing
-  float grain = 0.5 + 0.5 * sin(vUv.x * 22.0 + vUv.y * 38.0 - uTime * 0.2);
+  // --- Cherry bark texture layers ---
+
+  // Vertical grain — dominant on trunk, finer on twigs
+  float grainScale = mix(18.0, 40.0, clamp(uDepth / 4.0, 0.0, 1.0));
+  float grain = 0.5 + 0.5 * sin(vUv.x * grainScale + vUv.y * grainScale * 1.7 - uTime * 0.15);
+
+  // Horizontal lenticels — characteristic cherry bark feature (stronger on trunk)
+  float lenticelFreq = mix(8.0, 20.0, clamp(uDepth / 5.0, 0.0, 1.0));
+  float lenticels = smoothstep(0.55, 0.6, sin(vUv.x * lenticelFreq + noise(vUv * 6.0) * 1.5));
+  lenticels *= (1.0 - clamp(uDepth / 3.0, 0.0, 0.8)); // fade on twigs
+
+  // Ridge pattern
   float ridge = pow(0.5 + 0.5 * cos(vUv.y * 6.2831), 2.0);
-  float barkNoise = fbm(vec2(vUv.x * 3.2 + uFlowOffset * 3.5, vUv.y * 4.8));
-  float knots = smoothstep(0.62, 0.65, fbm(vec2(vUv.x * 1.8 + uFlowOffset * 7.0, vUv.y * 2.2 + uFlowOffset * 3.0)));
 
-  // Depth-based bark palette
-  vec3 trunkDark = vec3(0.23, 0.17, 0.12);    // gray-brown trunk
-  vec3 trunkMid = vec3(0.32, 0.24, 0.18);
-  vec3 limbMid = vec3(0.36, 0.23, 0.13);      // warm mid
-  vec3 limbHighlight = vec3(0.55, 0.39, 0.26);
-  vec3 twigColor = vec3(0.48, 0.29, 0.19);    // reddish twigs
+  // FBM bark noise — coarser on trunk, finer on twigs
+  float noiseScale = mix(2.8, 5.5, clamp(uDepth / 4.0, 0.0, 1.0));
+  float barkNoise = fbm(vec2(vUv.x * noiseScale + uFlowOffset * 3.5, vUv.y * noiseScale * 1.5));
 
+  // Knots — only on trunk/limbs
+  float knots = smoothstep(0.62, 0.66, fbm(vec2(vUv.x * 1.5 + uFlowOffset * 7.0, vUv.y * 2.0 + uFlowOffset * 3.0)));
+  knots *= (1.0 - clamp(uDepth / 2.5, 0.0, 1.0));
+
+  // Ambient occlusion from crevices
+  float ao = 1.0 - barkNoise * 0.2 - knots * 0.3;
+
+  // --- Depth-based cherry bark palette ---
+  // Cherry bark: silvery gray-brown on trunk, warmer reddish-brown on branches
   float depthBlend = clamp(uDepth / 5.0, 0.0, 1.0);
-  vec3 barkDark = mix(trunkDark, vec3(0.20, 0.12, 0.08), depthBlend);
-  vec3 barkMid = mix(trunkMid, limbMid, depthBlend);
-  vec3 barkHighlight = mix(limbHighlight, twigColor, depthBlend);
 
-  vec3 color = mix(barkDark, barkMid, clamp(grain * 0.4 + barkNoise * 0.45 + uHeat * 0.12, 0.0, 1.0));
-  color = mix(color, barkHighlight, ridge * 0.14 + barkNoise * 0.1);
-  color = mix(color, barkDark * 0.6, knots * 0.7);
+  vec3 barkDark = mix(vec3(0.18, 0.14, 0.11), vec3(0.16, 0.10, 0.07), depthBlend);
+  vec3 barkMid = mix(vec3(0.30, 0.24, 0.20), vec3(0.38, 0.24, 0.16), depthBlend);
+  vec3 barkLight = mix(vec3(0.42, 0.35, 0.30), vec3(0.52, 0.34, 0.22), depthBlend);
 
-  // Fresnel rim light
-  color += vec3(0.18, 0.12, 0.08) * fresnel * 0.35;
+  // Base color mix
+  vec3 color = mix(barkDark, barkMid, clamp(grain * 0.35 + barkNoise * 0.5 + uHeat * 0.1, 0.0, 1.0));
+  color = mix(color, barkLight, ridge * 0.15 + barkNoise * 0.12);
 
-  // Ridge highlights
-  color += vec3(0.06, 0.04, 0.03) * ridge * (0.2 + uHeat * 0.2);
+  // Knot darkening
+  color = mix(color, barkDark * 0.5, knots * 0.7);
 
-  // Pulse glow from events
+  // Lenticels — lighter horizontal streaks (cherry bark signature)
+  color = mix(color, barkLight * 1.2, lenticels * 0.35);
+
+  // Green-gray moss/lichen hint on sheltered parts (lower UV, deeper branches)
+  float mossMask = smoothstep(0.3, 0.0, vUv.y) * smoothstep(1.0, 3.0, uDepth) * barkNoise;
+  vec3 mossColor = vec3(0.15, 0.18, 0.12);
+  color = mix(color, mossColor, mossMask * 0.2);
+
+  // Apply AO
+  color *= ao;
+
+  // --- Lighting ---
+
+  // Diffuse from a key light direction
+  vec3 lightDir = normalize(vec3(-0.3, 0.8, 0.4));
+  float diffuse = max(dot(norm, lightDir), 0.0) * 0.4 + 0.6; // half-lambert
+  color *= diffuse;
+
+  // Fresnel rim highlight — warm edge light
+  color += vec3(0.22, 0.15, 0.10) * fresnel * 0.4;
+
+  // Ridge specular hint
+  color += vec3(0.08, 0.06, 0.04) * ridge * (0.15 + uHeat * 0.15);
+
+  // --- Event effects ---
+
+  // Pulse glow
   float flow = 0.5 + 0.5 * sin(vUv.x * 18.0 - uTime * 2.8 - uFlowOffset * 8.0);
   color += uPulseColor * (0.06 + flow * 0.18 + ridge * 0.1) * uPulse;
 
-  // Signal glow — smooth band at signal position
+  // Signal glow
   float signalDist = abs(vUv.x - uSignalPos);
   float signalGlow = smoothstep(0.1, 0.0, signalDist) * uSignalIntensity;
   color += uSignalColor * signalGlow * 0.6;
 
-  // Contamination / blight overlay
+  // Contamination blight
   vec3 blightColor = vec3(0.85, 0.25, 0.35);
   color = mix(color, blightColor, uContam * 0.3);
 
