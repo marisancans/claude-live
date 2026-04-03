@@ -201,6 +201,9 @@ export class SakuraApp {
     this.ground.receiveShadow = true
     this.scene.add(this.ground)
 
+    // EZ-Tree prototype (async — won't block page load)
+    void this.createEzTree()
+
     // Fallen petal scatter on ground — static decoration
     this.createGroundPetals()
 
@@ -274,6 +277,50 @@ export class SakuraApp {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }))
+  }
+
+  private async createEzTree() {
+    try {
+      const { Tree } = await import('@dgreenheck/ez-tree')
+      const tree = new Tree()
+      tree.options.seed = 42
+      tree.options.bark.tint = 0x8b6342
+      tree.options.bark.textured = true
+      tree.options.bark.flatShading = false
+      tree.options.branch.levels = 3
+      tree.options.branch.children[0] = 30
+      tree.options.branch.children[1] = 10
+      tree.options.branch.children[2] = 5
+      tree.options.branch.angle[1] = 50
+      tree.options.branch.angle[2] = 45
+      tree.options.branch.angle[3] = 40
+      tree.options.branch.length[0] = 24
+      tree.options.branch.length[1] = 14
+      tree.options.branch.length[2] = 8
+      tree.options.branch.length[3] = 4
+      tree.options.branch.radius[0] = 3
+      tree.options.branch.radius[1] = 1.4
+      tree.options.branch.radius[2] = 0.6
+      tree.options.branch.radius[3] = 0.2
+      tree.options.branch.taper[0] = 0.7
+      tree.options.branch.taper[1] = 0.7
+      tree.options.branch.taper[2] = 0.8
+      tree.options.branch.taper[3] = 0.9
+      tree.options.branch.gnarliness[0] = 0.05
+      tree.options.branch.gnarliness[1] = 0.15
+      tree.options.branch.gnarliness[2] = 0.2
+      tree.options.branch.gnarliness[3] = 0.3
+      tree.options.leaves.billboard = 'Double'
+      tree.options.leaves.tint = 0xffb0c8
+      tree.options.leaves.size = 3
+      tree.options.leaves.sizeVariance = 1.5
+      tree.options.leaves.count = 12
+      tree.options.leaves.alphaTest = 0.3
+      tree.generate()
+      this.scene.add(tree)
+    } catch (e) {
+      console.warn('[sakura] EZ-Tree failed to load:', e)
+    }
   }
 
   private createGroundPetals() {
