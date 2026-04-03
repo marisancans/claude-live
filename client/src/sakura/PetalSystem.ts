@@ -169,6 +169,15 @@ export class PetalSystem {
       this.mesh.setMatrixAt(idx, mat)
     }
 
+    // Mark all instanced attributes for GPU upload
+    this.attrAnchorPos.needsUpdate = true
+    this.attrAnchorDir.needsUpdate = true
+    this.attrPhase.needsUpdate = true
+    this.attrState.needsUpdate = true
+    this.attrWilt.needsUpdate = true
+    this.attrColor.needsUpdate = true
+    this.mesh.instanceMatrix.needsUpdate = true
+
     // Add center glow sprite
     const glowMat = new THREE.SpriteMaterial({
       color: '#ffe8d0',
@@ -274,6 +283,7 @@ export class PetalSystem {
     this.attrAnchorPos.needsUpdate = true
     this.attrState.needsUpdate = true
     this.attrWilt.needsUpdate = true
+    this.attrColor.needsUpdate = true
   }
 
   /** Reset — clear all petals for rebuild */
