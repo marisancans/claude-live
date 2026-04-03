@@ -72,9 +72,9 @@ function branchRadius(
 
   const weightFactor = Math.pow(subtreeWeight / Math.max(rootWeight, 1), 0.42)
   if (branchType === 'folder') {
-    return clamp(0.34 + weightFactor * 3.3 * Math.pow(0.86, depth), 0.24, 3.6)
+    return clamp(0.34 + weightFactor * 3.3 * Math.pow(0.86, depth), 0.32, 3.6)
   }
-  return clamp(0.1 + weightFactor * 0.95 * Math.pow(0.78, depth), 0.08, 0.46)
+  return clamp(0.1 + weightFactor * 0.95 * Math.pow(0.78, depth), 0.18, 0.46)
 }
 
 function branchLength(

@@ -236,23 +236,35 @@ export class SakuraApp {
   }
 
   private createGroundPetals() {
-    // Scatter small pink petal sprites on the ground near the tree base
-    const count = 60
+    // Soft circle texture for ground petals
+    const c = document.createElement('canvas')
+    c.width = 32; c.height = 32
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 14)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.5, 'rgba(255,255,255,0.6)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 32, 32)
+    const petalTex = new THREE.CanvasTexture(c)
+
+    const count = 80
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2
-      const radius = 5 + Math.random() * 45
+      const radius = 4 + Math.random() * 50
       const x = Math.cos(angle) * radius
       const z = Math.sin(angle) * radius
       const pinkness = 0.3 + Math.random() * 0.5
       const mat = new THREE.SpriteMaterial({
+        map: petalTex,
         color: new THREE.Color(1.0, 0.75 + (1 - pinkness) * 0.25, 0.82 + (1 - pinkness) * 0.18),
         transparent: true,
-        opacity: 0.15 + Math.random() * 0.15,
+        opacity: 0.2 + Math.random() * 0.2,
         depthWrite: false,
       })
       const sprite = new THREE.Sprite(mat)
-      sprite.position.set(x, -3.5 + Math.random() * 0.5, z)
-      sprite.scale.setScalar(0.6 + Math.random() * 1.0)
+      sprite.position.set(x, -3.5 + Math.random() * 0.3, z)
+      sprite.scale.setScalar(0.5 + Math.random() * 0.8)
       this.scene.add(sprite)
     }
   }
