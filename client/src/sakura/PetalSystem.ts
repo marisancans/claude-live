@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { BlossomAnchor } from './types'
 import type { WindField } from './WindField'
 
-const INITIAL_CAPACITY = 3500
+const INITIAL_CAPACITY = 5000
 const GRAVITY = -9.8
 const GROUND_Y = -2
 const STATE_ANCHORED = 0
@@ -109,21 +109,23 @@ export class PetalSystem {
   constructor() {
     this.capacity = INITIAL_CAPACITY
 
-    // PlaneGeometry + alpha-tested texture = no visible squares
-    const geometry = new THREE.PlaneGeometry(1.8, 2.2)
+    // Larger plane + alpha-tested canvas texture = soft petal silhouette
+    const geometry = new THREE.PlaneGeometry(3.0, 3.6)
     const petalMap = createPetalTexture()
     const petalAlpha = createPetalAlpha()
 
     this.material = new THREE.MeshStandardMaterial({
       map: petalMap,
       alphaMap: petalAlpha,
-      alphaTest: 0.3,
-      transparent: false,    // alphaTest handles cutoff, no need for transparency
+      alphaTest: 0.2,
+      transparent: true,
+      opacity: 0.95,
       side: THREE.DoubleSide,
-      roughness: 0.7,
+      roughness: 0.6,
       metalness: 0.0,
-      emissive: new THREE.Color('#ffd0e0'),
-      emissiveIntensity: 0.08,
+      emissive: new THREE.Color('#ffc8dd'),
+      emissiveIntensity: 0.15,
+      depthWrite: true,
     })
 
     this.mesh = new THREE.InstancedMesh(geometry, this.material, this.capacity)
@@ -145,7 +147,7 @@ export class PetalSystem {
 
   /** Allocate petals for a blossom cluster. Returns instance indices. */
   allocateCluster(anchor: BlossomAnchor): number[] {
-    const petalCount = 8 + Math.floor(hashUnit(`count:${anchor.path}`) * 7)
+    const petalCount = 12 + Math.floor(hashUnit(`count:${anchor.path}`) * 10)
     const indices: number[] = []
 
     const dir = anchor.direction.clone().normalize()
@@ -159,10 +161,10 @@ export class PetalSystem {
       indices.push(idx)
 
       const angle = (i / petalCount) * Math.PI * 2 + hashUnit(`${anchor.path}:a:${i}`) * 0.7
-      const radius = anchor.scale * (0.3 + hashUnit(`${anchor.path}:r:${i}`) * 0.4)
+      const radius = anchor.scale * (0.5 + hashUnit(`${anchor.path}:r:${i}`) * 0.8)
       const offsetX = Math.cos(angle) * radius
       const offsetZ = Math.sin(angle) * radius
-      const offsetY = (hashUnit(`${anchor.path}:y:${i}`) - 0.5) * anchor.scale * 0.3
+      const offsetY = (hashUnit(`${anchor.path}:y:${i}`) - 0.5) * anchor.scale * 0.6
 
       const pos = anchor.position.clone()
         .add(tangent.clone().multiplyScalar(offsetX))
@@ -180,7 +182,7 @@ export class PetalSystem {
       this.groundTimers[idx] = 0
 
       // Instance matrix: random rotation + scale
-      const scale = anchor.scale * (0.6 + hashUnit(`${anchor.path}:s:${i}`) * 0.5)
+      const scale = anchor.scale * (0.8 + hashUnit(`${anchor.path}:s:${i}`) * 0.7)
       const mat = new THREE.Matrix4()
       const rotX = (hashUnit(`${anchor.path}:rx:${i}`) - 0.5) * Math.PI * 0.9
       const rotY = hashUnit(`${anchor.path}:ry:${i}`) * Math.PI * 2
@@ -204,13 +206,13 @@ export class PetalSystem {
     const glowMat = new THREE.SpriteMaterial({
       color: '#ffe8d0',
       transparent: true,
-      opacity: 0.15,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
     const glow = new THREE.Sprite(glowMat)
     glow.position.copy(anchor.position)
-    glow.scale.setScalar(anchor.scale * 5)
+    glow.scale.setScalar(anchor.scale * 7)
     this.glowGroup.add(glow)
 
     return indices

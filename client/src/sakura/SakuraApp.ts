@@ -64,36 +64,46 @@ export class SakuraApp {
     container.appendChild(this.renderer.domElement)
 
     this.scene = new THREE.Scene()
-    this.scene.fog = new THREE.FogExp2('#0e0a08', 0.004)
+    this.scene.fog = new THREE.FogExp2('#0e0a08', 0.003)
 
-    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 1600)
-    this.camera.position.set(0, 135, 255)
+    this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 1600)
+    this.camera.position.set(40, 80, 200)
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
-    this.controls.dampingFactor = 0.05
-    this.controls.autoRotate = false
-    this.controls.autoRotateSpeed = 0.08
-    this.controls.minDistance = 80
-    this.controls.maxDistance = 620
-    this.controls.target.set(0, 34, 0)
+    this.controls.dampingFactor = 0.06
+    this.controls.autoRotate = true
+    this.controls.autoRotateSpeed = 0.15
+    this.controls.minDistance = 60
+    this.controls.maxDistance = 500
+    this.controls.target.set(0, 40, 0)
 
-    // Post-processing — bloom threshold 0.6 to avoid flicker
+    // Post-processing — bloom for soft glow on petals
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.6))
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.65, 0.5, 0.55))
 
-    // Lighting
-    this.scene.add(new THREE.AmbientLight('#fff0f0', 0.8))
-    const hemi = new THREE.HemisphereLight('#ffe8f0', '#0e0808', 1.6)
-    hemi.position.set(0, 180, 0)
+    // Lighting — warm, soft, multi-source
+    this.scene.add(new THREE.AmbientLight('#fff5f0', 1.0))
+    const hemi = new THREE.HemisphereLight('#ffeef5', '#0a0606', 1.8)
+    hemi.position.set(0, 200, 0)
     this.scene.add(hemi)
-    const rim = new THREE.PointLight('#ffd0e0', 0.7, 400, 2)
-    rim.position.set(0, 150, 90)
+    // Key light — warm from upper-left
+    const key = new THREE.DirectionalLight('#fff0e0', 0.8)
+    key.position.set(-80, 160, 100)
+    this.scene.add(key)
+    // Rim light — behind and above
+    const rim = new THREE.PointLight('#ffd0e0', 0.9, 500, 1.5)
+    rim.position.set(0, 180, -80)
     this.scene.add(rim)
-    const fill = new THREE.PointLight('#ffb78e', 0.25, 300, 2)
-    fill.position.set(-120, 70, -60)
+    // Fill from below — subtle uplight
+    const fill = new THREE.PointLight('#ffb78e', 0.35, 300, 2)
+    fill.position.set(-100, 20, 60)
     this.scene.add(fill)
+    // Pink accent from the side
+    const accent = new THREE.PointLight('#ff8ab0', 0.3, 250, 2)
+    accent.position.set(90, 60, -40)
+    this.scene.add(accent)
 
     // Sky sphere
     this.skyMaterial = new THREE.ShaderMaterial({
@@ -109,14 +119,31 @@ export class SakuraApp {
       fragmentShader: `
         uniform float uTime;
         varying vec3 vWorldPos;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+        float noise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p);
+          float a = hash(i), b = hash(i+vec2(1,0)), c = hash(i+vec2(0,1)), d = hash(i+vec2(1,1));
+          vec2 u = f*f*(3.0-2.0*f);
+          return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;
+        }
+        float fbm(vec2 p) {
+          float v=0.0, a=0.5; mat2 m=mat2(1.6,1.2,-1.2,1.6);
+          for(int i=0;i<4;i++){v+=a*noise(p);p=m*p;a*=0.5;} return v;
+        }
         void main() {
           vec3 dir = normalize(vWorldPos);
           float y = dir.y * 0.5 + 0.5;
-          vec3 top = vec3(0.05, 0.03, 0.08);
-          vec3 mid = vec3(0.12, 0.08, 0.14);
-          vec3 low = vec3(0.32, 0.18, 0.22);
-          vec3 color = mix(low, mid, smoothstep(0.0, 0.5, y));
-          color = mix(color, top, smoothstep(0.5, 1.0, y));
+          vec2 skyUv = vec2(atan(dir.z, dir.x)/6.2831+0.5, y);
+          float clouds = fbm(skyUv * vec2(4.0, 2.5) + vec2(uTime*0.015, -uTime*0.02));
+          float streaks = fbm(vec2(skyUv.x*10.0 - uTime*0.05, skyUv.y*2.0));
+          vec3 top = vec3(0.04, 0.02, 0.07);
+          vec3 mid = vec3(0.10, 0.06, 0.13);
+          vec3 low = vec3(0.35, 0.18, 0.25);
+          vec3 glow = vec3(0.45, 0.22, 0.30);
+          vec3 color = mix(low, mid, smoothstep(0.0, 0.45, y));
+          color = mix(color, top, smoothstep(0.45, 0.9, y));
+          color += glow * clouds * 0.15 * smoothstep(0.5, 0.0, y);
+          color += vec3(0.3, 0.15, 0.2) * streaks * 0.08;
           gl_FragColor = vec4(color, 1.0);
         }
       `,
@@ -127,15 +154,26 @@ export class SakuraApp {
     this.sky.scale.set(1, 0.72, 1)
     this.scene.add(this.sky)
 
-    // Ground
+    // Ground with warm center gradient via shader
     this.ground = new THREE.Mesh(
-      new THREE.CircleGeometry(700, 64),
-      new THREE.MeshStandardMaterial({
-        color: '#1a120e',
-        emissive: '#1f1510',
-        emissiveIntensity: 0.15,
+      new THREE.CircleGeometry(800, 72),
+      new THREE.ShaderMaterial({
+        uniforms: {},
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+          varying vec2 vUv;
+          void main() {
+            float d = length(vUv - 0.5) * 2.0;
+            vec3 warm = vec3(0.12, 0.08, 0.06);
+            vec3 dark = vec3(0.06, 0.04, 0.03);
+            vec3 color = mix(warm, dark, smoothstep(0.0, 0.8, d));
+            float alpha = smoothstep(1.0, 0.3, d) * 0.95;
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
         transparent: true,
-        opacity: 0.95,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       }),
     )
     this.ground.rotation.x = -Math.PI / 2
