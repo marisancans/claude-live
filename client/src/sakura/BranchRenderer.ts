@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import barkVertSource from './shaders/bark.vert.glsl?raw'
 import barkFragSource from './shaders/bark.frag.glsl?raw'
-import type { TreeBranch, TreeLayout, TreeNode, BranchVisual, JunctionVisual } from './types'
+import type { TreeLayout, BranchVisual, JunctionVisual } from './types'
+import { buildBranchGeometry } from './BranchGeometry'
 
 function createBarkNormalMap(): THREE.CanvasTexture {
   const size = 256
@@ -98,6 +99,7 @@ export function makeBarkMaterial(flowOffset: number): THREE.ShaderMaterial {
       uSignalIntensity: { value: 0 },
       uSignalColor: { value: new THREE.Color('#ffffff') },
       uDepth: { value: 0 },
+      uGrowth: { value: 1.0 },
       uNormalMap: { value: getBarkNormalMap() },
       uNormalScale: { value: 0.3 },
     },
@@ -122,9 +124,25 @@ export function buildBranches(
 
   for (const spec of layout.branches) {
     const curve = curveFromPoints(spec.curvePoints)
-    const segments = Math.max(14, Math.min(36, 30 - spec.depth * 2))
-    const radialSegments = spec.depth <= 1 ? 14 : spec.depth <= 3 ? 12 : 8
-    const geometry = new THREE.TubeGeometry(curve, segments, spec.radius, radialSegments, false)
+    const sections = Math.max(12, Math.min(32, 28 - spec.depth * 2))
+    const segments = spec.depth <= 1 ? 12 : spec.depth <= 3 ? 10 : 8
+    const taper = spec.branchType === 'root' ? 0.5 : spec.branchType === 'folder' ? 0.65 : 0.8
+    const gnarliness = spec.branchType === 'root' ? 0.015 : 0.03 + spec.depth * 0.015
+    const twist = hashUnit(spec.id) * 1.5
+    const parentBranch = layout.branches.find(b => b.toPath === spec.fromPath)
+    const parentRadius = parentBranch?.radius
+
+    const geometry = buildBranchGeometry({
+      curve,
+      baseRadius: spec.radius,
+      taper,
+      gnarliness,
+      twist,
+      sections,
+      segments,
+      seedKey: spec.id,
+      parentRadius,
+    })
     const material = makeBarkMaterial(hashUnit(spec.id))
     material.uniforms.uDepth.value = spec.depth
     const mesh = new THREE.Mesh(geometry, material)
@@ -140,51 +158,14 @@ export function buildBranches(
       pulse: 0,
       contamination: 0,
       pulseColor: new THREE.Color('#e8a88a'),
-      growthProgress: 1,
-      growthTarget: 1,
+      growthProgress: 1.0,
+      growthTarget: 1.0,
       growthStartTime: 0,
-      growthDuration: 0,
+      growthDuration: 2.5,
     })
   }
 
-  // Junction collars — spheres at folder fork points
-  const rootPath = layout.branches.find(b => b.isSyntheticRoot)?.toPath ?? '.'
-  const rootWeight = layout.nodes.get(rootPath)?.subtreeWeight ?? 1
   const junctions: JunctionVisual[] = []
-
-  for (const node of layout.nodes.values()) {
-    if (node.type !== 'folder') continue
-    const connectedBranchIds = new Set<string>()
-    if (node.branchId) connectedBranchIds.add(node.branchId)
-    for (const childPath of node.children) {
-      const child = layout.nodes.get(childPath)
-      if (child?.branchId) connectedBranchIds.add(child.branchId)
-    }
-    if (connectedBranchIds.size === 0) continue
-
-    // Collar radius = max connecting branch radius * 1.15
-    let maxRadius = 0
-    for (const branchId of connectedBranchIds) {
-      const branch = branches.get(branchId)
-      if (branch) maxRadius = Math.max(maxRadius, branch.spec.radius)
-    }
-    const collarRadius = maxRadius * 1.15
-
-    const material = makeBarkMaterial(hashUnit(`junction:${node.path}`))
-    material.uniforms.uDepth.value = node.depth
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(collarRadius, 16, 16), material)
-    mesh.position.copy(node.position)
-    mesh.renderOrder = 3
-    mesh.castShadow = true
-    group.add(mesh)
-
-    junctions.push({
-      path: node.path,
-      branchIds: [...connectedBranchIds],
-      mesh,
-      material,
-    })
-  }
 
   return { branches, junctions }
 }
