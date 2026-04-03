@@ -4,6 +4,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { createColorGradingPass } from './postprocessing/ColorGradingPass'
+import { createFilmGrainPass, updateFilmGrain } from './postprocessing/FilmGrainPass'
 import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
@@ -40,6 +43,7 @@ export class SakuraApp {
   private camera: THREE.PerspectiveCamera
   private controls: OrbitControls
   private composer: EffectComposer
+  private filmGrainPass: ShaderPass
 
   private colonies = new Map<string, ColonyVisual>()
   private windField = new WindField()
@@ -89,6 +93,9 @@ export class SakuraApp {
       maxblur: 0.006,
     })
     this.composer.addPass(bokeh)
+    this.composer.addPass(createColorGradingPass())
+    this.filmGrainPass = createFilmGrainPass()
+    this.composer.addPass(this.filmGrainPass)
 
     // Lighting — warm, soft, multi-source
     this.scene.add(new THREE.AmbientLight('#fff5f0', 1.0))
@@ -382,6 +389,7 @@ export class SakuraApp {
     this.signalSystem.update(dt, this.elapsed)
 
     // Render
+    updateFilmGrain(this.filmGrainPass, this.elapsed)
     this.composer.render()
   }
 
