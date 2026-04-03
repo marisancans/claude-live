@@ -36,12 +36,12 @@ function createPetalTexture(): THREE.CanvasTexture {
   ctx.bezierCurveTo(cx - 48, cy * 1.1, cx - 42, cy * 0.3, cx, cy * 0.15)
   ctx.closePath()
 
-  // Radial gradient fill: white center → soft pink edges
+  // Radial gradient fill: soft pink center → deeper pink edges
   const grad = ctx.createRadialGradient(cx, cy * 0.8, 0, cx, cy * 0.8, size * 0.45)
-  grad.addColorStop(0, 'rgba(255, 245, 248, 1)')
-  grad.addColorStop(0.4, 'rgba(255, 220, 230, 1)')
-  grad.addColorStop(0.7, 'rgba(255, 190, 210, 0.95)')
-  grad.addColorStop(1, 'rgba(248, 160, 190, 0.85)')
+  grad.addColorStop(0, 'rgba(255, 230, 240, 1)')
+  grad.addColorStop(0.3, 'rgba(255, 200, 220, 1)')
+  grad.addColorStop(0.6, 'rgba(245, 170, 200, 1)')
+  grad.addColorStop(1, 'rgba(230, 140, 175, 1)')
   ctx.fillStyle = grad
   ctx.fill()
 
@@ -123,8 +123,8 @@ export class PetalSystem {
       side: THREE.DoubleSide,
       roughness: 0.6,
       metalness: 0.0,
-      emissive: new THREE.Color('#ffc8dd'),
-      emissiveIntensity: 0.15,
+      emissive: new THREE.Color('#ffd0e8'),
+      emissiveIntensity: 0.03,
       depthWrite: true,
     })
 
@@ -202,17 +202,17 @@ export class PetalSystem {
     this.mesh.instanceMatrix.needsUpdate = true
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
-    // Center glow sprite
+    // Small subtle center — much dimmer than before so petals show
     const glowMat = new THREE.SpriteMaterial({
-      color: '#ffe8d0',
+      color: '#ffeecc',
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.06,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
     const glow = new THREE.Sprite(glowMat)
     glow.position.copy(anchor.position)
-    glow.scale.setScalar(anchor.scale * 7)
+    glow.scale.setScalar(anchor.scale * 2.5)
     this.glowGroup.add(glow)
 
     return indices

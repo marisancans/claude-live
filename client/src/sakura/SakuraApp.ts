@@ -81,7 +81,7 @@ export class SakuraApp {
     // Post-processing — bloom for soft glow on petals
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.65, 0.5, 0.55))
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.4, 0.3, 0.75))
 
     // Lighting — warm, soft, multi-source
     this.scene.add(new THREE.AmbientLight('#fff5f0', 1.0))
