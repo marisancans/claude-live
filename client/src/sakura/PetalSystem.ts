@@ -29,11 +29,11 @@ function createPetalTexture(): THREE.CanvasTexture {
   const cx = size / 2
   const cy = size / 2
 
-  // Petal silhouette — teardrop/oval
+  // Petal silhouette — teardrop/oval (slightly asymmetric for natural look)
   ctx.beginPath()
   ctx.moveTo(cx, cy * 0.15)
-  ctx.bezierCurveTo(cx + 42, cy * 0.3, cx + 48, cy * 1.1, cx, cy * 1.75)
-  ctx.bezierCurveTo(cx - 48, cy * 1.1, cx - 42, cy * 0.3, cx, cy * 0.15)
+  ctx.bezierCurveTo(cx + 44, cy * 0.28, cx + 50, cy * 1.05, cx + 2, cy * 1.75)
+  ctx.bezierCurveTo(cx - 46, cy * 1.12, cx - 40, cy * 0.32, cx, cy * 0.15)
   ctx.closePath()
 
   // Radial gradient fill: soft pink center → deeper pink edges
@@ -45,13 +45,32 @@ function createPetalTexture(): THREE.CanvasTexture {
   ctx.fillStyle = grad
   ctx.fill()
 
-  // Subtle vein line down the center
-  ctx.strokeStyle = 'rgba(255, 200, 215, 0.3)'
-  ctx.lineWidth = 1
+  // Central vein — slightly curved quadratic bezier
+  ctx.strokeStyle = 'rgba(220, 170, 190, 0.35)'
+  ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.moveTo(cx, cy * 0.3)
-  ctx.lineTo(cx, cy * 1.5)
+  ctx.moveTo(cx, cy * 0.25)
+  ctx.quadraticCurveTo(cx + 1, cy, cx, cy * 1.55)
   ctx.stroke()
+
+  // Side veins radiating from center
+  ctx.strokeStyle = 'rgba(220, 170, 190, 0.2)'
+  ctx.lineWidth = 0.7
+  for (let i = 0; i < 4; i++) {
+    const t = 0.3 + i * 0.15
+    const y = cy * (0.4 + t * 1.1)
+    const spread = 18 + i * 6
+    // Left vein
+    ctx.beginPath()
+    ctx.moveTo(cx, y)
+    ctx.quadraticCurveTo(cx - spread * 0.6, y - 4, cx - spread, y + 3)
+    ctx.stroke()
+    // Right vein
+    ctx.beginPath()
+    ctx.moveTo(cx, y)
+    ctx.quadraticCurveTo(cx + spread * 0.6, y - 4, cx + spread, y + 3)
+    ctx.stroke()
+  }
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.needsUpdate = true
@@ -69,11 +88,11 @@ function createPetalAlpha(): THREE.CanvasTexture {
   const cx = size / 2
   const cy = size / 2
 
-  // Same petal silhouette as color texture
+  // Same petal silhouette as color texture (slightly asymmetric)
   ctx.beginPath()
   ctx.moveTo(cx, cy * 0.15)
-  ctx.bezierCurveTo(cx + 42, cy * 0.3, cx + 48, cy * 1.1, cx, cy * 1.75)
-  ctx.bezierCurveTo(cx - 48, cy * 1.1, cx - 42, cy * 0.3, cx, cy * 0.15)
+  ctx.bezierCurveTo(cx + 44, cy * 0.28, cx + 50, cy * 1.05, cx + 2, cy * 1.75)
+  ctx.bezierCurveTo(cx - 46, cy * 1.12, cx - 40, cy * 0.32, cx, cy * 0.15)
   ctx.closePath()
 
   // Solid white inside, sharp cutoff at petal edge
@@ -92,7 +111,7 @@ function createPetalAlpha(): THREE.CanvasTexture {
 
 export class PetalSystem {
   readonly mesh: THREE.InstancedMesh
-  private material: THREE.MeshStandardMaterial
+  private material: THREE.ShaderMaterial
   private capacity: number
   private count = 0
 
@@ -115,18 +134,65 @@ export class PetalSystem {
     const petalMap = createPetalTexture()
     const petalAlpha = createPetalAlpha()
 
-    this.material = new THREE.MeshStandardMaterial({
-      map: petalMap,
-      alphaMap: petalAlpha,
-      alphaTest: 0.5,
-      transparent: false,
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: petalMap },
+        uAlphaMap: { value: petalAlpha },
+        uLightDir: { value: new THREE.Vector3(-0.3, 0.8, 0.4).normalize() },
+        uSSS: { value: 0.45 },
+        uSSSColor: { value: new THREE.Color('#ff8aaa') },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 world = modelMatrix * instanceMatrix * vec4(position, 1.0);
+          vWorldPos = world.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform sampler2D uAlphaMap;
+        uniform vec3 uLightDir;
+        uniform float uSSS;
+        uniform vec3 uSSSColor;
+        varying vec2 vUv;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+
+        void main() {
+          vec4 texColor = texture2D(uMap, vUv);
+          float alpha = texture2D(uAlphaMap, vUv).r;
+          if (alpha < 0.5) discard;
+
+          vec3 norm = normalize(vWorldNormal);
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+
+          // Diffuse — half-lambert for soft wrap
+          float diffuse = max(dot(norm, uLightDir), 0.0) * 0.5 + 0.5;
+
+          // Subsurface scattering — light passing through the petal
+          float sss = max(dot(-norm, uLightDir), 0.0);
+          sss = pow(sss, 1.5) * uSSS;
+
+          // Fresnel rim
+          float fresnel = pow(1.0 - max(dot(viewDir, norm), 0.0), 2.5) * 0.15;
+
+          vec3 color = texColor.rgb * diffuse;
+          color += uSSSColor * sss;
+          color += vec3(1.0, 0.95, 0.98) * fresnel;
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
       side: THREE.DoubleSide,
-      roughness: 0.6,
-      metalness: 0.0,
-      emissive: new THREE.Color('#ffd0e8'),
-      emissiveIntensity: 0.03,
       depthWrite: true,
-    })
+      transparent: false,
+    }) as any // InstancedMesh accepts Material
 
     this.mesh = new THREE.InstancedMesh(geometry, this.material, this.capacity)
     this.mesh.count = 0
@@ -193,14 +259,9 @@ export class PetalSystem {
       mat.setPosition(pos)
       this.mesh.setMatrixAt(idx, mat)
 
-      // Per-instance color — white to pink variation
-      const pinkness = 0.2 + hashUnit(`${anchor.path}:pink:${i}`) * 0.6
-      const color = new THREE.Color(1.0, 0.82 + (1 - pinkness) * 0.18, 0.86 + (1 - pinkness) * 0.14)
-      this.mesh.setColorAt(idx, color)
     }
 
     this.mesh.instanceMatrix.needsUpdate = true
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
 
     // Soft blossom cloud sprite — gives canopy volume at distance
     const cloudMat = new THREE.SpriteMaterial({
@@ -352,8 +413,8 @@ export class PetalSystem {
 
   dispose() {
     this.mesh.geometry.dispose()
-    this.material.map?.dispose()
-    this.material.alphaMap?.dispose()
+    ;(this.material.uniforms.uMap?.value as THREE.Texture | undefined)?.dispose()
+    ;(this.material.uniforms.uAlphaMap?.value as THREE.Texture | undefined)?.dispose()
     this.material.dispose()
     this.reset()
   }
