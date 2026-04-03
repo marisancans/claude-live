@@ -321,12 +321,12 @@ export class SakuraApp {
 
       if (!colony || colony.signature !== signature) {
         if (colony) this.disposeColony(colony)
-        colony = this.createColony(projectState, signature)
+        const skipTrunk = index > 0 // only first colony gets the trunk
+        colony = this.createColony(projectState, signature, skipTrunk)
         this.colonies.set(projectState.project.id, colony)
         this.scene.add(colony.group)
       }
 
-      // All colonies share one root position
       colony.group.position.set(0, 0, 0)
 
       colony.activity = projectState.activity
@@ -341,11 +341,17 @@ export class SakuraApp {
     }
   }
 
-  private createColony(projectState: ProjectVisualState, signature: string): ColonyVisual {
+  private createColony(projectState: ProjectVisualState, signature: string, skipTrunk = false): ColonyVisual {
     const tree = projectState.tree!
     const layout = buildTreeLayout(tree.tree!, projectState.project.id)
-    const group = new THREE.Group()
 
+    // Remove the synthetic root branch for 2nd+ colonies (shared trunk)
+    if (skipTrunk) {
+      const trunkIdx = layout.branches.findIndex(b => b.isSyntheticRoot)
+      if (trunkIdx !== -1) layout.branches.splice(trunkIdx, 1)
+    }
+
+    const group = new THREE.Group()
     const { branches, junctions } = buildBranches(layout, group)
 
     // Allocate petals for each blossom anchor

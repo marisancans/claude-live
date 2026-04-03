@@ -4,10 +4,10 @@ const GodRaysShader = {
   uniforms: {
     tDiffuse: { value: null },
     uLightPos: { value: [0.3, 0.8] },  // screen-space light position
-    uExposure: { value: 0.18 },
-    uDecay: { value: 0.96 },
-    uDensity: { value: 0.8 },
-    uWeight: { value: 0.12 },
+    uExposure: { value: 0.04 },
+    uDecay: { value: 0.95 },
+    uDensity: { value: 0.4 },
+    uWeight: { value: 0.04 },
     uSamples: { value: 60 },
   },
   vertexShader: `

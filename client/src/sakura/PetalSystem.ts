@@ -294,31 +294,8 @@ export class PetalSystem {
 
     this.mesh.instanceMatrix.needsUpdate = true
 
-    // Soft blossom cloud sprite — gives canopy volume at distance
-    const cloudMat = new THREE.SpriteMaterial({
-      color: '#ffd4e2',
-      transparent: true,
-      opacity: 0.08,
-      blending: THREE.NormalBlending,
-      depthWrite: false,
-    })
-    const cloud = new THREE.Sprite(cloudMat)
-    cloud.position.copy(anchor.position)
-    cloud.scale.setScalar(anchor.scale * 8)
-    this.glowGroup.add(cloud)
-
-    // Tiny warm center glow
-    const glowMat = new THREE.SpriteMaterial({
-      color: '#ffeecc',
-      transparent: true,
-      opacity: 0.04,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    const glow = new THREE.Sprite(glowMat)
-    glow.position.copy(anchor.position)
-    glow.scale.setScalar(anchor.scale * 1.5)
-    this.glowGroup.add(glow)
+    // No sprites — crossed-quad petals provide volume from all angles
+    // Sprites caused square artifacts that bloom amplified
 
     return indices
   }
