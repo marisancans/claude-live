@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { BlossomAnchor, TreeBranch, TreeLayout, TreeNode, ProjectTreeNode } from './types'
+import type { BlossomAnchor, TreeBranch, TreeLayout, TreeNode, ProjectTreeNode, GrowthAction } from './types'
 
 const GROUND_PATH = '__ground__'
 
@@ -326,4 +326,219 @@ export function closestKnownPath(layout: TreeLayout, inputPath: string | null): 
 
   // Fall back to root
   return layout.nodes.has(root) ? root : null
+}
+
+export class IncrementalTreeBuilder {
+  readonly layout: TreeLayout = {
+    nodes: new Map(),
+    branches: [],
+    blossomAnchors: new Map(),
+    tipPaths: [],
+    maxDepth: 0,
+  }
+
+  private rootWeight = 100 // estimated; doesn't change layout stability
+  private rootPosition = new THREE.Vector3()
+  private trunkDirection = new THREE.Vector3(0, 1, 0)
+  private lean = new THREE.Vector3()
+  private trunkBuilt = false
+
+  constructor(private seedKey: string) {
+    const leanRng = makeRandom(`${seedKey}:lean`)
+    const leanAngle = rand(leanRng, 0, Math.PI * 2)
+    const leanStrength = rand(leanRng, 0.07, 0.18)
+    this.lean = new THREE.Vector3(Math.cos(leanAngle) * leanStrength, 0, Math.sin(leanAngle) * leanStrength)
+    this.trunkDirection = new THREE.Vector3(this.lean.x, 1, this.lean.z).normalize()
+  }
+
+  /**
+   * Add a file path to the tree. Creates all missing ancestor branches.
+   * Returns GrowthAction[] for branches/blossoms that need to be created.
+   */
+  addPath(filePath: string, rootPath: string): GrowthAction[] {
+    const actions: GrowthAction[] = []
+
+    // Parse path into segments: "client/src/App.tsx" → ["client", "client/src", "client/src/App.tsx"]
+    const parts = filePath.split('/').filter(Boolean)
+    const segments: { path: string; name: string; isFile: boolean }[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const path = parts.slice(0, i + 1).join('/')
+      segments.push({ path, name: parts[i], isFile: i === parts.length - 1 })
+    }
+
+    // Ensure trunk exists
+    if (!this.trunkBuilt) {
+      this.buildTrunk(rootPath)
+      this.trunkBuilt = true
+    }
+
+    // Walk the path, creating missing branches
+    let parentPath: string = rootPath
+    let parentPosition = this.rootPosition.clone()
+    let parentDirection = this.trunkDirection.clone()
+    let depth = 0
+
+    // Find the trunk endpoint
+    const trunkBranch = this.layout.branches.find(b => b.isSyntheticRoot)
+    if (trunkBranch) {
+      parentPosition = trunkBranch.curvePoints[trunkBranch.curvePoints.length - 1].clone()
+    }
+
+    for (const segment of segments) {
+      depth++
+      this.layout.maxDepth = Math.max(this.layout.maxDepth, depth)
+
+      // Already exists?
+      if (this.layout.nodes.has(segment.path)) {
+        const existing = this.layout.nodes.get(segment.path)!
+        parentPath = segment.path
+        parentPosition = existing.position.clone()
+        // Recover direction from the branch
+        const branch = this.layout.branches.find(b => b.toPath === segment.path)
+        if (branch && branch.curvePoints.length >= 2) {
+          const pts = branch.curvePoints
+          parentDirection = pts[pts.length - 1].clone().sub(pts[pts.length - 2]).normalize()
+        }
+        continue
+      }
+
+      // Create new branch for this segment
+      const rng = makeRandom(`${this.seedKey}:${segment.path}`)
+      const branchType: 'folder' | 'file' = segment.isFile ? 'file' : 'folder'
+      const weight = segment.isFile ? 1 : 5
+      const radius = branchRadius(depth, branchType, weight, this.rootWeight)
+      const length = branchLength(depth, branchType, weight, this.rootWeight, rng)
+
+      // Compute direction using the same radial spread algorithm
+      const basis = makeBasis(parentDirection)
+      const canopy = clamp((depth + 1) / 6, 0, 1)
+      const childAngle = hashString(`${this.seedKey}:${segment.path}:angle`) / 4294967296 * Math.PI * 2
+      const spread = THREE.MathUtils.lerp(0.4, 1.6, canopy) + 0.3
+      const radialU = Math.cos(childAngle) * spread
+      const radialV = Math.sin(childAngle) * spread
+      const upward = branchType === 'folder'
+        ? THREE.MathUtils.lerp(0.85, 0.1, canopy)
+        : THREE.MathUtils.lerp(0.4, -0.15, canopy)
+      const continuation = depth <= 1 ? 0.92 : depth <= 2 ? 0.65 : 0.4
+      const droop = branchType === 'folder'
+        ? clamp((depth - 1) * 0.06, 0, 0.22)
+        : clamp(0.1 + depth * 0.07, 0.1, 0.45)
+
+      const childDirection = parentDirection.clone()
+        .multiplyScalar(continuation)
+        .add(new THREE.Vector3(0, 1, 0).multiplyScalar(upward))
+        .add(basis.u.clone().multiplyScalar(radialU))
+        .add(basis.v.clone().multiplyScalar(radialV))
+        .add(this.lean.clone().multiplyScalar(0.12 + canopy * 0.18))
+        .add(new THREE.Vector3(0, -1, 0).multiplyScalar(droop))
+        .normalize()
+
+      const childPosition = parentPosition.clone().add(childDirection.clone().multiplyScalar(length))
+
+      // Bezier control points
+      const bend = (branchType === 'folder' ? 5.2 : 2.7) * (0.94 + canopy * 0.55)
+      const ctrl1 = parentPosition.clone()
+        .lerp(childPosition, 0.28)
+        .add(new THREE.Vector3(0, upward * bend * 0.68, 0))
+        .add(basis.u.clone().multiplyScalar(radialU * bend * 0.3))
+        .add(basis.v.clone().multiplyScalar(radialV * bend * 0.3))
+      const ctrl2 = parentPosition.clone()
+        .lerp(childPosition, 0.74)
+        .add(basis.u.clone().multiplyScalar(radialU * bend * 0.15))
+        .add(basis.v.clone().multiplyScalar(radialV * bend * 0.15))
+        .add(new THREE.Vector3(0, branchType === 'folder' ? bend * 0.16 : -bend * 0.08, 0))
+
+      const branchId = `${parentPath}->${segment.path}`
+      const branchSpec: TreeBranch = {
+        id: branchId,
+        fromPath: parentPath,
+        toPath: segment.path,
+        curvePoints: [parentPosition.clone(), ctrl1, ctrl2, childPosition.clone()],
+        depth,
+        radius,
+        subtreeWeight: weight,
+        branchType,
+      }
+      this.layout.branches.push(branchSpec)
+
+      // Create node
+      this.layout.nodes.set(segment.path, {
+        id: segment.path,
+        path: segment.path,
+        type: branchType,
+        depth,
+        position: childPosition.clone(),
+        parentPath,
+        children: [],
+        branchId,
+        subtreeWeight: weight,
+      })
+
+      // Update parent's children list
+      const parentNode = this.layout.nodes.get(parentPath)
+      if (parentNode) parentNode.children.push(segment.path)
+
+      actions.push({ type: 'branch', path: segment.path, parentPath, spec: branchSpec })
+
+      // If file, add blossom
+      if (segment.isFile) {
+        this.layout.tipPaths.push(segment.path)
+        const anchor: BlossomAnchor = {
+          path: segment.path,
+          position: childPosition.clone(),
+          direction: childDirection.clone(),
+          depth,
+          scale: clamp(1.02 - depth * 0.05, 0.42, 1.02),
+        }
+        this.layout.blossomAnchors.set(segment.path, anchor)
+        actions.push({ type: 'blossom', path: segment.path, parentPath: segment.path, spec: anchor })
+      }
+
+      parentPath = segment.path
+      parentPosition = childPosition
+      parentDirection = childDirection
+    }
+
+    return actions
+  }
+
+  buildTrunk(rootPath: string) {
+    const trunkRng = makeRandom(`${this.seedKey}:trunk`)
+    const trunkLength = branchLength(0, 'root', this.rootWeight, this.rootWeight, trunkRng, true)
+    const groundPosition = new THREE.Vector3(0, 0, 0)
+    this.rootPosition = groundPosition.clone().add(this.trunkDirection.clone().multiplyScalar(trunkLength))
+
+    const rootBranchId = `__ground__->${rootPath}`
+    const rootCtrl1 = groundPosition.clone()
+      .lerp(this.rootPosition, 0.32)
+      .add(new THREE.Vector3(this.lean.x * 12, 4.5, this.lean.z * 12))
+    const rootCtrl2 = groundPosition.clone()
+      .lerp(this.rootPosition, 0.74)
+      .add(new THREE.Vector3(this.lean.x * 18, 2.2, this.lean.z * 18))
+
+    const trunkSpec: TreeBranch = {
+      id: rootBranchId,
+      fromPath: '__ground__',
+      toPath: rootPath,
+      curvePoints: [groundPosition.clone(), rootCtrl1, rootCtrl2, this.rootPosition.clone()],
+      depth: 0,
+      radius: branchRadius(0, 'root', this.rootWeight, this.rootWeight, true),
+      subtreeWeight: this.rootWeight,
+      branchType: 'root',
+      isSyntheticRoot: true,
+    }
+    this.layout.branches.push(trunkSpec)
+
+    this.layout.nodes.set(rootPath, {
+      id: rootPath,
+      path: rootPath,
+      type: 'folder',
+      depth: 0,
+      position: this.rootPosition.clone(),
+      parentPath: null,
+      children: [],
+      branchId: rootBranchId,
+      subtreeWeight: this.rootWeight,
+    })
+  }
 }
