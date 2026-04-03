@@ -14,7 +14,7 @@ function pixiFullReload(): Plugin {
   return {
     name: 'pixi-full-reload',
     handleHotUpdate({ file, server }) {
-      if (file.includes('/canvas-pixi/') || file.includes('/canvas-three/')) {
+      if (file.includes('/canvas-pixi/') || file.includes('/canvas-three/') || file.includes('/sakura/')) {
         server.ws.send({ type: 'full-reload' })
         return []
       }
