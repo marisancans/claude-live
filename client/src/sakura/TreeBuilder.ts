@@ -91,7 +91,7 @@ function branchLength(
 
   const weightFactor = Math.pow(subtreeWeight / Math.max(rootWeight, 1), 0.36)
   if (branchType === 'folder') {
-    return clamp(14 * Math.pow(0.9, depth) + weightFactor * 16 + rand(rng, 1, 4.5), 8, 32)
+    return clamp(20 * Math.pow(0.9, depth) + weightFactor * 22 + rand(rng, 1, 6), 10, 44)
   }
   return clamp(7 * Math.pow(0.88, depth) + weightFactor * 4.8 + rand(rng, 0.8, 2.2), 4, 12)
 }
@@ -181,16 +181,16 @@ export function buildTreeLayout(tree: ProjectTreeNode, seedKey: string): TreeLay
       const childWeight = weights.get(child.path) ?? 1
       const weightFactor = Math.pow(childWeight / Math.max(rootWeight, 1), 0.34)
       const ratio = children.length === 1 ? 0 : index / (children.length - 1) - 0.5
-      const spread = THREE.MathUtils.lerp(0.18, 1.72, canopy) + children.length * 0.05
+      const spread = THREE.MathUtils.lerp(0.6, 2.4, canopy) + children.length * 0.05
       const lateral = ratio * (spread + weightFactor * 0.4) + rand(rng, -0.08, 0.08)
       const roll = rand(rng, -1, 1)
       const upward = child.type === 'folder'
-        ? THREE.MathUtils.lerp(0.96, 0.2, canopy)
-        : THREE.MathUtils.lerp(0.6, -0.12, canopy)
-      const continuation = depth === 0 ? 0.96 : depth < 2 ? 0.78 : 0.54
+        ? THREE.MathUtils.lerp(0.5, -0.1, canopy)
+        : THREE.MathUtils.lerp(0.3, -0.25, canopy)
+      const continuation = depth === 0 ? 0.6 : depth < 2 ? 0.4 : 0.25
       const droop = child.type === 'folder'
-        ? clamp((depth - 1) * 0.045, 0, 0.18)
-        : clamp(0.08 + depth * 0.05, 0.1, 0.34)
+        ? clamp((depth - 1) * 0.07, 0, 0.3)
+        : clamp(0.15 + depth * 0.09, 0.15, 0.55)
 
       const childDirection = direction.clone()
         .multiplyScalar(continuation + weightFactor * 0.28)

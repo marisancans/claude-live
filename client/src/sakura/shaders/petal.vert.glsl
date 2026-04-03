@@ -24,9 +24,9 @@ void main() {
 
   if (aState < 0.5) {
     // Anchored — sway around anchor position
-    float swayX = sin(uTime * 1.4 + aPhase * 6.28) * uWindStrength * 0.3;
-    float swayZ = cos(uTime * 0.9 + aPhase * 4.71) * uWindStrength * 0.2;
-    float swayY = sin(uTime * 2.1 + aPhase * 3.14) * uWindStrength * 0.08;
+    float swayX = sin(uTime * 1.4 + aPhase * 6.28) * uWindStrength * 0.8;
+    float swayZ = cos(uTime * 0.9 + aPhase * 4.71) * uWindStrength * 0.5;
+    float swayY = sin(uTime * 2.1 + aPhase * 3.14) * uWindStrength * 0.2;
 
     // Pulse expansion from events
     float pulseScale = 1.0 + uPulseGlobal * 0.2;

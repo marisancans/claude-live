@@ -7,6 +7,7 @@ uniform float uFlowOffset;
 uniform float uSignalPos;
 uniform float uSignalIntensity;
 uniform vec3 uSignalColor;
+uniform float uDepth;
 
 varying vec2 vUv;
 varying vec3 vWorldPos;
@@ -49,10 +50,17 @@ void main() {
   float barkNoise = fbm(vec2(vUv.x * 3.2 + uFlowOffset * 3.5, vUv.y * 4.8));
   float knots = smoothstep(0.62, 0.65, fbm(vec2(vUv.x * 1.8 + uFlowOffset * 7.0, vUv.y * 2.2 + uFlowOffset * 3.0)));
 
-  // Base bark colors — warm natural browns
-  vec3 barkDark = vec3(0.16, 0.10, 0.06);
-  vec3 barkMid = vec3(0.36, 0.23, 0.13);
-  vec3 barkHighlight = vec3(0.55, 0.39, 0.26);
+  // Depth-based bark palette
+  vec3 trunkDark = vec3(0.23, 0.17, 0.12);    // gray-brown trunk
+  vec3 trunkMid = vec3(0.32, 0.24, 0.18);
+  vec3 limbMid = vec3(0.36, 0.23, 0.13);      // warm mid
+  vec3 limbHighlight = vec3(0.55, 0.39, 0.26);
+  vec3 twigColor = vec3(0.48, 0.29, 0.19);    // reddish twigs
+
+  float depthBlend = clamp(uDepth / 5.0, 0.0, 1.0);
+  vec3 barkDark = mix(trunkDark, vec3(0.20, 0.12, 0.08), depthBlend);
+  vec3 barkMid = mix(trunkMid, limbMid, depthBlend);
+  vec3 barkHighlight = mix(limbHighlight, twigColor, depthBlend);
 
   vec3 color = mix(barkDark, barkMid, clamp(grain * 0.4 + barkNoise * 0.45 + uHeat * 0.12, 0.0, 1.0));
   color = mix(color, barkHighlight, ridge * 0.14 + barkNoise * 0.1);

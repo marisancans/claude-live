@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
-import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
+import { buildBranches, disposeBranches, updateBranchUniforms, makeBarkMaterial } from './BranchRenderer'
 import { PetalSystem } from './PetalSystem'
 import { SignalSystem } from './SignalSystem'
 import { WindField } from './WindField'
@@ -49,6 +49,8 @@ export class SakuraApp {
   private sky: THREE.Mesh
   private skyMaterial: THREE.ShaderMaterial
   private ground: THREE.Mesh
+  private rootTrunk: THREE.Mesh
+  private rootTrunkMat: THREE.ShaderMaterial
   private elapsed = 0
   private resizeHandler: () => void
 
@@ -64,7 +66,7 @@ export class SakuraApp {
     container.appendChild(this.renderer.domElement)
 
     this.scene = new THREE.Scene()
-    this.scene.fog = new THREE.FogExp2('#0e0a08', 0.0025)
+    this.scene.fog = new THREE.FogExp2('#0e0a08', 0.004)
 
     this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 1600)
     this.camera.position.set(0, 135, 255)
@@ -85,7 +87,7 @@ export class SakuraApp {
 
     // Lighting
     this.scene.add(new THREE.AmbientLight('#fff0f0', 0.8))
-    const hemi = new THREE.HemisphereLight('#ffe8f0', '#1a1014', 1.2)
+    const hemi = new THREE.HemisphereLight('#ffe8f0', '#0e0808', 1.6)
     hemi.position.set(0, 180, 0)
     this.scene.add(hemi)
     const rim = new THREE.PointLight('#ffd0e0', 0.7, 400, 2)
@@ -112,9 +114,9 @@ export class SakuraApp {
         void main() {
           vec3 dir = normalize(vWorldPos);
           float y = dir.y * 0.5 + 0.5;
-          vec3 top = vec3(0.06, 0.04, 0.10);
-          vec3 mid = vec3(0.14, 0.09, 0.15);
-          vec3 low = vec3(0.28, 0.17, 0.20);
+          vec3 top = vec3(0.05, 0.03, 0.08);
+          vec3 mid = vec3(0.12, 0.08, 0.14);
+          vec3 low = vec3(0.32, 0.18, 0.22);
           vec3 color = mix(low, mid, smoothstep(0.0, 0.5, y));
           color = mix(color, top, smoothstep(0.5, 1.0, y));
           gl_FragColor = vec4(color, 1.0);
@@ -142,6 +144,16 @@ export class SakuraApp {
     this.ground.position.y = -4
     this.scene.add(this.ground)
 
+    // Permanent root trunk
+    const rootTrunkGeom = new THREE.CylinderGeometry(7, 8.5, 15, 12, 4)
+    const rootTrunkMat = makeBarkMaterial(0.5)
+    rootTrunkMat.uniforms.uHeat.value = 0.15
+    const rootTrunk = new THREE.Mesh(rootTrunkGeom, rootTrunkMat)
+    rootTrunk.position.y = 7.5 // half height, so base at y=0
+    this.scene.add(rootTrunk)
+    this.rootTrunk = rootTrunk
+    this.rootTrunkMat = rootTrunkMat
+
     // Atmosphere particles
     this.atmosphere = this.createAtmosphere()
     this.scene.add(this.atmosphere)
@@ -157,7 +169,7 @@ export class SakuraApp {
   }
 
   private createAtmosphere() {
-    const count = 800
+    const count = 1200
     const positions = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
       const radius = 100 + Math.random() * 400
@@ -172,8 +184,8 @@ export class SakuraApp {
     return new THREE.Points(geometry, new THREE.PointsMaterial({
       color: '#ffd8e2',
       transparent: true,
-      opacity: 0.08,
-      size: 1.4,
+      opacity: 0.12,
+      size: 1.6,
       sizeAttenuation: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -184,7 +196,7 @@ export class SakuraApp {
     const withTrees = projects.filter(p => p.tree?.tree)
     const seen = new Set<string>()
 
-    withTrees.forEach((projectState, _index) => {
+    withTrees.forEach((projectState, index) => {
       const tree = projectState.tree!
       const signature = buildSignature(tree)
       let colony = this.colonies.get(projectState.project.id)
@@ -194,6 +206,20 @@ export class SakuraApp {
         colony = this.createColony(projectState, signature)
         this.colonies.set(projectState.project.id, colony)
         this.scene.add(colony.group)
+      }
+
+      // Position colonies sprouting from top of root trunk (y=15)
+      const total = withTrees.length
+      if (total <= 1) {
+        colony.group.position.set(0, 15, 0)
+      } else {
+        const angle = (index / total) * Math.PI * 2
+        const radius = 20 + total * 8
+        colony.group.position.set(
+          Math.cos(angle) * radius,
+          15,
+          Math.sin(angle) * radius,
+        )
       }
 
       colony.activity = projectState.activity
@@ -256,6 +282,7 @@ export class SakuraApp {
     // Atmosphere drift
     this.atmosphere.rotation.y += dt * 0.001
     this.skyMaterial.uniforms.uTime.value = this.elapsed
+    this.rootTrunkMat.uniforms.uTime.value = this.elapsed
 
     const now = Date.now()
     for (const colony of this.colonies.values()) {
@@ -278,6 +305,7 @@ export class SakuraApp {
 
     // Petals
     this.petalSystem.update(dt, this.elapsed, this.windField)
+    this.petalSystem.ambientDrift(dt)
 
     // Effects
     this.signalSystem.update(dt, this.elapsed)
@@ -313,6 +341,8 @@ export class SakuraApp {
     this.skyMaterial.dispose()
     this.ground.geometry.dispose()
     ;(this.ground.material as THREE.MeshStandardMaterial).dispose()
+    this.rootTrunk.geometry.dispose()
+    this.rootTrunkMat.dispose()
     this.controls.dispose()
     this.composer.dispose()
     this.renderer.dispose()

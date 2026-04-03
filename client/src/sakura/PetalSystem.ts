@@ -23,12 +23,11 @@ function hashUnit(value: string): number {
 
 function makePetalShape(): THREE.ShapeGeometry {
   const shape = new THREE.Shape()
-  // Rounded triangle — reads as petal
-  shape.moveTo(0, 0.5)
-  shape.quadraticCurveTo(0.35, 0.35, 0.3, 0)
-  shape.quadraticCurveTo(0.15, -0.15, 0, -0.2)
-  shape.quadraticCurveTo(-0.15, -0.15, -0.3, 0)
-  shape.quadraticCurveTo(-0.35, 0.35, 0, 0.5)
+  shape.moveTo(0, 1.5)
+  shape.quadraticCurveTo(1.05, 1.05, 0.9, 0)
+  shape.quadraticCurveTo(0.45, -0.45, 0, -0.6)
+  shape.quadraticCurveTo(-0.45, -0.45, -0.9, 0)
+  shape.quadraticCurveTo(-1.05, 1.05, 0, 1.5)
   return new THREE.ShapeGeometry(shape, 4)
 }
 
@@ -116,7 +115,7 @@ export class PetalSystem {
 
   /** Allocate petals for a blossom cluster. Returns array of instance indices. */
   allocateCluster(anchor: BlossomAnchor): number[] {
-    const petalCount = 5 + Math.floor(hashUnit(`count:${anchor.path}`) * 5)
+    const petalCount = 8 + Math.floor(hashUnit(`count:${anchor.path}`) * 7)
     const indices: number[] = []
 
     const dir = anchor.direction.clone().normalize()
@@ -161,10 +160,16 @@ export class PetalSystem {
       this.positions[idx * 3 + 1] = pos.y
       this.positions[idx * 3 + 2] = pos.z
 
-      // Set instance matrix (scale by petal size)
+      // Set instance matrix with random orientation + scale
       const scale = anchor.scale * (0.44 + hashUnit(`${anchor.path}:s:${i}`) * 0.18)
       const mat = new THREE.Matrix4()
-      mat.makeScale(scale, scale, scale)
+      const rotX = (hashUnit(`${anchor.path}:rx:${i}`) - 0.5) * Math.PI * 0.8
+      const rotY = hashUnit(`${anchor.path}:ry:${i}`) * Math.PI * 2
+      const rotZ = (hashUnit(`${anchor.path}:rz:${i}`) - 0.5) * Math.PI * 0.6
+      const euler = new THREE.Euler(rotX, rotY, rotZ)
+      const quat = new THREE.Quaternion().setFromEuler(euler)
+      mat.makeRotationFromQuaternion(quat)
+      mat.scale(new THREE.Vector3(scale, scale, scale))
       mat.setPosition(pos)
       this.mesh.setMatrixAt(idx, mat)
     }
@@ -284,6 +289,29 @@ export class PetalSystem {
     this.attrState.needsUpdate = true
     this.attrWilt.needsUpdate = true
     this.attrColor.needsUpdate = true
+  }
+
+  private driftTimer = 0
+  private driftInterval = 3
+
+  /** Randomly detach 1-3 petals for ambient life */
+  ambientDrift(dt: number) {
+    this.driftTimer += dt
+    if (this.driftTimer < this.driftInterval || this.count === 0) return
+    this.driftTimer = 0
+    this.driftInterval = 2 + Math.random() * 4
+    const driftCount = 1 + Math.floor(Math.random() * 3)
+    const candidates: number[] = []
+    for (let i = 0; i < this.count && candidates.length < driftCount * 5; i++) {
+      if (this.states[i] < 0.5) candidates.push(i)
+    }
+    if (candidates.length === 0) return
+    const toDetach: number[] = []
+    for (let i = 0; i < driftCount && candidates.length > 0; i++) {
+      const pick = Math.floor(Math.random() * candidates.length)
+      toDetach.push(candidates.splice(pick, 1)[0])
+    }
+    this.detach(toDetach, new THREE.Vector3(0, 0.5, 0))
   }
 
   /** Reset — clear all petals for rebuild */

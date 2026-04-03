@@ -28,6 +28,7 @@ export function makeBarkMaterial(flowOffset: number): THREE.ShaderMaterial {
       uSignalPos: { value: -1 },
       uSignalIntensity: { value: 0 },
       uSignalColor: { value: new THREE.Color('#ffffff') },
+      uDepth: { value: 0 },
     },
     vertexShader: barkVertSource,
     fragmentShader: barkFragSource,
@@ -53,6 +54,7 @@ export function buildBranches(
     const segments = Math.max(10, Math.min(28, 24 - spec.depth * 2))
     const geometry = new THREE.TubeGeometry(curve, segments, spec.radius, 8, false)
     const material = makeBarkMaterial(hashUnit(spec.id))
+    material.uniforms.uDepth.value = spec.depth
     const mesh = new THREE.Mesh(geometry, material)
     mesh.renderOrder = 2
     group.add(mesh)
@@ -92,6 +94,7 @@ export function buildBranches(
     const collarRadius = maxRadius * 1.15
 
     const material = makeBarkMaterial(hashUnit(`junction:${node.path}`))
+    material.uniforms.uDepth.value = node.depth
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(collarRadius, 12, 12), material)
     mesh.position.copy(node.position)
     mesh.renderOrder = 3
@@ -131,7 +134,7 @@ export function updateBranchUniforms(
     u.uPulse.value = branch.pulse
     u.uContam.value = clamp(colonyContam * 0.45 + branch.contamination, 0, 1)
     u.uPulseColor.value.copy(branch.pulseColor)
-    u.uWindStrength.value = windStrength * (branch.spec.depth >= 3 ? 1.0 : 0.3)
+    u.uWindStrength.value = windStrength * Math.min(2.0, branch.spec.depth * 0.3)
     u.uWindPhase.value = windPhase
   }
 
@@ -154,7 +157,7 @@ export function updateBranchUniforms(
     u.uPulse.value = pulse * 0.88
     u.uContam.value = clamp(colonyContam * 0.4 + contamination * 0.85, 0, 1)
     u.uPulseColor.value.copy(pulseColor)
-    u.uWindStrength.value = windStrength * 0.15
+    u.uWindStrength.value = windStrength * 0.2
     u.uWindPhase.value = windPhase
   }
 }
