@@ -180,10 +180,13 @@ export function buildTreeLayout(tree: ProjectTreeNode, seedKey: string): TreeLay
       const rng = makeRandom(`${seedKey}:${child.path}`)
       const childWeight = weights.get(child.path) ?? 1
       const weightFactor = Math.pow(childWeight / Math.max(rootWeight, 1), 0.34)
-      const ratio = children.length === 1 ? 0 : index / (children.length - 1) - 0.5
-      const spread = THREE.MathUtils.lerp(0.3, 1.9, canopy) + children.length * 0.05
-      const lateral = ratio * (spread + weightFactor * 0.4) + rand(rng, -0.1, 0.1)
-      const roll = rand(rng, -1, 1)
+      // Radial arrangement — children circle around parent branch axis
+      const angleBase = (index / Math.max(children.length, 1)) * Math.PI * 2
+      const angleJitter = rand(rng, -0.4, 0.4)
+      const childAngle = angleBase + angleJitter
+      const spread = THREE.MathUtils.lerp(0.4, 1.6, canopy) + weightFactor * 0.3
+      const radialU = Math.cos(childAngle) * spread
+      const radialV = Math.sin(childAngle) * spread
       const upward = child.type === 'folder'
         ? THREE.MathUtils.lerp(0.85, 0.1, canopy)
         : THREE.MathUtils.lerp(0.4, -0.15, canopy)
@@ -195,9 +198,9 @@ export function buildTreeLayout(tree: ProjectTreeNode, seedKey: string): TreeLay
       const childDirection = direction.clone()
         .multiplyScalar(continuation + weightFactor * 0.28)
         .add(new THREE.Vector3(0, 1, 0).multiplyScalar(upward))
-        .add(basis.v.clone().multiplyScalar(lateral))
-        .add(basis.u.clone().multiplyScalar(roll * (0.4 + canopy * 0.7 + Math.abs(ratio) * 0.3)))
-        .add(lean.clone().multiplyScalar(0.18 + canopy * 0.26))
+        .add(basis.u.clone().multiplyScalar(radialU))
+        .add(basis.v.clone().multiplyScalar(radialV))
+        .add(lean.clone().multiplyScalar(0.12 + canopy * 0.18))
         .add(new THREE.Vector3(0, -1, 0).multiplyScalar(droop))
         .normalize()
 
@@ -208,11 +211,13 @@ export function buildTreeLayout(tree: ProjectTreeNode, seedKey: string): TreeLay
       const ctrl1 = position.clone()
         .lerp(childPosition, 0.28)
         .add(new THREE.Vector3(0, upward * bend * 0.68, 0))
-        .add(basis.v.clone().multiplyScalar(lateral * bend * 0.42))
-        .add(lean.clone().multiplyScalar(bend * 0.5))
+        .add(basis.u.clone().multiplyScalar(radialU * bend * 0.3))
+        .add(basis.v.clone().multiplyScalar(radialV * bend * 0.3))
+        .add(lean.clone().multiplyScalar(bend * 0.3))
       const ctrl2 = position.clone()
         .lerp(childPosition, 0.74)
-        .add(basis.v.clone().multiplyScalar(lateral * bend * 0.24))
+        .add(basis.u.clone().multiplyScalar(radialU * bend * 0.15))
+        .add(basis.v.clone().multiplyScalar(radialV * bend * 0.15))
         .add(new THREE.Vector3(0, branchType === 'folder' ? bend * 0.16 : -bend * 0.08, 0))
 
       const branchId = `${current.path}->${child.path}`
