@@ -3,6 +3,75 @@ import barkVertSource from './shaders/bark.vert.glsl?raw'
 import barkFragSource from './shaders/bark.frag.glsl?raw'
 import type { TreeBranch, TreeLayout, TreeNode, BranchVisual, JunctionVisual } from './types'
 
+function createBarkNormalMap(): THREE.CanvasTexture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+
+  // Base flat normal (128, 128, 255)
+  ctx.fillStyle = 'rgb(128,128,255)'
+  ctx.fillRect(0, 0, size, size)
+
+  // Vertical grain grooves via sin waves
+  const imageData = ctx.getImageData(0, 0, size, size)
+  const data = imageData.data
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4
+      // sin-wave grain along vertical axis
+      const grain = Math.sin((x / size) * Math.PI * 24) * 0.5
+        + Math.sin((x / size) * Math.PI * 7 + 0.8) * 0.25
+      // Perturb X normal channel
+      data[idx] = Math.round(128 + grain * 30)     // R → normal X
+      data[idx + 1] = 128                            // G → normal Y (flat)
+      data[idx + 2] = 255                            // B → normal Z (up)
+      data[idx + 3] = 255
+    }
+  }
+
+  // Horizontal lenticel bumps — 12 random
+  const rng = (seed: number) => {
+    let s = seed
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff }
+  }
+  const rand = rng(42)
+  for (let i = 0; i < 12; i++) {
+    const cx = Math.floor(rand() * size)
+    const cy = Math.floor(rand() * size)
+    const hw = Math.floor(20 + rand() * 30) // half-width
+    const hh = Math.floor(3 + rand() * 5)   // half-height
+    for (let dy = -hh; dy <= hh; dy++) {
+      for (let dx = -hw; dx <= hw; dx++) {
+        const px = (cx + dx + size) % size
+        const py = (cy + dy + size) % size
+        const t = 1 - Math.sqrt((dx / hw) ** 2 + (dy / hh) ** 2)
+        if (t <= 0) continue
+        const idx = (py * size + px) * 4
+        // Bump normal: push Y outward
+        const bump = Math.sin(t * Math.PI) * 40
+        data[idx + 1] = Math.min(255, Math.round(data[idx + 1] + bump))
+      }
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(2, 4)
+  tex.needsUpdate = true
+  return tex
+}
+
+let _barkNormalMap: THREE.CanvasTexture | null = null
+function getBarkNormalMap(): THREE.CanvasTexture {
+  if (!_barkNormalMap) _barkNormalMap = createBarkNormalMap()
+  return _barkNormalMap
+}
+
 function hashUnit(value: string): number {
   let hash = 2166136261
   for (let i = 0; i < value.length; i++) {
@@ -29,6 +98,8 @@ export function makeBarkMaterial(flowOffset: number): THREE.ShaderMaterial {
       uSignalIntensity: { value: 0 },
       uSignalColor: { value: new THREE.Color('#ffffff') },
       uDepth: { value: 0 },
+      uNormalMap: { value: getBarkNormalMap() },
+      uNormalScale: { value: 0.3 },
     },
     vertexShader: barkVertSource,
     fragmentShader: barkFragSource,
@@ -58,6 +129,7 @@ export function buildBranches(
     material.uniforms.uDepth.value = spec.depth
     const mesh = new THREE.Mesh(geometry, material)
     mesh.renderOrder = 2
+    mesh.castShadow = true
     group.add(mesh)
 
     branches.set(spec.id, {
@@ -99,6 +171,7 @@ export function buildBranches(
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(collarRadius, 16, 16), material)
     mesh.position.copy(node.position)
     mesh.renderOrder = 3
+    mesh.castShadow = true
     group.add(mesh)
 
     junctions.push({

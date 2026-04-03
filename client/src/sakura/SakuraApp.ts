@@ -68,6 +68,8 @@ export class SakuraApp {
     this.renderer.setSize(w, h)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.setClearColor('#0e0a08')
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     container.appendChild(this.renderer.domElement)
 
     this.scene = new THREE.Scene()
@@ -109,6 +111,17 @@ export class SakuraApp {
     // Key light — warm from upper-left
     const key = new THREE.DirectionalLight('#fff0e0', 0.8)
     key.position.set(-80, 160, 100)
+    key.castShadow = true
+    key.shadow.mapSize.width = 1024
+    key.shadow.mapSize.height = 1024
+    key.shadow.camera.near = 10
+    key.shadow.camera.far = 400
+    key.shadow.camera.left = -120
+    key.shadow.camera.right = 120
+    key.shadow.camera.top = 120
+    key.shadow.camera.bottom = -40
+    key.shadow.bias = -0.002
+    key.shadow.radius = 4
     this.scene.add(key)
     // Rim light — behind and above
     const rim = new THREE.PointLight('#ffd0e0', 0.9, 500, 1.5)
@@ -172,30 +185,20 @@ export class SakuraApp {
     this.sky.scale.set(1, 0.72, 1)
     this.scene.add(this.sky)
 
-    // Ground with warm center gradient via shader
+    // Ground — MeshStandardMaterial so it receives shadows
     this.ground = new THREE.Mesh(
       new THREE.CircleGeometry(800, 72),
-      new THREE.ShaderMaterial({
-        uniforms: {},
-        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        fragmentShader: `
-          varying vec2 vUv;
-          void main() {
-            float d = length(vUv - 0.5) * 2.0;
-            vec3 warm = vec3(0.12, 0.08, 0.06);
-            vec3 dark = vec3(0.06, 0.04, 0.03);
-            vec3 color = mix(warm, dark, smoothstep(0.0, 0.8, d));
-            float alpha = smoothstep(1.0, 0.3, d) * 0.95;
-            gl_FragColor = vec4(color, alpha);
-          }
-        `,
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+      new THREE.MeshStandardMaterial({
+        color: '#0f0a08',
+        emissive: '#0a0705',
+        emissiveIntensity: 0.3,
+        roughness: 0.95,
+        metalness: 0.0,
       }),
     )
     this.ground.rotation.x = -Math.PI / 2
     this.ground.position.y = -4
+    this.ground.receiveShadow = true
     this.scene.add(this.ground)
 
     // Fallen petal scatter on ground — static decoration

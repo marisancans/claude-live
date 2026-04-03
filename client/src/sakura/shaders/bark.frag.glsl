@@ -8,6 +8,8 @@ uniform float uSignalPos;
 uniform float uSignalIntensity;
 uniform vec3 uSignalColor;
 uniform float uDepth;
+uniform sampler2D uNormalMap;
+uniform float uNormalScale;
 
 varying vec2 vUv;
 varying vec3 vWorldPos;
@@ -43,6 +45,8 @@ float fbm(vec2 p) {
 void main() {
   vec3 viewDir = normalize(cameraPosition - vWorldPos);
   vec3 norm = normalize(vWorldNormal);
+  vec3 mapNormal = texture2D(uNormalMap, vUv * vec2(2.0, 4.0)).rgb * 2.0 - 1.0;
+  norm = normalize(norm + mapNormal * uNormalScale);
   float fresnel = pow(1.0 - max(dot(viewDir, norm), 0.0), 2.2);
 
   // --- Cherry bark texture layers ---
