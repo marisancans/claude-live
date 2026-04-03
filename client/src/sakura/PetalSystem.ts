@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { BlossomAnchor } from './types'
 import type { WindField } from './WindField'
 
-const INITIAL_CAPACITY = 5000
+const INITIAL_CAPACITY = 8000
 const GRAVITY = -9.8
 const GROUND_Y = -2
 const STATE_ANCHORED = 0
@@ -244,7 +244,7 @@ export class PetalSystem {
 
   /** Allocate petals for a blossom cluster. Returns instance indices. */
   allocateCluster(anchor: BlossomAnchor): number[] {
-    const petalCount = 12 + Math.floor(hashUnit(`count:${anchor.path}`) * 10)
+    const petalCount = 16 + Math.floor(hashUnit(`count:${anchor.path}`) * 12)
     const indices: number[] = []
 
     const dir = anchor.direction.clone().normalize()
@@ -258,7 +258,7 @@ export class PetalSystem {
       indices.push(idx)
 
       const angle = (i / petalCount) * Math.PI * 2 + hashUnit(`${anchor.path}:a:${i}`) * 0.7
-      const radius = anchor.scale * (0.5 + hashUnit(`${anchor.path}:r:${i}`) * 0.8)
+      const radius = anchor.scale * (0.6 + hashUnit(`${anchor.path}:r:${i}`) * 1.2)
       const offsetX = Math.cos(angle) * radius
       const offsetZ = Math.sin(angle) * radius
       const offsetY = (hashUnit(`${anchor.path}:y:${i}`) - 0.5) * anchor.scale * 0.6

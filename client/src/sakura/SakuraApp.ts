@@ -92,9 +92,9 @@ export class SakuraApp {
     this.composer.addPass(new RenderPass(this.scene, this.camera))
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.4, 0.3, 0.75))
     const bokeh = new BokehPass(this.scene, this.camera, {
-      focus: 180,
-      aperture: 0.002,
-      maxblur: 0.006,
+      focus: 160,
+      aperture: 0.001,
+      maxblur: 0.002,
     })
     this.composer.addPass(bokeh)
     this.composer.addPass(createGodRaysPass())

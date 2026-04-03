@@ -123,25 +123,36 @@ export function buildBranches(
   const branches = new Map<string, BranchVisual>()
 
   for (const spec of layout.branches) {
+    // Skip file-type branches — files are represented only by blossom clusters
+    if (spec.branchType === 'file') continue
     const curve = curveFromPoints(spec.curvePoints)
     const sections = Math.max(12, Math.min(32, 28 - spec.depth * 2))
     const segments = spec.depth <= 1 ? 12 : spec.depth <= 3 ? 10 : 8
-    const taper = spec.branchType === 'root' ? 0.5 : spec.branchType === 'folder' ? 0.65 : 0.8
-    const gnarliness = spec.branchType === 'root' ? 0.015 : 0.03 + spec.depth * 0.015
-    const twist = hashUnit(spec.id) * 1.5
+    const taperVariation = hashUnit(`taper:${spec.id}`) * 0.15
+    const taper = spec.branchType === 'root' ? 0.5 : spec.branchType === 'folder' ? 0.6 + taperVariation : 0.75 + taperVariation
+    const gnarliness = spec.branchType === 'root' ? 0.008 : 0.012 + spec.depth * 0.006
+    const twist = hashUnit(spec.id) * 1.0 + 0.3
+    // Child's base radius should not exceed parent's tapered radius at the fork point
     const parentBranch = layout.branches.find(b => b.toPath === spec.fromPath)
-    const parentRadius = parentBranch?.radius
+    const parentTaper = parentBranch
+      ? (parentBranch.branchType === 'root' ? 0.5 : parentBranch.branchType === 'folder' ? 0.65 : 0.8)
+      : 0.5
+    // Estimate fork position as ~0.7 along parent (child branches near the tip)
+    const parentRadiusAtFork = parentBranch
+      ? parentBranch.radius * (1 - parentTaper * 0.7)
+      : spec.radius
+    const effectiveRadius = Math.min(spec.radius, parentRadiusAtFork * 0.9)
 
     const geometry = buildBranchGeometry({
       curve,
-      baseRadius: spec.radius,
+      baseRadius: spec.isSyntheticRoot ? spec.radius : effectiveRadius,
       taper,
       gnarliness,
       twist,
       sections,
       segments,
       seedKey: spec.id,
-      parentRadius,
+      parentRadius: parentRadiusAtFork,
     })
     const material = makeBarkMaterial(hashUnit(spec.id))
     material.uniforms.uDepth.value = spec.depth

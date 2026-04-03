@@ -85,9 +85,9 @@ export function buildBranchGeometry(options: BranchGeometryOptions): THREE.Buffe
       }
     }
 
-    // Add gnarliness — random orientation perturbation
-    if (i > 0) {
-      const gnarl = gnarliness * Math.max(1, 1 / Math.sqrt(Math.max(sectionRadius, 0.1)))
+    // Add gnarliness — skip first 2 sections to keep junction smooth
+    if (i > 2) {
+      const gnarl = gnarliness * Math.max(0.5, 1 / Math.sqrt(Math.max(sectionRadius, 0.2)))
       orientation.x += rngRange(-gnarl, gnarl)
       orientation.z += rngRange(-gnarl, gnarl)
     }
