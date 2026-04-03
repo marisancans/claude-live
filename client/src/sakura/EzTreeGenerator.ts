@@ -61,23 +61,42 @@ interface Branch {
   segmentCount: number
 }
 
-// --- Default cherry blossom params ---
-export const SAKURA_PARAMS: TreeParams = {
-  seed: 42,
+// --- Oak Large preset from EZ-Tree (proven good-looking tree) ---
+export const OAK_LARGE_PARAMS: TreeParams = {
+  seed: 23399,
   levels: 3,
-  trunkLength: 28,
-  lengthPerLevel: [28, 16, 9, 5],
-  radiusPerLevel: [3.5, 1.5, 0.6, 0.25],
-  taperPerLevel: [0.65, 0.7, 0.8, 0.9],
-  gnarlPerLevel: [0.03, 0.1, 0.16, 0.22],
-  twistPerLevel: [0.01, 0.04, 0.08, 0.12],
-  childrenPerLevel: [5, 4, 3, 0],
-  anglePerLevel: [0, 50, 45, 40],
-  sectionsPerLevel: [12, 8, 6, 4],
-  segmentsPerLevel: [10, 8, 6, 4],
-  startPerLevel: [0, 0.4, 0.3, 0.3],
+  trunkLength: 47.7,
+  lengthPerLevel: [47.7, 29.39, 17.62, 7.16],
+  radiusPerLevel: [3, 0.69, 0.69, 1.19],
+  taperPerLevel: [0.73, 0.42, 0.69, 0.75],
+  gnarlPerLevel: [0.04, 0.16, 0.06, 0.09],
+  twistPerLevel: [0.23, 0.42, 0, 0],
+  childrenPerLevel: [9, 5, 3, 0],
+  anglePerLevel: [0, 54, 43, 32],
+  sectionsPerLevel: [16, 9, 8, 3],
+  segmentsPerLevel: [12, 5, 3, 3],
+  startPerLevel: [0, 0.35, 0.1, 0],
   forceDirection: new THREE.Vector3(0, 1, 0),
-  forceStrength: 0.04,
+  forceStrength: 0.025,
+}
+
+// --- Cherry blossom — based on Oak Large but with sakura tweaks ---
+export const SAKURA_PARAMS: TreeParams = {
+  seed: 23399,
+  levels: 3,
+  trunkLength: 47.7,
+  lengthPerLevel: [47.7, 29.39, 17.62, 7.16],
+  radiusPerLevel: [3, 0.69, 0.69, 1.19],
+  taperPerLevel: [0.73, 0.42, 0.69, 0.75],
+  gnarlPerLevel: [0.04, 0.16, 0.06, 0.09],
+  twistPerLevel: [0.23, 0.42, 0, 0],
+  childrenPerLevel: [9, 5, 3, 0],
+  anglePerLevel: [0, 54, 43, 32],
+  sectionsPerLevel: [16, 9, 8, 3],
+  segmentsPerLevel: [12, 5, 3, 3],
+  startPerLevel: [0, 0.35, 0.1, 0],
+  forceDirection: new THREE.Vector3(0, 1, 0),
+  forceStrength: 0.025,
 }
 
 // --- Generator ---
