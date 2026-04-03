@@ -13,6 +13,7 @@ import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
 import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
+import { generateTree, SAKURA_PARAMS } from './EzTreeGenerator'
 import { PetalSystem } from './PetalSystem'
 import { SignalSystem } from './SignalSystem'
 import { WindField } from './WindField'
@@ -391,22 +392,44 @@ export class SakuraApp {
   private createColony(projectState: ProjectVisualState, signature: string, skipTrunk = false): ColonyVisual {
     const tree = projectState.tree!
     const layout = buildTreeLayout(tree.tree!, projectState.project.id)
-
-    // Remove the synthetic root branch for 2nd+ colonies (shared trunk)
-    if (skipTrunk) {
-      const trunkIdx = layout.branches.findIndex(b => b.isSyntheticRoot)
-      if (trunkIdx !== -1) layout.branches.splice(trunkIdx, 1)
-    }
-
     const group = new THREE.Group()
-    const { branches, junctions } = buildBranches(layout, group)
 
-    // Allocate petals for each blossom anchor
+    // Generate tree using walk-forward algorithm (EZ-Tree style)
+    const treeParams = { ...SAKURA_PARAMS, seed: hashUnit(projectState.project.id) * 100000 | 0 }
+    if (skipTrunk) {
+      // Second colony: different seed, shorter trunk, fewer children
+      treeParams.lengthPerLevel = [12, 14, 8, 4]
+      treeParams.childrenPerLevel = [4, 3, 2, 0]
+    }
+    const { branchGeometry, leafPositions, leafDirections } = generateTree(treeParams)
+
+    // Bark material for the generated tree
+    const barkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x6b4226,
+      roughness: 0.85,
+      metalness: 0.0,
+      flatShading: false,
+    })
+    const branchMesh = new THREE.Mesh(branchGeometry, barkMaterial)
+    branchMesh.castShadow = true
+    group.add(branchMesh)
+
+    // Place petals at leaf positions from the generator
     const petalInstanceIds: number[] = []
-    for (const [, anchor] of layout.blossomAnchors) {
+    for (let i = 0; i < leafPositions.length; i++) {
+      const anchor = {
+        path: `leaf:${i}`,
+        position: leafPositions[i],
+        direction: leafDirections[i],
+        depth: 3,
+        scale: 0.6 + Math.random() * 0.4,
+      }
       const ids = this.petalSystem.allocateCluster(anchor)
       petalInstanceIds.push(...ids)
     }
+
+    // Keep old layout for event routing (SignalSystem still uses it)
+    const { branches, junctions } = buildBranches(layout, new THREE.Group()) // hidden, just for data
 
     return {
       id: projectState.project.id,
