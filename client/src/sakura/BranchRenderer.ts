@@ -51,8 +51,9 @@ export function buildBranches(
 
   for (const spec of layout.branches) {
     const curve = curveFromPoints(spec.curvePoints)
-    const segments = Math.max(10, Math.min(28, 24 - spec.depth * 2))
-    const geometry = new THREE.TubeGeometry(curve, segments, spec.radius, 8, false)
+    const segments = Math.max(14, Math.min(36, 30 - spec.depth * 2))
+    const radialSegments = spec.depth <= 1 ? 14 : spec.depth <= 3 ? 12 : 8
+    const geometry = new THREE.TubeGeometry(curve, segments, spec.radius, radialSegments, false)
     const material = makeBarkMaterial(hashUnit(spec.id))
     material.uniforms.uDepth.value = spec.depth
     const mesh = new THREE.Mesh(geometry, material)
@@ -95,7 +96,7 @@ export function buildBranches(
 
     const material = makeBarkMaterial(hashUnit(`junction:${node.path}`))
     material.uniforms.uDepth.value = node.depth
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(collarRadius, 12, 12), material)
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(collarRadius, 16, 16), material)
     mesh.position.copy(node.position)
     mesh.renderOrder = 3
     group.add(mesh)
