@@ -539,10 +539,12 @@ export class SpaceColonizationTree {
     avgDir.y += ry_p + drift.y * 0.2
     avgDir.z += rz + drift.z * 0.2
 
-    // Tropism
+    // Tropism — gravity droop + horizontal wind drift (starts earlier = whole-tree bend)
     if (node.depth > TROPISM_START_DEPTH) {
       const tropismFactor = Math.min(1, (node.depth - TROPISM_START_DEPTH) / 10)
       avgDir.y -= TROPISM_STRENGTH * tropismFactor
+      avgDir.x += this.personality.windDriftX * tropismFactor
+      avgDir.z += this.personality.windDriftZ * tropismFactor
     }
 
     avgDir.normalize()
