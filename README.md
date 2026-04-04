@@ -46,14 +46,7 @@ With the plugin installed, manage the server from inside Claude Code:
 
 The server watches Claude Code's session transcript files (`~/.claude/projects/`) and tails them in real time. No hooks or additional configuration required.
 
-Each Claude Code session appears as an orbiting star system. Every tool call creates a node — the more events a session generates, the larger it grows. Tool calls trigger visual effects:
-
-- **Read / Grep / Glob** — scan effect radiates from the node
-- **Edit / Write** — energy beam fires from core to node
-- **Bash** — spark burst at the node
-- **Subagents** — child systems orbit their parent session
-
-Multiple Claude sessions show as separate star systems. Prompts pulse outward, context compaction triggers an implosion/rebirth effect.
+Each Claude Code session appears as an orbiting star system. Every tool call creates a node — the more events a session generates, the larger it grows. Multiple sessions show as separate star systems. Prompts pulse outward, context compaction triggers an implosion/rebirth effect.
 
 ## Server Endpoints
 
