@@ -184,6 +184,7 @@ export class SpaceColonizationTree {
   private rng: SeededRNG
   private seed: number
   private eventCounter = 0
+  private activeAttractors = 0
 
   // Pre-allocated geometry buffers
   private positions:  Float32Array
@@ -241,6 +242,7 @@ export class SpaceColonizationTree {
     this.nodeMap.clear()
     this.nextNodeId = 0
     this.attractors = []
+    this.activeAttractors = 0
     this.vertexCount = 0
     this.indexCount = 0
     this.eventCounter = 0
@@ -284,9 +286,7 @@ export class SpaceColonizationTree {
   }
 
   get activeAttractorCount(): number {
-    let n = 0
-    for (const a of this.attractors) if (a.active) n++
-    return n
+    return this.activeAttractors
   }
 
   /** Return flower positions for the pre-grown tree — tips and outer branch nodes. */
@@ -389,6 +389,7 @@ export class SpaceColonizationTree {
       this.attractors.push({ position: new THREE.Vector3(x, y, z), active: true })
       added++
     }
+    this.activeAttractors += count
   }
 
   // -----------------------------------------------------------------------
@@ -445,7 +446,7 @@ export class SpaceColonizationTree {
     if (associations.size === 0) {
       const trunkNode = this.growTrunkUpward()
       newNodeIds.push(trunkNode.id)
-      if (emitFlowers && trunkNode && trunkNode.depth >= FLOWER_MIN_DEPTH) {
+      if (emitFlowers && trunkNode.depth >= FLOWER_MIN_DEPTH) {
         pendingFlowers.push({ pos: trunkNode.position.clone(), dir: trunkNode.direction.clone() })
       }
       this.commitGeometry()
@@ -504,6 +505,7 @@ export class SpaceColonizationTree {
       if (!att.active) continue
       if (newNode.position.distanceToSquared(att.position) < killDist2) {
         att.active = false
+        this.activeAttractors--
       }
     }
 
@@ -522,8 +524,7 @@ export class SpaceColonizationTree {
     }
 
     // Step 9: Refill attractors if running low
-    const activeCount = this.attractors.filter(a => a.active).length
-    if (activeCount < REFILL_THRESHOLD) {
+    if (this.activeAttractors < REFILL_THRESHOLD) {
       this.envelopeScale += 0.12
       this.scatterAttractors(REFILL_BATCH)
     }
