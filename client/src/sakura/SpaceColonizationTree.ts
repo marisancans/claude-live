@@ -452,74 +452,73 @@ export class SpaceColonizationTree {
       return result
     }
 
-    // Step 3: Grow — ALL associated nodes extend simultaneously
-    // This is how SCA branching works: parallel growth creates forks naturally
-    const newNodes: TreeNode[] = []
+    // Step 3: Grow — SINGLE best node (most attractor associations, tie-break by depth)
+    let bestNodeId = -1, bestCount = 0, bestDepth = -1
     for (const [nodeId, attPositions] of associations.entries()) {
-      const node = this.nodeMap.get(nodeId)!
-
-      // Average normalized direction toward all associated attractors
-      const avgDir = new THREE.Vector3()
-      for (const ap of attPositions) {
-        avgDir.add(new THREE.Vector3().subVectors(ap, node.position).normalize())
+      const n = this.nodeMap.get(nodeId)!
+      if (attPositions.length > bestCount ||
+          (attPositions.length === bestCount && n.depth > bestDepth)) {
+        bestNodeId = nodeId
+        bestCount = attPositions.length
+        bestDepth = n.depth
       }
-      avgDir.divideScalar(attPositions.length).normalize()
-
-      // Organic gnarl (random perturbation)
-      avgDir.x += (this.rng.random() - 0.5) * 0.14
-      avgDir.y += (this.rng.random() - 0.5) * 0.14 * 0.5
-      avgDir.z += (this.rng.random() - 0.5) * 0.14
-
-      // Tropism — sakura branches droop on outer/deeper branches
-      if (node.depth > TROPISM_START_DEPTH) {
-        const tropismFactor = Math.min(1, (node.depth - TROPISM_START_DEPTH) / 10)
-        avgDir.y -= TROPISM_STRENGTH * tropismFactor
-      }
-
-      avgDir.normalize()
-
-      const newPos = node.position.clone().addScaledVector(avgDir, SEGMENT_LENGTH)
-      const newNode = this.createNode(newPos, avgDir, node)
-      newNodes.push(newNode)
+    }
+    if (bestNodeId < 0) {
+      this.commitGeometry()
+      return result
     }
 
-    // Collect new node IDs for sap pulse effects
-    for (const nn of newNodes) newNodeIds.push(nn.id)
+    const node = this.nodeMap.get(bestNodeId)!
+    const attPositions = associations.get(bestNodeId)!
 
-    // Step 4: Kill attractors within kill distance of any NEW node
+    // Average normalized direction toward associated attractors
+    const avgDir = new THREE.Vector3()
+    for (const ap of attPositions) {
+      avgDir.add(new THREE.Vector3().subVectors(ap, node.position).normalize())
+    }
+    avgDir.divideScalar(attPositions.length).normalize()
+
+    // Organic gnarl (random perturbation) — depth-weighted in Task 6
+    avgDir.x += (this.rng.random() - 0.5) * 0.14
+    avgDir.y += (this.rng.random() - 0.5) * 0.07
+    avgDir.z += (this.rng.random() - 0.5) * 0.14
+
+    // Tropism
+    if (node.depth > TROPISM_START_DEPTH) {
+      const tropismFactor = Math.min(1, (node.depth - TROPISM_START_DEPTH) / 10)
+      avgDir.y -= TROPISM_STRENGTH * tropismFactor
+    }
+
+    avgDir.normalize()
+
+    const newPos = node.position.clone().addScaledVector(avgDir, SEGMENT_LENGTH)
+    const newNode = this.createNode(newPos, avgDir, node)
+    newNode.lastPerturbation = new THREE.Vector3()  // set properly in Task 6
+
+    // Collect new node ID for sap pulse
+    newNodeIds.push(newNode.id)
+
+    // Step 4: Kill attractors within kill distance of the new node
     const killDist2 = KILL_DISTANCE * KILL_DISTANCE
     for (const att of this.attractors) {
       if (!att.active) continue
-      for (const nn of newNodes) {
-        if (nn.position.distanceToSquared(att.position) < killDist2) {
-          att.active = false
-          break
-        }
+      if (newNode.position.distanceToSquared(att.position) < killDist2) {
+        att.active = false
       }
     }
 
-    // Step 5: Update radii (pipe model — walk from new nodes to root)
-    for (const nn of newNodes) {
-      this.updateRadiiToRoot(nn)
-    }
+    // Step 5: Update radii (pipe model — walk from new node to root)
+    this.updateRadiiToRoot(newNode)
 
-    // Step 6: Write tube geometry for new segments
-    for (const nn of newNodes) {
-      this.writeSegment(nn)
-    }
+    // Step 6: Write tube geometry for new segment
+    this.writeSegment(newNode)
 
     // Step 7: Update ancestor ring geometry (radii changed from pipe model)
-    for (const nn of newNodes) {
-      this.updateAncestorGeometry(nn)
-    }
+    this.updateAncestorGeometry(newNode)
 
-    // Step 8: Flower positions (deeper branches only, only if requested)
-    if (emitFlowers) {
-      for (const nn of newNodes) {
-        if (nn.depth >= FLOWER_MIN_DEPTH) {
-          pendingFlowers.push({ pos: nn.position.clone(), dir: nn.direction.clone() })
-        }
-      }
+    // Step 8: Flower position (deeper branches only, if requested)
+    if (emitFlowers && newNode.depth >= FLOWER_MIN_DEPTH) {
+      pendingFlowers.push({ pos: newNode.position.clone(), dir: newNode.direction.clone() })
     }
 
     // Step 9: Refill attractors if running low
