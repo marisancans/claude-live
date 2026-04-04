@@ -24,6 +24,7 @@ export { buildGlobSeekers }     from './globSeekers'
 export { buildResponseBurst }   from './responseBurst'
 export { buildCompactImplosion } from './compactImplosion'
 export { buildCompactSupernova } from './compactSupernova'
+export { buildCompactBranch }   from './compactBranch'
 
 import { buildOriginRing }       from './originRing'
 import { buildEditCross }        from './editCross'
@@ -45,6 +46,7 @@ import { buildGlobSeekers }     from './globSeekers'
 import { buildResponseBurst }   from './responseBurst'
 import { buildCompactImplosion } from './compactImplosion'
 import { buildCompactSupernova } from './compactSupernova'
+import { buildCompactBranch }   from './compactBranch'
 
 export function buildEffect(tool: string, group: THREE.Group, p: SpawnParams): SecondaryEffect | null {
   switch (tool) {
@@ -53,8 +55,8 @@ export function buildEffect(tool: string, group: THREE.Group, p: SpawnParams): S
     case 'response':           return buildResponseBurst(group, p)
     case 'response:first':     return buildResponseBurst(group, p)
     case 'compact:pre':        return buildCompactImplosion(group, p)
-    case 'compact:post':       return buildCompactSupernova(group, p)
-    case 'compact:post:first': return buildCompactSupernova(group, p)
+    case 'compact:post':       return buildCompactBranch(group, p)
+    case 'compact:post:first': return buildCompactBranch(group, p)
     case 'Edit':               return buildEditCross(group, p)
     case 'Write':              return buildWriteBus(group, p)
     case 'WebFetch':           return buildWebFetchBranches(group, p)
