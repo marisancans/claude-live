@@ -1,6 +1,6 @@
 /**
  * Canvas2D → THREE.CanvasTexture factories.
- * Same gradient techniques as PixiJS version, but returns Three.js textures.
+ * Gradient textures for Three.js.
  */
 import * as THREE from 'three'
 

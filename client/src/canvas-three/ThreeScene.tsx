@@ -1,7 +1,5 @@
 /**
  * React wrapper for the Three.js nebula renderer.
- * Same props interface as PixiScene — drop-in replacement via hash routing.
- * Fetches /api/history on mount to load existing session data.
  */
 import { useEffect, useRef } from 'react'
 import type { Cluster, GraphNode } from '../types'

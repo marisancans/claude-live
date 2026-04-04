@@ -7,8 +7,8 @@ const TOOLS = ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'WebFetch'] as c
 const FILES = [
   'server/index.js', 'bin/hook.js', 'bin/cli.js', 'bin/hook-wrapper.sh',
   'client/src/App.tsx', 'client/src/store.ts', 'client/src/types.ts',
-  'client/src/canvas-pixi/PixiApp.ts', 'client/src/canvas-pixi/PixiScene.tsx',
-  'client/src/canvas-pixi/layers/WorldLayer.ts', 'client/src/events/EventBus.ts',
+  'client/src/canvas-three/ThreeApp.ts', 'client/src/canvas-three/ThreeScene.tsx',
+  'client/src/canvas-three/layers/BackgroundLayer.ts', 'client/src/events/EventBus.ts',
   'package.json', 'README.md', 'CLAUDE.md', 'client/vite.config.ts',
 ]
 const BASH_COMMANDS = [

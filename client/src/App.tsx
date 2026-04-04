@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RawEvent, GraphNode, Cluster } from './types'
 import { createStore } from './store'
-import { PixiScene } from './canvas-pixi/PixiScene'
 import { ThreeScene } from './canvas-three/ThreeScene'
 import { DebugPanel } from './DebugPanel'
 import { OperationsPanel } from './OperationsPanel'
@@ -164,7 +163,7 @@ interface PermNotification {
   timestamp: number
 }
 
-export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
+export function App() {
   const [clusters, setClusters] = useState(store.getSessions())
   const [lastToolName, setLastToolName] = useState<string | null>(null)
   const [eventCount, setEventCount] = useState(0)
@@ -400,10 +399,7 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {engine === 'three'
-        ? <ThreeScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} autoRotateEnabled={autoRotateEnabled} />
-        : <PixiScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} />
-      }
+      <ThreeScene clusters={clusters} onHover={handleHover} onSelect={handleSelect} autofitEnabled={autofitEnabled} autoRotateEnabled={autoRotateEnabled} />
 
       {/* HUD — single compact bar, top-right */}
       <div className="hud-bar">
@@ -420,33 +416,9 @@ export function App({ engine = 'pixi' }: { engine?: 'pixi' | 'three' }) {
         <button className="hud-ctrl-btn" onClick={toggleAutofit} title={autofitEnabled ? 'Disable autofit' : 'Enable autofit'} aria-label={autofitEnabled ? 'Disable autofit' : 'Enable autofit'}>
           <AutofitIcon enabled={autofitEnabled} />
         </button>
-        {engine === 'three' && (
-          <a
-            className="hud-ctrl-btn"
-            href="#/mycelium"
-            title="Mycelium"
-            aria-label="Open mycelium scene"
-            style={{ width: 'auto', padding: '0 10px', textDecoration: 'none', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}
-          >
-            myc
-          </a>
-        )}
-        {engine === 'three' && (
-          <a
-            className="hud-ctrl-btn"
-            href="#/sakura"
-            title="Sakura"
-            aria-label="Open sakura tree"
-            style={{ width: 'auto', padding: '0 10px', textDecoration: 'none', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}
-          >
-            sak
-          </a>
-        )}
-        {engine === 'three' && (
-          <button className="hud-ctrl-btn" onClick={toggleAutoRotate} title={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} aria-label={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} style={{ opacity: autoRotateEnabled ? 1 : 0.4 }}>
+        <button className="hud-ctrl-btn" onClick={toggleAutoRotate} title={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} aria-label={autoRotateEnabled ? 'Stop rotation' : 'Start rotation'} style={{ opacity: autoRotateEnabled ? 1 : 0.4 }}>
             ⟳
           </button>
-        )}
         <button className="hud-ctrl-btn" onClick={() => setOperationsOpen(true)} title="Operations" aria-label="Operations">?</button>
         <button className="hud-ctrl-btn" onClick={() => setDebugOpen(true)} title="Debug" aria-label="Debug">⚙</button>
       </div>

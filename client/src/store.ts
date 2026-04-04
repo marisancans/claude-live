@@ -705,7 +705,7 @@ export function createStore() {
 
     recomputeAges()
 
-    // Emit domain events to EventBus for PixiJS animations
+    // Emit domain events to EventBus for animations
     const nk = nodeKeyFor(event)
     const affectedNode = nk ? cluster.nodes.get(nk) ?? null : null
     if (!skipAnimations) EventProcessor.process(event, cluster, affectedNode)

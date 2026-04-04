@@ -19,8 +19,12 @@ const SakuraPage = lazy(() =>
   import('./sakura/SakuraPage').then(m => ({ default: m.SakuraPage }))
 )
 
+const SakuraShaderLabPage = lazy(() =>
+  import('./sakura/SakuraShaderLabPage').then(m => ({ default: m.SakuraShaderLabPage }))
+)
+
 function getRoute(): string {
-  return window.location.hash.replace(/^#\/?/, '') || 'pixi'
+  return window.location.hash.replace(/^#\/?/, '') || ''
 }
 
 function Root() {
@@ -32,9 +36,6 @@ function Root() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  if (route === 'three') {
-    return <App engine="three" />
-  }
   if (route === 'effect-demo') {
     return (
       <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
@@ -63,7 +64,14 @@ function Root() {
       </Suspense>
     )
   }
-  return <App engine="pixi" />
+  if (route === 'sakura-shader-lab' || route === 'sakura-signal-lab') {
+    return (
+      <Suspense fallback={<div style={{ background: '#0b0809', width: '100vw', height: '100vh' }} />}>
+        <SakuraShaderLabPage />
+      </Suspense>
+    )
+  }
+  return <App />
 }
 
 createRoot(document.getElementById('root')!).render(

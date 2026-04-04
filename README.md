@@ -2,7 +2,7 @@
 
 Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) activity as an orbital solar system.
 
-![claude-live demo](claude-live-demo.gif)
+<video src="claude-live-demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 **[Try the demo](https://marisancans.github.io/claude-live/)** (no install needed)
 

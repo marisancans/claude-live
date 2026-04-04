@@ -45,7 +45,7 @@ export function desaturate(hex: string): string {
   return `#${mr.toString(16).padStart(2, '0')}${mg.toString(16).padStart(2, '0')}${mb.toString(16).padStart(2, '0')}`
 }
 
-// Utility: Convert hex color to PixiJS integer format
+// Utility: Convert hex color string to integer format
 export function hexToInt(hex: string): number {
   return parseInt(hex.replace('#', ''), 16)
 }

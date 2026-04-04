@@ -36,7 +36,7 @@ export interface GraphNode {
   label: string
   nodeType: 'file' | 'bash' | 'web' | 'stop' | 'notification' | 'tool' | 'agent'
   baseRadius: number
-  color: number         // PixiJS-style hex int (kept for HUD compatibility)
+  color: number         // hex int (kept for HUD compatibility)
   colorHex: string      // CSS hex string e.g. '#60a5fa'
   x: number
   y: number

@@ -1,7 +1,7 @@
 import type { Cluster, GraphNode } from '../types'
 
 /**
- * Typed domain events for the PixiJS renderer animation system.
+ * Typed domain events for the renderer animation system.
  * These events decouple state mutations (store.ts) from visual animations (AnimationManager).
  */
 export interface BusEvents {
