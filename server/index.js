@@ -32,6 +32,11 @@ const MIME = {
 const clients = new Set()
 const eventHistory = [] // all events seen since server start
 const MAX_HISTORY = 5000
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
 
 function filterHistory(events, { sessionId, projectId }) {
   return events.filter(event => {
@@ -54,6 +59,15 @@ function broadcast(data) {
 }
 
 const server = createServer((req, res) => {
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    res.setHeader(key, value)
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    res.end()
+    return
+  }
+
   const requestUrl = new URL(req.url || '/', 'http://localhost')
   const pathname = requestUrl.pathname
 

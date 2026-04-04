@@ -1,8 +1,7 @@
 /**
  * COMPACT POST — Space Colonization Branch.
- * Mini SCA tree grows as glowing gold particles from the session core,
- * then fades. SCA drives node positions; THREE.Points makes them visible.
- * Replaces the supernova for compact:post.
+ * Mini SCA tree grows gold line-segment branches from the session core,
+ * then fades. Replaces the supernova for compact:post.
  */
 import * as THREE from 'three'
 import type { SpawnParams } from '../types'
@@ -11,14 +10,14 @@ import type { SecondaryEffect } from './types'
 // ---------------------------------------------------------------------------
 // SCA constants (tuned for compact effect scale)
 // ---------------------------------------------------------------------------
-const ATTRACTOR_COUNT    = 80
-const ATTRACTOR_RADIUS   = 60
-const INFLUENCE_RADIUS   = 18
-const KILL_RADIUS        = 6
-const SEGMENT_LENGTH     = 5
-const MAX_SEGMENTS       = 35
-const STEP_INTERVAL      = 0.04   // seconds between growth steps
-const FADE_DURATION      = 1.5   // seconds to fade out after growth
+const ATTRACTOR_COUNT    = 60
+const ATTRACTOR_RADIUS   = 40
+const INFLUENCE_RADIUS   = 12
+const KILL_RADIUS        = 4
+const SEGMENT_LENGTH     = 3
+const MAX_SEGMENTS       = 30
+const STEP_INTERVAL      = 0.05   // seconds between growth steps
+const FADE_DURATION      = 1.2   // seconds to fade out after growth
 
 // ---------------------------------------------------------------------------
 // Minimal SCA types
@@ -52,52 +51,27 @@ export function buildCompactBranch(group: THREE.Group, _p: SpawnParams): Seconda
   // --- SCA skeleton ---
   const nodes: ScaNode[] = [{ pos: new THREE.Vector3(0, 0, 0), parentIdx: null }]
 
-  // --- Points geometry — one point per SCA node (root + up to MAX_SEGMENTS children) ---
-  const MAX_NODES = MAX_SEGMENTS + 1
-  const posArr  = new Float32Array(MAX_NODES * 3)
-  const sizeArr = new Float32Array(MAX_NODES)
-
-  // Root node at origin
-  posArr[0] = 0; posArr[1] = 0; posArr[2] = 0
-  sizeArr[0] = 12.0
-
+  // --- Line geometry (pre-allocated for MAX_SEGMENTS line pairs) ---
+  const posArr = new Float32Array(MAX_SEGMENTS * 2 * 3)
   const geo = new THREE.BufferGeometry()
-  const posAttr  = new THREE.BufferAttribute(posArr,  3); posAttr.setUsage(THREE.DynamicDrawUsage)
-  const sizeAttr = new THREE.BufferAttribute(sizeArr, 1); sizeAttr.setUsage(THREE.DynamicDrawUsage)
+  const posAttr = new THREE.BufferAttribute(posArr, 3)
+  posAttr.setUsage(THREE.DynamicDrawUsage)
   geo.setAttribute('position', posAttr)
-  geo.setAttribute('aSize',    sizeAttr)
-  geo.setDrawRange(0, 1)   // root visible immediately
+  geo.setDrawRange(0, 0)
 
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 1.0 } },
-    vertexShader: `
-      attribute float aSize;
-      uniform float uOpacity;
-      varying float vOpacity;
-      void main() {
-        vOpacity = uOpacity;
-        gl_PointSize = aSize;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying float vOpacity;
-      void main() {
-        float d = length(gl_PointCoord - 0.5) * 2.0;
-        float a = (1.0 - smoothstep(0.4, 1.0, d)) * vOpacity;
-        gl_FragColor = vec4(1.0, 0.82, 0.38, a);
-      }
-    `,
-    blending: THREE.AdditiveBlending,
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color('#FFD060'),
     transparent: true,
+    opacity: 1.0,
+    blending: THREE.AdditiveBlending,
     depthWrite: false,
   })
 
-  const points = new THREE.Points(geo, mat)
-  group.add(points)
+  const lines = new THREE.LineSegments(geo, mat)
+  group.add(lines)
 
   // --- State ---
-  let nodeCount = 1   // root already placed
+  let segmentCount = 0
   let stepTimer = 0
   let growing = true
   let fadeTimer = 0
@@ -164,20 +138,18 @@ export function buildCompactBranch(group: THREE.Group, _p: SpawnParams): Seconda
       }
     }
 
-    // Write new node as a point — size tapers slightly for deeper nodes
-    const base = nodeCount * 3
-    posArr[base]  = newPos.x; posArr[base + 1] = newPos.y; posArr[base + 2] = newPos.z
-    sizeArr[nodeCount] = Math.max(5.0, 14.0 - nodes.length * 0.25)
-    nodeCount++
-    posAttr.needsUpdate  = true
-    sizeAttr.needsUpdate = true
-    geo.setDrawRange(0, nodeCount)
+    const base = segmentCount * 2 * 3
+    posArr[base]     = node.pos.x;  posArr[base + 1] = node.pos.y;  posArr[base + 2] = node.pos.z
+    posArr[base + 3] = newPos.x;    posArr[base + 4] = newPos.y;    posArr[base + 5] = newPos.z
+    segmentCount++
+    posAttr.needsUpdate = true
+    geo.setDrawRange(0, segmentCount * 2)
 
     return true
   }
 
   const effect: SecondaryEffect = {
-    entries: [{ obj: points, mat, meta: {} }],
+    entries: [{ obj: lines, mat, meta: {} }],
     suppressDefaultTrail: true,
 
     trailTick(_prog, dt, _elapsed, _head) {
@@ -186,14 +158,14 @@ export function buildCompactBranch(group: THREE.Group, _p: SpawnParams): Seconda
         while (stepTimer >= STEP_INTERVAL) {
           stepTimer -= STEP_INTERVAL
           const grew = growStep()
-          if (!grew || nodeCount > MAX_SEGMENTS || activeAttractors === 0) {
+          if (!grew || segmentCount >= MAX_SEGMENTS || activeAttractors === 0) {
             growing = false
             break
           }
         }
       } else {
         fadeTimer += dt
-        mat.uniforms.uOpacity.value = Math.max(0, 1.0 - fadeTimer / FADE_DURATION)
+        mat.opacity = Math.max(0, 1.0 - fadeTimer / FADE_DURATION)
         if (fadeTimer >= FADE_DURATION) {
           effect.shouldMarkDone = true
         }
