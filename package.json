@@ -20,8 +20,7 @@
     "bin/",
     "client/dist/",
     ".claude-plugin/",
-    "commands/",
-    "hooks/"
+    "commands/"
   ],
   "engines": {
     "node": ">=18"
