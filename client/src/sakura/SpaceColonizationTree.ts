@@ -342,6 +342,14 @@ export class SpaceColonizationTree {
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
   }
 
+  /** Returns gnarl strength for a given node depth — heavier on trunk, lighter on tips. */
+  private gnarlForDepth(depth: number): number {
+    const g = this.personality.gnarliness
+    if (depth <= 5)  return (0.35 + Math.min(depth, 5) * 0.02) * g  // 0.35–0.45 × gnarliness
+    if (depth <= 12) return 0.18 * g
+    return 0.10 * g
+  }
+
   private derivePersonality(): TreePersonality {
     const leanAngle     = this.rng.random(0.44, 0.05)       // 3–25° in radians
     const leanDirection = this.rng.random(Math.PI * 2, 0)
@@ -519,10 +527,17 @@ export class SpaceColonizationTree {
     }
     avgDir.divideScalar(attPositions.length).normalize()
 
-    // Organic gnarl (random perturbation) — depth-weighted in Task 6
-    avgDir.x += (this.rng.random() - 0.5) * 0.14
-    avgDir.y += (this.rng.random() - 0.5) * 0.07
-    avgDir.z += (this.rng.random() - 0.5) * 0.14
+    // Depth-weighted gnarl + accumulated drift (S-curves from parent perturbation)
+    const gnarl = this.gnarlForDepth(node.depth)
+    const rx = (this.rng.random() - 0.5) * gnarl
+    const ry_p = (this.rng.random() - 0.5) * gnarl * 0.5
+    const rz = (this.rng.random() - 0.5) * gnarl
+
+    // Inherit 20% of parent's last perturbation for flowing S-curves
+    const drift = node.lastPerturbation
+    avgDir.x += rx + drift.x * 0.2
+    avgDir.y += ry_p + drift.y * 0.2
+    avgDir.z += rz + drift.z * 0.2
 
     // Tropism
     if (node.depth > TROPISM_START_DEPTH) {
@@ -534,7 +549,11 @@ export class SpaceColonizationTree {
 
     const newPos = node.position.clone().addScaledVector(avgDir, SEGMENT_LENGTH)
     const newNode = this.createNode(newPos, avgDir, node)
-    newNode.lastPerturbation = new THREE.Vector3()  // set properly in Task 6
+    newNode.lastPerturbation = new THREE.Vector3(
+      rx + drift.x * 0.2,
+      ry_p + drift.y * 0.2,
+      rz + drift.z * 0.2,
+    )
 
     // Collect new node ID for sap pulse
     newNodeIds.push(newNode.id)
@@ -611,6 +630,7 @@ export class SpaceColonizationTree {
 
     const newPos = tip.position.clone().addScaledVector(dir, SEGMENT_LENGTH)
     const node = this.createNode(newPos, dir, tip)
+    node.lastPerturbation = new THREE.Vector3()  // trunk drift stays zero — already has direction noise
     this.updateRadiiToRoot(node)
     this.writeSegment(node)
     this.updateAncestorGeometry(node)
