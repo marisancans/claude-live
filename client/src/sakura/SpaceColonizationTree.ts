@@ -308,10 +308,16 @@ export class SpaceColonizationTree {
   // -----------------------------------------------------------------------
 
   private init() {
+    this.personality = this.derivePersonality()
     this.scatterAttractors(INITIAL_ATTRACTORS)
 
-    // Root at ground level — tree starts from nothing
-    const rootDir = new THREE.Vector3(0, 1, 0)
+    // Root: slight seed-derived tilt so trunk doesn't start perfectly vertical
+    const tiltMag = 0.052 + this.personality.leanAngle * 0.15  // ~3° base
+    const rootDir = new THREE.Vector3(
+      Math.sin(tiltMag) * Math.cos(this.personality.leanDirection),
+      Math.cos(tiltMag),
+      Math.sin(tiltMag) * Math.sin(this.personality.leanDirection),
+    ).normalize()
     const root: TreeNode = {
       id: this.nextNodeId++,
       position: new THREE.Vector3(0, 0, 0),
@@ -327,6 +333,38 @@ export class SpaceColonizationTree {
     }
     this.nodes.push(root)
     this.nodeMap.set(root.id, root)
+  }
+
+  /** Box-Muller transform using the seeded RNG. Produces std-normal variate. */
+  private gaussRng(): number {
+    const u = Math.max(1e-10, this.rng.random())
+    const v = this.rng.random()
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+  }
+
+  private derivePersonality(): TreePersonality {
+    const leanAngle     = this.rng.random(0.44, 0.05)       // 3–25° in radians
+    const leanDirection = this.rng.random(Math.PI * 2, 0)
+    const gnarliness    = this.rng.random(2.5, 0.8)
+    const windDriftX    = (this.rng.random() - 0.5) * 0.12
+    const windDriftZ    = (this.rng.random() - 0.5) * 0.12
+
+    // 2–4 hotspot cluster centers in base-dome world space (envelopeScale=1)
+    const hotspotCount = 2 + Math.floor(this.rng.random() * 3)
+    const hotspots: THREE.Vector3[] = []
+    const rxz = DOME_RADIUS_XZ, ry = DOME_RADIUS_Y, cy = DOME_CENTER_Y
+    for (let i = 0; i < hotspotCount; i++) {
+      let x = 0, y = 0, z = 0, tries = 0
+      do {
+        x = (this.rng.random() * 2 - 1) * rxz
+        y = (this.rng.random() * 2 - 1) * ry + cy
+        z = (this.rng.random() * 2 - 1) * rxz
+        tries++
+      } while ((x * x / (rxz * rxz) + (y - cy) * (y - cy) / (ry * ry) + z * z / (rxz * rxz) > 1 || y < 15) && tries < 50)
+      hotspots.push(new THREE.Vector3(x, y, z))
+    }
+
+    return { leanAngle, leanDirection, gnarliness, windDriftX, windDriftZ, hotspots }
   }
 
   private scatterAttractors(count: number) {
