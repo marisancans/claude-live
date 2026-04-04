@@ -3,6 +3,7 @@ import type { RawEvent } from '../types'
 import { SakuraScene } from './SakuraScene'
 import { SakuraDebugPanel } from './SakuraDebugPanel'
 import type { HookDraft, ProjectActivity, ProjectSummary, ProjectTreePayload, ProjectVisualState, SignalEnvelope } from './types'
+import { backendEventSource, backendFetch, fetchJson, readJsonResponse } from '../backend'
 
 const EMPTY_ACTIVITY: ProjectActivity = {
   eventCount: 0,
@@ -81,9 +82,9 @@ export function SakuraPage() {
     if (!force && (trees[projectId] || pendingTreesRef.current.has(projectId))) return
     pendingTreesRef.current.add(projectId)
     try {
-      const res = await fetch(`/api/project-tree?project=${encodeURIComponent(projectId)}`)
+      const res = await backendFetch(`/api/project-tree?project=${encodeURIComponent(projectId)}`)
       if (!res.ok) return
-      const tree = await res.json() as ProjectTreePayload
+      const tree = await readJsonResponse<ProjectTreePayload>(res)
       setTrees(prev => ({ ...prev, [tree.projectId]: tree }))
     } finally {
       pendingTreesRef.current.delete(projectId)
@@ -95,9 +96,10 @@ export function SakuraPage() {
     let cancelled = false
     async function load() {
       try {
-        const [pRes, hRes] = await Promise.all([fetch('/api/projects'), fetch('/api/history')])
-        const pJson = await pRes.json() as { projects?: ProjectSummary[] }
-        const history = await hRes.json() as RawEvent[]
+        const [pJson, history] = await Promise.all([
+          fetchJson<{ projects?: ProjectSummary[] }>('/api/projects'),
+          fetchJson<RawEvent[]>('/api/history'),
+        ])
         if (cancelled) return
         setProjects(mergeProjects([], pJson.projects ?? []))
         setHistoryCount(history.length)
@@ -108,8 +110,7 @@ export function SakuraPage() {
     load()
     const refresh = setInterval(async () => {
       try {
-        const res = await fetch('/api/projects')
-        const json = await res.json() as { projects?: ProjectSummary[] }
+        const json = await fetchJson<{ projects?: ProjectSummary[] }>('/api/projects')
         if (!cancelled) setProjects(prev => mergeProjects(prev, json.projects ?? []))
       } catch { /* keep existing */ }
     }, 15000)
@@ -127,7 +128,7 @@ export function SakuraPage() {
   // SSE connection
   useEffect(() => {
     const recent = recentKeysRef.current
-    const es = new EventSource('/events')
+    const es = backendEventSource('/events')
     es.onopen = () => setConnection('connected')
     es.onerror = () => setConnection('disconnected')
     es.onmessage = (msg) => {
@@ -178,8 +179,7 @@ export function SakuraPage() {
     stopReplay()
     setResetSignal(s => s + 1)
     setReplayStatus('loading...')
-    const res = await fetch(`/api/history?project=${encodeURIComponent(projectId)}${persisted ? '&persisted=1' : ''}`)
-    const events = await res.json() as RawEvent[]
+    const events = await fetchJson<RawEvent[]>(`/api/history?project=${encodeURIComponent(projectId)}${persisted ? '&persisted=1' : ''}`)
     const replayable = events.filter(shouldAnimate).slice(-220)
     if (!replayable.length) { setReplayStatus('no events'); return 0 }
     let i = 0
@@ -211,7 +211,7 @@ export function SakuraPage() {
       notification_type: null, title: null, agent_transcript_path: null, memory_type: null,
       ...partial,
     }
-    await fetch('/hook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) })
+    await backendFetch('/hook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) })
   }
 
   useEffect(() => {

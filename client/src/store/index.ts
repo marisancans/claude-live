@@ -68,6 +68,7 @@ export function createStore() {
   const buffer: RawEvent[] = []  // transient buffer for visualization only
   const sessions = new Map<string, Cluster>()
   const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
+  const pendingInputs = new Map<string, Record<string, unknown> | null>()  // tool_use_id → tool_input
   let replayDone = false
   const MAX_BUFFER_SIZE = 500  // keep some history for visualization, server enforces session limits
 
@@ -243,9 +244,16 @@ export function createStore() {
       (cluster as any).awaitingPermission = false
     }
 
-    // Track tool latency: store start timestamp on PreToolUse
+    // Track tool latency + input: store on PreToolUse, restore on PostToolUse
     if (event.hook_event_name === 'PreToolUse' && event.tool_use_id) {
       pendingTimings.set(event.tool_use_id, event.timestamp)
+      pendingInputs.set(event.tool_use_id, event.tool_input)
+    }
+    if ((event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure') && event.tool_use_id) {
+      if (!event.tool_input && pendingInputs.has(event.tool_use_id)) {
+        event.tool_input = pendingInputs.get(event.tool_use_id) ?? null
+        pendingInputs.delete(event.tool_use_id)
+      }
     }
 
     // SubagentStart: spawn satellite node orbiting close to core

@@ -15,6 +15,10 @@ const SakuraPage = lazy(() =>
   import('./sakura/SakuraPage').then(m => ({ default: m.SakuraPage }))
 )
 
+const ColonizationDemoScene = lazy(() =>
+  import('./canvas-three/demo/ColonizationDemoScene').then(m => ({ default: m.ColonizationDemoScene }))
+)
+
 function getRoute(): string {
   return window.location.hash.replace(/^#\/?/, '') || ''
 }
@@ -32,6 +36,13 @@ function Root() {
     return (
       <Suspense fallback={<div style={{ background: '#030308', width: '100vw', height: '100vh' }} />}>
         <EffectDemoScene />
+      </Suspense>
+    )
+  }
+  if (route === 'colonization-demo') {
+    return (
+      <Suspense fallback={<div style={{ background: '#04050b', width: '100vw', height: '100vh' }} />}>
+        <ColonizationDemoScene />
       </Suspense>
     )
   }
