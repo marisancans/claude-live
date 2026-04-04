@@ -43,6 +43,7 @@ export interface TreeParams {
   startPerLevel: number[]   // min t along parent where children start (0-1)
   forceDirection: THREE.Vector3 // growth force direction (gravity/phototropism)
   forceStrength: number
+  trunkTermination?: number // 0-1: fraction of trunk geometry to render (hides cone tip)
 }
 
 interface Section {
@@ -86,19 +87,33 @@ export const OAK_LARGE_PARAMS: TreeParams = {
 export const SAKURA_PARAMS: TreeParams = {
   seed: 23399,
   levels: 3,
-  trunkLength: 35,
-  lengthPerLevel: [35, 25, 12, 5],
-  radiusPerLevel: [2, 0.63, 0.76, 0.7],
-  taperPerLevel: [0.7, 0.7, 0.7, 0.7],
-  gnarlPerLevel: [0.03, 0.2, 0.15, 0.09],
-  twistPerLevel: [0.09, -0.07, 0, 0],
-  childrenPerLevel: [8, 5, 4, 0],
-  anglePerLevel: [0, 50, 65, 55],
-  sectionsPerLevel: [12, 8, 6, 4],
+  trunkLength: 36,
+  lengthPerLevel: [36, 56, 24, 10],
+  radiusPerLevel: [1.4, 0.55, 0.76, 0.7],
+  taperPerLevel: [0.3, 0.7, 0.7, 0.7],
+  gnarlPerLevel: [0.12, 0.2, 0.15, 0.09],
+  twistPerLevel: [0.15, -0.07, 0, 0],
+  childrenPerLevel: [10, 8, 6, 0],
+  anglePerLevel: [0, 40, 65, 55],
+  sectionsPerLevel: [8, 8, 6, 4],
   segmentsPerLevel: [12, 6, 4, 3],
-  startPerLevel: [0, 0.25, 0.3, 0],
+  startPerLevel: [0, 0.3, 0.3, 0],
   forceDirection: new THREE.Vector3(0, 1, 0),
-  forceStrength: -0.03,
+  forceStrength: -0.06,
+}
+
+// --- BranchMeta for growth animation ---
+export interface BranchMeta {
+  branchIndex: number
+  level: number
+  parentIndex: number       // -1 for trunk
+  vertexStart: number
+  vertexCount: number
+  segmentCount: number      // radial segments (needed for attribute loop)
+  sectionCount: number      // longitudinal sections (needed for attribute loop)
+  baseOrigin: THREE.Vector3
+  tipOrigin: THREE.Vector3
+  spawnT: number            // normalized position along parent where this branch spawns (0 for trunk)
 }
 
 // --- Generator ---
@@ -106,6 +121,8 @@ export function generateTree(params: TreeParams): {
   branchGeometry: THREE.BufferGeometry
   leafPositions: THREE.Vector3[]
   leafDirections: THREE.Vector3[]
+  branchMeta: BranchMeta[]
+  leafPositionsByBranch: Map<number, { pos: THREE.Vector3, dir: THREE.Vector3 }[]>
 } {
   const rng = new SeededRNG(params.seed)
 
@@ -119,23 +136,71 @@ export function generateTree(params: TreeParams): {
   const leafPositions: THREE.Vector3[] = []
   const leafDirections: THREE.Vector3[] = []
 
-  // Branch queue (breadth-first generation)
-  const queue: Branch[] = []
+  // Branch queue (breadth-first generation) — stores parentIndex for BranchMeta
+  const queue: { branch: Branch, parentIndex: number, spawnT: number }[] = []
 
-  // Start with trunk
+  // Start with trunk — slight random lean for organic character
+  const leanAngle = 0.08 + rng.random(0.07) // 5-9 degrees
+  const leanDir = rng.random(Math.PI * 2)
   queue.push({
-    origin: new THREE.Vector3(0, 0, 0),
-    orientation: new THREE.Euler(0, 0, 0),
-    length: params.lengthPerLevel[0],
-    radius: params.radiusPerLevel[0],
-    level: 0,
-    sectionCount: params.sectionsPerLevel[0],
-    segmentCount: params.segmentsPerLevel[0],
+    branch: {
+      origin: new THREE.Vector3(0, 0, 0),
+      orientation: new THREE.Euler(
+        Math.sin(leanDir) * leanAngle,
+        0,
+        Math.cos(leanDir) * leanAngle,
+      ),
+      length: params.lengthPerLevel[0],
+      radius: params.radiusPerLevel[0],
+      level: 0,
+      sectionCount: params.sectionsPerLevel[0],
+      segmentCount: params.segmentsPerLevel[0],
+    },
+    parentIndex: -1,
+    spawnT: 0,
   })
 
+  let branchCount = 0
+  const branchMeta: BranchMeta[] = []
+  const leafPositionsByBranch = new Map<number, { pos: THREE.Vector3, dir: THREE.Vector3 }[]>()
+
   while (queue.length > 0) {
-    const branch = queue.shift()!
-    generateBranch(branch, params, rng, verts, normals, uvs, indices, queue, leafPositions, leafDirections)
+    const { branch, parentIndex, spawnT } = queue.shift()!
+    const branchIndex = branchCount
+    const vertexStart = verts.length / 3
+    const leafStartIdx = leafPositions.length
+
+    generateBranch(branch, params, rng, verts, normals, uvs, indices, queue, leafPositions, leafDirections, branchIndex)
+
+    const vertexCount = verts.length / 3 - vertexStart
+
+    branchMeta.push({
+      branchIndex,
+      level: branch.level,
+      parentIndex,
+      vertexStart,
+      vertexCount,
+      segmentCount: branch.segmentCount,
+      sectionCount: branch.sectionCount,
+      baseOrigin: branch.origin.clone(),
+      tipOrigin: new THREE.Vector3(
+        verts[verts.length - 3] ?? branch.origin.x,
+        verts[verts.length - 2] ?? branch.origin.y,
+        verts[verts.length - 1] ?? branch.origin.z,
+      ),
+      spawnT,
+    })
+
+    // Collect leaf positions for this branch
+    if (leafPositions.length > leafStartIdx) {
+      const branchLeaves: { pos: THREE.Vector3, dir: THREE.Vector3 }[] = []
+      for (let i = leafStartIdx; i < leafPositions.length; i++) {
+        branchLeaves.push({ pos: leafPositions[i], dir: leafDirections[i] })
+      }
+      leafPositionsByBranch.set(branchIndex, branchLeaves)
+    }
+
+    branchCount++
   }
 
   // Build BufferGeometry
@@ -144,9 +209,36 @@ export function generateTree(params: TreeParams): {
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
   geometry.setIndex(indices)
+
+  // Build growth vertex attributes AFTER the main loop
+  const totalVerts = verts.length / 3
+  const lengthTArr = new Float32Array(totalVerts)
+  const branchIdxArr = new Float32Array(totalVerts)
+  const branchOriginArr = new Float32Array(totalVerts * 3)
+
+  for (const meta of branchMeta) {
+    const vertsPerRing = meta.segmentCount + 1  // +1 for UV seam closure vertex
+    const sections = meta.sectionCount + 1      // includes the last section
+    for (let i = 0; i < sections; i++) {
+      const t = i / meta.sectionCount
+      for (let j = 0; j < vertsPerRing; j++) {
+        const vi = meta.vertexStart + i * vertsPerRing + j
+        if (vi >= totalVerts) break
+        lengthTArr[vi] = t
+        branchIdxArr[vi] = meta.branchIndex
+        branchOriginArr[vi * 3] = meta.baseOrigin.x
+        branchOriginArr[vi * 3 + 1] = meta.baseOrigin.y
+        branchOriginArr[vi * 3 + 2] = meta.baseOrigin.z
+      }
+    }
+  }
+
+  geometry.setAttribute('lengthT', new THREE.Float32BufferAttribute(lengthTArr, 1))
+  geometry.setAttribute('branchIdx', new THREE.Float32BufferAttribute(branchIdxArr, 1))
+  geometry.setAttribute('branchOrigin', new THREE.Float32BufferAttribute(branchOriginArr, 3))
   geometry.computeBoundingSphere()
 
-  return { branchGeometry: geometry, leafPositions, leafDirections }
+  return { branchGeometry: geometry, leafPositions, leafDirections, branchMeta, leafPositionsByBranch }
 }
 
 function generateBranch(
@@ -157,14 +249,16 @@ function generateBranch(
   normals: number[],
   uvs: number[],
   indices: number[],
-  queue: Branch[],
+  queue: { branch: Branch, parentIndex: number, spawnT: number }[],
   leafPositions: THREE.Vector3[],
   leafDirections: THREE.Vector3[],
+  currentBranchIndex: number,
 ) {
   const indexOffset = verts.length / 3
   const orientation = branch.orientation.clone()
   const origin = branch.origin.clone()
-  const stepLength = branch.length / branch.sectionCount
+  // Deciduous trees divide by (levels - 1) — matches original EZ-Tree
+  const stepLength = branch.length / branch.sectionCount / Math.max(params.levels - 1, 1)
   const sections: Section[] = []
 
   for (let i = 0; i <= branch.sectionCount; i++) {
@@ -176,19 +270,22 @@ function generateBranch(
       sectionRadius *= 1 - params.taperPerLevel[branch.level] * (i / branch.sectionCount)
     }
 
+    // Base flare for trunk — exponential widening at ground level (buttress roots)
+    if (branch.level === 0 && i < branch.sectionCount * 0.3) {
+      const flareT = 1 - (i / (branch.sectionCount * 0.3))
+      sectionRadius *= 1 + 0.6 * flareT * flareT
+    }
+
     // Generate vertex ring
     let firstVertex: { x: number; y: number; z: number } | null = null
     let firstNormal: { x: number; y: number; z: number } | null = null
 
     for (let j = 0; j < branch.segmentCount; j++) {
       const angle = (2 * Math.PI * j) / branch.segmentCount
-
-      // Vertex position: circle in XZ plane, rotated by orientation, offset by origin
       const vertex = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle))
         .multiplyScalar(sectionRadius)
         .applyEuler(orientation)
         .add(origin)
-
       const normal = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle))
         .applyEuler(orientation)
         .normalize()
@@ -203,7 +300,6 @@ function generateBranch(
       }
     }
 
-    // Close the ring (duplicate first vertex for UV seam)
     if (firstVertex && firstNormal) {
       verts.push(firstVertex.x, firstVertex.y, firstVertex.z)
       normals.push(firstNormal.x, firstNormal.y, firstNormal.z)
@@ -221,8 +317,10 @@ function generateBranch(
     origin.add(new THREE.Vector3(0, stepLength, 0).applyEuler(orientation))
 
     // Accumulate gnarliness (random orientation perturbation)
+    // Dampen trunk gnarl at base for stable root flare
+    const baseDampen = (branch.level === 0 && i < 3) ? 0.3 : 1.0
     const gnarl = Math.max(1, 1 / Math.sqrt(Math.max(sectionRadius, 0.1)))
-      * params.gnarlPerLevel[branch.level]
+      * params.gnarlPerLevel[branch.level] * baseDampen
     orientation.x += rng.random(gnarl, -gnarl)
     orientation.z += rng.random(gnarl, -gnarl)
 
@@ -252,14 +350,14 @@ function generateBranch(
       const b = indexOffset + i * vertsPerRing + j + 1
       const c = indexOffset + (i + 1) * vertsPerRing + j + 1
       const d = indexOffset + (i + 1) * vertsPerRing + j
-      indices.push(a, b, c)
-      indices.push(a, c, d)
+      indices.push(a, d, b)
+      indices.push(b, d, c)
     }
   }
 
   // Spawn child branches from parent sections
   if (branch.level < params.levels && params.childrenPerLevel[branch.level] > 0) {
-    spawnChildren(branch.level, sections, params, rng, queue)
+    spawnChildren(branch.level, sections, params, rng, queue, currentBranchIndex)
   }
 
   // Spawn leaves at terminal branches
@@ -279,7 +377,8 @@ function spawnChildren(
   parentSections: Section[],
   params: TreeParams,
   rng: SeededRNG,
-  queue: Branch[],
+  queue: { branch: Branch, parentIndex: number, spawnT: number }[],
+  parentBranchIndex: number,
 ) {
   const childLevel = parentLevel + 1
   const childCount = params.childrenPerLevel[parentLevel]
@@ -302,9 +401,9 @@ function spawnChildren(
     // Child origin: interpolated along parent
     const childOrigin = new THREE.Vector3().lerpVectors(sectionA.origin, sectionB.origin, alpha)
 
-    // Child radius: parent's interpolated radius scaled by child level radius
+    // Child radius: matches original EZ-Tree — childLevelRadius * interpolatedParentRadius
     const interpolatedParentRadius = (1 - alpha) * sectionA.radius + alpha * sectionB.radius
-    const childRadius = params.radiusPerLevel[childLevel] * (interpolatedParentRadius / params.radiusPerLevel[parentLevel])
+    const childRadius = params.radiusPerLevel[childLevel] * interpolatedParentRadius
 
     // Child orientation: slerp parent orientations + angle offset + radial rotation
     const qA = new THREE.Quaternion().setFromEuler(sectionA.orientation)
@@ -324,13 +423,17 @@ function spawnChildren(
     const childOrientation = new THREE.Euler().setFromQuaternion(childQ)
 
     queue.push({
-      origin: childOrigin,
-      orientation: childOrientation,
-      length: params.lengthPerLevel[childLevel],
-      radius: Math.max(childRadius, 0.05),
-      level: childLevel,
-      sectionCount: params.sectionsPerLevel[childLevel],
-      segmentCount: params.segmentsPerLevel[childLevel],
+      branch: {
+        origin: childOrigin,
+        orientation: childOrientation,
+        length: params.lengthPerLevel[childLevel],
+        radius: Math.max(childRadius, 0.05),
+        level: childLevel,
+        sectionCount: params.sectionsPerLevel[childLevel],
+        segmentCount: params.segmentsPerLevel[childLevel],
+      },
+      parentIndex: parentBranchIndex,
+      spawnT: t,
     })
   }
 }

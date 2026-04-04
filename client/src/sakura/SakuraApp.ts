@@ -13,12 +13,13 @@ import type { RawEvent } from '../types'
 import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
 import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
-import { generateTree, SAKURA_PARAMS } from './EzTreeGenerator'
-import type { TreeParams } from './EzTreeGenerator'
+import { SpaceColonizationTree } from './SpaceColonizationTree'
 import { PetalSystem } from './PetalSystem'
 import { FlowerSystem } from './FlowerSystem'
 import { SignalSystem } from './SignalSystem'
 import { WindField } from './WindField'
+import barkVertSource from './shaders/bark.vert.glsl?raw'
+import barkFragSource from './shaders/bark.frag.glsl?raw'
 
 function hashUnit(value: string): number {
   let hash = 2166136261
@@ -30,6 +31,58 @@ function hashUnit(value: string): number {
 }
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)) }
+
+// --- Bark normal map (shared singleton, same as BranchRenderer) ---
+function createBarkNormalMap(): THREE.CanvasTexture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size; canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = 'rgb(128,128,255)'
+  ctx.fillRect(0, 0, size, size)
+  const imageData = ctx.getImageData(0, 0, size, size)
+  const data = imageData.data
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4
+      const grain = Math.sin((x / size) * Math.PI * 24) * 0.5
+        + Math.sin((x / size) * Math.PI * 7 + 0.8) * 0.25
+      data[idx] = Math.round(128 + grain * 30)
+      data[idx + 1] = 128
+      data[idx + 2] = 255
+      data[idx + 3] = 255
+    }
+  }
+  const rng = (seed: number) => { let s = seed; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff } }
+  const rand = rng(42)
+  for (let i = 0; i < 12; i++) {
+    const cx = Math.floor(rand() * size)
+    const cy = Math.floor(rand() * size)
+    const hw = Math.floor(20 + rand() * 30)
+    const hh = Math.floor(3 + rand() * 5)
+    for (let dy = -hh; dy <= hh; dy++) {
+      for (let dx = -hw; dx <= hw; dx++) {
+        const px = (cx + dx + size) % size
+        const py = (cy + dy + size) % size
+        const t = 1 - Math.sqrt((dx / hw) ** 2 + (dy / hh) ** 2)
+        if (t <= 0) continue
+        const idx2 = (py * size + px) * 4
+        const bump = Math.sin(t * Math.PI) * 40
+        data[idx2 + 1] = Math.min(255, Math.round(data[idx2 + 1] + bump))
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(2, 4); tex.needsUpdate = true
+  return tex
+}
+let _barkNormalMap: THREE.CanvasTexture | null = null
+function getBarkNormalMap(): THREE.CanvasTexture {
+  if (!_barkNormalMap) _barkNormalMap = createBarkNormalMap()
+  return _barkNormalMap
+}
 
 function projectHeat(activity: ProjectActivity, now = Date.now()) {
   const age = Math.max(0, now - activity.lastEventTime)
@@ -56,13 +109,10 @@ export class SakuraApp {
   private flowerSystem = new FlowerSystem()
   private signalSystem: SignalSystem
 
-  // Sakura tree — generated via EZ-Tree algorithm, flowers placed by events
+  // Sakura tree — space colonization driven growth
+  private tree: SpaceColonizationTree
   private treeMesh: THREE.Mesh
-  private barkMaterial: THREE.MeshStandardMaterial
-  private leafPositions: THREE.Vector3[] = []
-  private leafDirections: THREE.Vector3[] = []
-  private eventCount = 0
-  private currentGrowthStage = -1
+  private barkMaterial: THREE.ShaderMaterial
 
   private atmosphere: THREE.Points
   private sky: THREE.Mesh
@@ -238,25 +288,59 @@ export class SakuraApp {
       this.scene.add(fogPlane)
     }
 
-    // Add petal system + flower system to scene
+    // Petal system in scene (world space), flowers in tree group (scale with tree)
     this.scene.add(this.petalSystem.mesh)
     this.scene.add(this.petalSystem.glowGroup)
-    this.scene.add(this.flowerSystem.mesh)
 
     this.signalSystem = new SignalSystem(this.petalSystem, this.windField)
 
-    // Sakura tree — EZ-Tree algorithm with Ash-based preset
-    this.barkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6b4226,
-      roughness: 0.85,
-      metalness: 0.0,
-      flatShading: false,
+    // Sakura tree — dynamic incremental growth (no pre-computed topology)
+    this.tree = new SpaceColonizationTree(23399)
+
+    // Custom ShaderMaterial using bark shaders (no growth uniforms needed)
+    this.barkMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uHeat: { value: 0.12 },
+        uPulse: { value: 0 },
+        uContam: { value: 0 },
+        uPulseColor: { value: new THREE.Color('#e8a88a') },
+        uFlowOffset: { value: 0 },
+        uWindStrength: { value: 0 },
+        uWindPhase: { value: 0 },
+        uSignalPos: { value: -1 },
+        uSignalIntensity: { value: 0 },
+        uSignalColor: { value: new THREE.Color('#ffffff') },
+        uDepth: { value: 0 },
+        uNormalMap: { value: getBarkNormalMap() },
+        uNormalScale: { value: 0.3 },
+      },
+      vertexShader: barkVertSource,
+      fragmentShader: barkFragSource,
+      transparent: false,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
     })
-    this.treeMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.barkMaterial)
+
+    this.treeMesh = new THREE.Mesh(this.tree.geometry, this.barkMaterial)
     this.treeMesh.castShadow = true
     this.scene.add(this.treeMesh)
-    // Generate initial full tree
-    this.regenerateTree()
+    this.scene.add(this.flowerSystem.mesh)
+
+    // Scatter initial flowers densely across the pre-grown canopy
+    // Shuffle so flowers spread evenly if we hit the instance cap
+    const flowerPositions = this.tree.getTipFlowerPositions()
+    for (let i = flowerPositions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[flowerPositions[i], flowerPositions[j]] = [flowerPositions[j], flowerPositions[i]]
+    }
+    for (const f of flowerPositions) {
+      const count = f.isTip
+        ? 8 + Math.floor(Math.random() * 10)   // tips: big clusters
+        : 3 + Math.floor(Math.random() * 5)    // interior: smaller fill
+      this.flowerSystem.addCluster(f.pos, f.dir, count)
+    }
 
     this.resizeHandler = () => this.onResize()
     window.addEventListener('resize', this.resizeHandler)
@@ -391,56 +475,13 @@ export class SakuraApp {
     }
   }
 
-  /** Growth stages: more events = more branches on the tree */
-  private static GROWTH_STAGES = [
-    { threshold: 0,   children: [3, 2, 0, 0] },   // sapling
-    { threshold: 15,  children: [5, 3, 2, 0] },   // young tree
-    { threshold: 40,  children: [7, 4, 3, 0] },   // growing
-    { threshold: 100, children: [8, 5, 4, 0] },   // full tree
-  ]
-
-  private regenerateTree() {
-    // Determine growth stage from event count
-    let stage = 0
-    for (let i = SakuraApp.GROWTH_STAGES.length - 1; i >= 0; i--) {
-      if (this.eventCount >= SakuraApp.GROWTH_STAGES[i].threshold) { stage = i; break }
-    }
-    if (stage === this.currentGrowthStage) return
-    this.currentGrowthStage = stage
-
-    const children = SakuraApp.GROWTH_STAGES[stage].children
-    const params: TreeParams = {
-      ...SAKURA_PARAMS,
-      childrenPerLevel: children,
-      seed: 23399,
-    }
-
-    const { branchGeometry, leafPositions, leafDirections } = generateTree(params)
-    const oldGeo = this.treeMesh.geometry
-    this.treeMesh.geometry = branchGeometry
-    oldGeo.dispose()
-
-    this.leafPositions = leafPositions
-    this.leafDirections = leafDirections
-  }
-
   applyEvent(event: RawEvent) {
-    this.eventCount++
+    // Grow tree: extend all branches + split one + get flower positions
+    const flowers = this.tree.onEvent()
 
-    // Check if tree needs to grow to next stage
-    this.regenerateTree()
-
-    // Place flowers at random leaf positions — each event IS a flower cluster
-    if (this.leafPositions.length > 0) {
-      const count = 2 + Math.floor(Math.random() * 3) // 2-4 clusters per event
-      for (let c = 0; c < count; c++) {
-        const idx = Math.floor(Math.random() * this.leafPositions.length)
-        this.flowerSystem.addCluster(
-          this.leafPositions[idx],
-          this.leafDirections[idx],
-          15 + Math.floor(Math.random() * 10), // 15-24 flowers per cluster
-        )
-      }
+    // Place flowers at every new split point
+    for (const f of flowers) {
+      this.flowerSystem.addCluster(f.pos, f.dir, 6 + Math.floor(Math.random() * 8))
     }
 
     // Route to colony for SignalSystem effects
@@ -453,12 +494,22 @@ export class SakuraApp {
     }
   }
 
+  resetGrowth() {
+    this.tree.reset()
+    this.flowerSystem.reset()
+  }
+
   tick(dt: number) {
     this.elapsed += dt
     this.controls.update()
 
     // Wind
     this.windField.update(dt)
+
+    // Update bark material uniforms
+    this.barkMaterial.uniforms.uTime.value = this.elapsed
+    this.barkMaterial.uniforms.uWindStrength.value = this.windField.effectiveStrength
+    this.barkMaterial.uniforms.uWindPhase.value = this.windField.phase
 
     // Atmosphere drift
     this.atmosphere.rotation.y += dt * 0.001
@@ -514,10 +565,10 @@ export class SakuraApp {
     this.petalSystem.dispose()
     this.scene.remove(this.petalSystem.mesh)
     this.scene.remove(this.petalSystem.glowGroup)
+    this.scene.remove(this.treeMesh)
     this.scene.remove(this.flowerSystem.mesh)
     this.flowerSystem.dispose()
-    this.scene.remove(this.treeMesh)
-    this.treeMesh.geometry.dispose()
+    this.tree.geometry.dispose()
     this.barkMaterial.dispose()
     ;(this.atmosphere.geometry as THREE.BufferGeometry).dispose()
     ;(this.atmosphere.material as THREE.PointsMaterial).dispose()

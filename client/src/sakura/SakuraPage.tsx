@@ -74,6 +74,7 @@ export function SakuraPage() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [hudOpen, setHudOpen] = useState(false)
   const [replayStatus, setReplayStatus] = useState('idle')
+  const [resetSignal, setResetSignal] = useState(0)
   const replayTimerRef = useRef<number | null>(null)
 
   async function fetchProjectTree(projectId: string, force = false) {
@@ -175,6 +176,7 @@ export function SakuraPage() {
 
   async function replayProjectHistory(projectId: string, persisted: boolean) {
     stopReplay()
+    setResetSignal(s => s + 1)
     setReplayStatus('loading...')
     const res = await fetch(`/api/history?project=${encodeURIComponent(projectId)}${persisted ? '&persisted=1' : ''}`)
     const events = await res.json() as RawEvent[]
@@ -239,7 +241,7 @@ export function SakuraPage() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#0e0a08' }}>
-      <SakuraScene projects={visualProjects} latestSignal={latestSignal} />
+      <SakuraScene projects={visualProjects} latestSignal={latestSignal} resetSignal={resetSignal} />
 
       <a href="#/three" style={{
         position: 'absolute', top: 18, left: 18, zIndex: 20,

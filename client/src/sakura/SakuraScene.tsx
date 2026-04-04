@@ -5,9 +5,10 @@ import type { ProjectVisualState, SignalEnvelope } from './types'
 interface Props {
   projects: ProjectVisualState[]
   latestSignal: SignalEnvelope | null
+  resetSignal?: number
 }
 
-export function SakuraScene({ projects, latestSignal }: Props) {
+export function SakuraScene({ projects, latestSignal, resetSignal }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const appRef = useRef<SakuraApp | null>(null)
   const frameRef = useRef<number | null>(null)
@@ -48,6 +49,10 @@ export function SakuraScene({ projects, latestSignal }: Props) {
     if (!latestSignal) return
     appRef.current?.applyEvent(latestSignal.event)
   }, [latestSignal?.sequence])
+
+  useEffect(() => {
+    if (resetSignal) appRef.current?.resetGrowth()
+  }, [resetSignal])
 
   return <div ref={containerRef} style={{ width: '100vw', height: '100vh', background: '#0e0a08' }} />
 }

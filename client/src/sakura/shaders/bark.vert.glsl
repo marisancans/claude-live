@@ -44,7 +44,7 @@ void main() {
   // Breathing — subtle radial pulse
   float breathe = sin(uTime * 0.18 + uFlowOffset * 3.0) * (0.01 + uHeat * 0.016);
 
-  // Wind sway — twigs bend, trunk barely moves
+  // Wind sway — height-dependent (twigs bend more, trunk barely moves)
   float windSway = sin(uTime * 1.4 + uWindPhase + position.y * 0.06) * uWindStrength * 0.45;
   float windCross = cos(uTime * 0.9 + uWindPhase * 1.3 + position.y * 0.04) * uWindStrength * 0.22;
 
