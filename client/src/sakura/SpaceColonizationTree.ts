@@ -11,8 +11,8 @@
  *   5. Recalculate radii via pipe model (da Vinci's rule)
  *   6. Write tube geometry for new segments
  *
- * Pre-grows ~150 iterations on init so the tree is visible immediately.
- * Each live event grows 2 additional iterations.
+ * Starts from nothing — each live event drives growth.
+ * First events grow the trunk, then SCA branching kicks in.
  */
 import * as THREE from 'three'
 
@@ -20,25 +20,35 @@ import * as THREE from 'three'
 // Types
 // ---------------------------------------------------------------------------
 
+interface TreePersonality {
+  leanAngle: number        // radians 0–0.44 (0–25°) — how much the whole tree tilts
+  leanDirection: number    // radians 0–2π — direction of lean
+  gnarliness: number       // 0.8–2.5 — multiplier on gnarl strength at all depths
+  windDriftX: number       // -0.06 to 0.06 — horizontal tropism component X
+  windDriftZ: number       // -0.06 to 0.06 — horizontal tropism component Z
+  hotspots: THREE.Vector3[] // 2–4 attractor cluster centers in base-dome world space (s=1)
+}
+
 export interface TreeNode {
   id: number
   position: THREE.Vector3
   parentId: number | null
   childIds: number[]
   radius: number
-  depth: number                 // edges from root (0 = root)
-  distFromRoot: number          // cumulative arc length from root
+  depth: number
+  distFromRoot: number
   direction: THREE.Vector3
-  segmentVertexStart: number    // first vertex of the tube segment (parent→this)
+  segmentVertexStart: number
   createdAtEvent: number
+  lastPerturbation: THREE.Vector3  // accumulated drift vector (set after node creation)
 }
 
 // ---------------------------------------------------------------------------
 // Constants — tuned for sakura canopy
 // ---------------------------------------------------------------------------
 
-const MAX_VERTICES   = 300_000
-const MAX_INDICES    = 900_000
+const MAX_VERTICES   = 600_000
+const MAX_INDICES    = 1_800_000
 const SEGMENTS       = 8
 const VERTS_PER_RING = SEGMENTS + 1  // +1 for UV seam closure
 
@@ -46,10 +56,11 @@ const VERTS_PER_RING = SEGMENTS + 1  // +1 for UV seam closure
 const INFLUENCE_DISTANCE = 22       // tighter = more distinct branching
 const KILL_DISTANCE      = 5.0
 const SEGMENT_LENGTH     = 2.0
-const GNARL_STRENGTH     = 0.14     // random perturbation for organic curves
+const DOME_EXPAND_INTERVAL = 50     // expand dome every N events
+const DOME_EXPAND_RATE     = 0.04   // how much to grow envelopeScale each interval
 
-// Crown envelope — wide dome for sakura canopy shape
-const DOME_CENTER_Y      = 42
+// Crown envelope — dome positioned for clear trunk then canopy
+const DOME_CENTER_Y      = 38
 const DOME_RADIUS_XZ     = 48       // wide horizontal spread
 const DOME_RADIUS_Y      = 28       // flatter top
 const INITIAL_ATTRACTORS = 2000
@@ -62,19 +73,17 @@ const TIP_RADIUS    = 0.05
 const MAX_RADIUS    = 3.5
 
 // Tropism — sakura branches droop outward
-const TROPISM_START_DEPTH = 4       // start drooping after this depth
+const TROPISM_START_DEPTH = 2       // start drooping after this depth (sooner = whole-tree bend)
 const TROPISM_STRENGTH    = 0.06    // how much gravity pull
 
-// Flowers
-const FLOWER_MIN_DEPTH = 3
+// Flowers — depth 2+ gets blossoms (trunk base stays bare)
+const FLOWER_MIN_DEPTH = 2
 
 // Trunk
 const TRUNK_BASE_RADIUS = 1.2
-const TRUNK_PRE_SECTIONS = 6        // initial trunk height before SCA
 
-// Growth
-const PREGROW_ITERATIONS = 150
-const STEPS_PER_EVENT    = 2
+// Growth — one segment per event for visible incremental growth
+const STEPS_PER_EVENT    = 1
 
 // UV scale: bark texture repeats every this many world units along the branch
 const UV_Y_SCALE = 30.0
@@ -171,6 +180,7 @@ export class SpaceColonizationTree {
   // Envelope growth
   private envelopeScale = 1.0
 
+  private personality!: TreePersonality
   private rng: SeededRNG
   private seed: number
   private eventCounter = 0
@@ -213,15 +223,17 @@ export class SpaceColonizationTree {
 
   /**
    * Run growth iterations triggered by a live event.
-   * Returns flower positions for new branch tips.
+   * Returns flower positions for new branch tips and IDs of newly created nodes.
    */
-  onEvent(): { pos: THREE.Vector3; dir: THREE.Vector3 }[] {
+  onEvent(): { flowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[]; newNodeIds: number[] } {
     const allFlowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[] = []
+    const allNodeIds: number[] = []
     for (let i = 0; i < STEPS_PER_EVENT; i++) {
-      const flowers = this.growOneStep(true)
+      const { flowers, newNodeIds } = this.growOneStep(true)
       allFlowers.push(...flowers)
+      allNodeIds.push(...newNodeIds)
     }
-    return allFlowers
+    return { flowers: allFlowers, newNodeIds: allNodeIds }
   }
 
   reset() {
@@ -254,6 +266,23 @@ export class SpaceColonizationTree {
 
   get nodeCount(): number { return this.nodes.length }
 
+  get totalEvents(): number { return this.eventCounter }
+
+  get isCapped(): boolean {
+    return this.vertexCount + VERTS_PER_RING * 60 >= MAX_VERTICES
+  }
+
+  /** Returns positions root→tip for a random leaf node, for fallback sap pulses. */
+  getRandomLeafPath(): THREE.Vector3[] | null {
+    const tips = this.nodes.filter(n => n.childIds.length === 0)
+    if (tips.length === 0) return null
+    const tip = tips[Math.floor(Math.random() * tips.length)]
+    return this.traceToRoot(tip.id)
+      .map(id => this.nodeMap.get(id))
+      .filter((n): n is TreeNode => n !== undefined)
+      .map(n => n.position.clone())
+  }
+
   get activeAttractorCount(): number {
     let n = 0
     for (const a of this.attractors) if (a.active) n++
@@ -281,7 +310,7 @@ export class SpaceColonizationTree {
   private init() {
     this.scatterAttractors(INITIAL_ATTRACTORS)
 
-    // Root at ground level
+    // Root at ground level — tree starts from nothing
     const rootDir = new THREE.Vector3(0, 1, 0)
     const root: TreeNode = {
       id: this.nextNodeId++,
@@ -294,21 +323,10 @@ export class SpaceColonizationTree {
       direction: rootDir,
       segmentVertexStart: -1,
       createdAtEvent: 0,
+      lastPerturbation: new THREE.Vector3(),
     }
     this.nodes.push(root)
     this.nodeMap.set(root.id, root)
-
-    // Pre-grow trunk so it reaches attractor zone
-    for (let i = 0; i < TRUNK_PRE_SECTIONS; i++) {
-      this.growTrunkUpward()
-    }
-
-    // Pre-grow tree with SCA — makes a full tree visible on load
-    for (let i = 0; i < PREGROW_ITERATIONS; i++) {
-      this.growOneStep(false) // no flowers during pre-growth
-    }
-
-    this.commitGeometry()
   }
 
   private scatterAttractors(count: number) {
@@ -328,7 +346,7 @@ export class SpaceColonizationTree {
       if (nx * nx + ny * ny + nz * nz > 1) continue
 
       // Keep canopy above ground
-      if (y < 6) continue
+      if (y < 12) continue
 
       this.attractors.push({ position: new THREE.Vector3(x, y, z), active: true })
       added++
@@ -339,11 +357,16 @@ export class SpaceColonizationTree {
   // Core SCA growth step — one iteration
   // -----------------------------------------------------------------------
 
-  private growOneStep(emitFlowers: boolean): { pos: THREE.Vector3; dir: THREE.Vector3 }[] {
+  private growOneStep(emitFlowers: boolean): { flowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[]; newNodeIds: number[] } {
     this.eventCounter++
     const pendingFlowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[] = []
+    const newNodeIds: number[] = []
+    const result = { flowers: pendingFlowers, newNodeIds }
 
-    if (this.vertexCount + VERTS_PER_RING * 60 >= MAX_VERTICES) return pendingFlowers
+    if (this.vertexCount + VERTS_PER_RING * 60 >= MAX_VERTICES) {
+      console.warn(`[SCA] vertex cap reached: ${this.vertexCount}/${MAX_VERTICES} (${this.nodes.length} nodes, event ${this.eventCounter})`)
+      return result
+    }
 
     // Rebuild node spatial grid (all nodes, not just tips)
     this.nodeGrid.clear()
@@ -382,14 +405,19 @@ export class SpaceColonizationTree {
 
     // Step 2: No associations → grow trunk upward (pre-canopy phase)
     if (associations.size === 0) {
-      this.growTrunkUpward()
+      const trunkNode = this.growTrunkUpward()
+      newNodeIds.push(trunkNode.id)
+      if (emitFlowers && trunkNode && trunkNode.depth >= FLOWER_MIN_DEPTH) {
+        pendingFlowers.push({ pos: trunkNode.position.clone(), dir: trunkNode.direction.clone() })
+      }
       this.commitGeometry()
-      return pendingFlowers
+      return result
     }
 
-    // Step 3: Grow — for each associated node, create a new child
+    // Step 3: Grow — ALL associated nodes extend simultaneously
+    // This is how SCA branching works: parallel growth creates forks naturally
     const newNodes: TreeNode[] = []
-    for (const [nodeId, attPositions] of associations) {
+    for (const [nodeId, attPositions] of associations.entries()) {
       const node = this.nodeMap.get(nodeId)!
 
       // Average normalized direction toward all associated attractors
@@ -400,9 +428,9 @@ export class SpaceColonizationTree {
       avgDir.divideScalar(attPositions.length).normalize()
 
       // Organic gnarl (random perturbation)
-      avgDir.x += (this.rng.random() - 0.5) * GNARL_STRENGTH
-      avgDir.y += (this.rng.random() - 0.5) * GNARL_STRENGTH * 0.5
-      avgDir.z += (this.rng.random() - 0.5) * GNARL_STRENGTH
+      avgDir.x += (this.rng.random() - 0.5) * 0.14
+      avgDir.y += (this.rng.random() - 0.5) * 0.14 * 0.5
+      avgDir.z += (this.rng.random() - 0.5) * 0.14
 
       // Tropism — sakura branches droop on outer/deeper branches
       if (node.depth > TROPISM_START_DEPTH) {
@@ -416,6 +444,9 @@ export class SpaceColonizationTree {
       const newNode = this.createNode(newPos, avgDir, node)
       newNodes.push(newNode)
     }
+
+    // Collect new node IDs for sap pulse effects
+    for (const nn of newNodes) newNodeIds.push(nn.id)
 
     // Step 4: Kill attractors within kill distance of any NEW node
     const killDist2 = KILL_DISTANCE * KILL_DISTANCE
@@ -461,7 +492,7 @@ export class SpaceColonizationTree {
     }
 
     this.commitGeometry()
-    return pendingFlowers
+    return result
   }
 
   // -----------------------------------------------------------------------
@@ -480,6 +511,7 @@ export class SpaceColonizationTree {
       direction: direction.clone(),
       segmentVertexStart: -1,
       createdAtEvent: this.eventCounter,
+      lastPerturbation: new THREE.Vector3(),  // caller sets this after creation
     }
     parent.childIds.push(node.id)
     this.nodes.push(node)
@@ -487,7 +519,7 @@ export class SpaceColonizationTree {
     return node
   }
 
-  private growTrunkUpward() {
+  private growTrunkUpward(): TreeNode {
     let tip = this.nodes[this.nodes.length - 1]
     for (const n of this.nodes) {
       if (n.childIds.length === 0 && n.position.y > tip.position.y) tip = n
@@ -504,6 +536,7 @@ export class SpaceColonizationTree {
     this.updateRadiiToRoot(node)
     this.writeSegment(node)
     this.updateAncestorGeometry(node)
+    return node
   }
 
   // -----------------------------------------------------------------------
