@@ -529,20 +529,8 @@ export function createStore() {
       return
     }
 
-    const key = nodeKeyFor(event)
-    if (!key) {
-      recomputeAges()
-      return
-    }
-
-    const rawHex = TOOL_COLOR_HEX[event.tool_name || event.hook_event_name] ?? DEFAULT_HEX
-    const colorHex = desaturate(rawHex)
-    const colorInt = hexToInt(colorHex)
-    const type = nodeTypeFor(event)
-    const isFile = type === 'file'
-
-    // Compute tool latency for PostToolUse / PostToolUseFailure
-    // Also restore tool_input from PreToolUse (PostToolUse events have tool_input: null)
+    // Restore tool_input + compute latency for PostToolUse BEFORE nodeKeyFor,
+    // so the key is based on the actual file path (JSONL parser omits tool_input on PostToolUse)
     let latencyStr = ''
     if ((event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure') && event.tool_use_id) {
       const startTs = pendingTimings.get(event.tool_use_id)
@@ -556,6 +544,18 @@ export function createStore() {
         pendingInputs.delete(event.tool_use_id)
       }
     }
+
+    const key = nodeKeyFor(event)
+    if (!key) {
+      recomputeAges()
+      return
+    }
+
+    const rawHex = TOOL_COLOR_HEX[event.tool_name || event.hook_event_name] ?? DEFAULT_HEX
+    const colorHex = desaturate(rawHex)
+    const colorInt = hexToInt(colorHex)
+    const type = nodeTypeFor(event)
+    const isFile = type === 'file'
 
     if (!cluster.nodes.has(key)) {
       // Assign to ring based on capacity (atomic orbital structure)

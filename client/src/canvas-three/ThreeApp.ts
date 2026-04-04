@@ -9,6 +9,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { fetchJson } from '../backend'
 import type { MutableRefObject } from 'react'
 import type { Cluster } from '../types'
 import { BackgroundLayer } from './layers/BackgroundLayer'
@@ -40,6 +41,7 @@ export class ThreeApp {
   private eventUnsubs: (() => void)[] = []
   private _autofit = true
   private _autoRotate = true
+  private _docVisible = !document.hidden
 
   constructor(container: HTMLElement, clustersRef: MutableRefObject<Map<string, Cluster>>) {
     this.container = container
@@ -96,12 +98,16 @@ export class ThreeApp {
     // ── Resize ──
     window.addEventListener('resize', this.onResize)
 
+    // ── Tab visibility — drop spawns when hidden to avoid explosion on refocus ──
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
+
     // ── EventBus subscriptions ──
     this.setupEventListeners()
   }
 
   private setupEventListeners() {
     const onToolUsed = (e: { sessionId: string; tool: string; colorHex: string; nodeKey?: string; agentId?: string | null; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
 
@@ -129,6 +135,7 @@ export class ThreeApp {
     }
 
     const onPrompt = (e: { sessionId: string; words: string[] }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
@@ -136,6 +143,7 @@ export class ThreeApp {
     }
 
     const onResponse = (e: { sessionId: string; words: string[] }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
@@ -143,6 +151,7 @@ export class ThreeApp {
     }
 
     const onCompactPre = (e: { sessionId: string }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
@@ -150,6 +159,7 @@ export class ThreeApp {
     }
 
     const onCompactPost = (e: { sessionId: string }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.core.triggerActivity()
@@ -157,6 +167,7 @@ export class ThreeApp {
     }
 
     const onSessionEnd = (e: { sessionId: string }) => {
+      if (!this._docVisible) return
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       sv.particles.spawn('Stop')
@@ -255,8 +266,7 @@ export class ThreeApp {
    * Called when a new session appears in syncSessions.
    */
   private loadSessionHistory(sessionId: string, particles: ParticleCloud) {
-    fetch(`/api/history?session=${encodeURIComponent(sessionId)}`)
-      .then(r => r.json())
+    fetchJson<any[]>(`/api/history?session=${encodeURIComponent(sessionId)}`)
       .then((events: any[]) => {
         if (events.length === 0) return
         // Cap at 250, sample evenly if too many
@@ -354,8 +364,13 @@ export class ThreeApp {
     this.camera.updateProjectionMatrix()
   }
 
+  private onVisibilityChange = () => {
+    this._docVisible = !document.hidden
+  }
+
   destroy() {
     window.removeEventListener('resize', this.onResize)
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
     for (const unsub of this.eventUnsubs) unsub()
     this.eventUnsubs = []
     for (const sv of this.sessions.values()) {

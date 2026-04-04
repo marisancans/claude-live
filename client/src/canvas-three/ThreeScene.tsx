@@ -39,6 +39,11 @@ export function ThreeScene({ clusters, onHover, onSelect, autofitEnabled, autoRo
     app.setAutoRotate(autoRotateEnabled)
     appRef.current = app
 
+    const onVisibilityChange = () => {
+      if (!document.hidden) lastTime = performance.now()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     const animate = () => {
       const now = performance.now()
       const dt = (now - lastTime) / 1000
@@ -49,6 +54,7 @@ export function ThreeScene({ clusters, onHover, onSelect, autofitEnabled, autoRo
     rafId = requestAnimationFrame(animate)
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       if (rafId !== null) cancelAnimationFrame(rafId)
       app.destroy()
       appRef.current = null
