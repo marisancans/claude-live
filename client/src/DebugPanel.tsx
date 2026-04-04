@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const FILE_PATHS = [
   '/src/App.tsx', '/src/store.ts', '/src/types.ts',
@@ -33,13 +33,27 @@ interface Props {
   sessionIds: string[]
   isOpen: boolean
   onClose: () => void
+  onLoadHistory?: (sessionId: string, events: any[]) => void
 }
 
-export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
+export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props) {
   const [sessionId, setSessionId] = useState(genId)
+  const [historySessions, setHistorySessions] = useState<Array<{ id: string; ts: number }>>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoadId, setHistoryLoadId] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
   const fileIdx = useRef(0)
   const cmdIdx = useRef(0)
-  const agentId = useRef('agent-' + Math.random().toString(36).slice(2, 7))
+  const eventIdx = useRef(0)
+  const startedAgents = useRef<string[]>([])
+  function nextAgentId() {
+    const id = 'agent-' + Math.random().toString(36).slice(2, 7)
+    startedAgents.current.push(id)
+    return id
+  }
+  function lastAgentId() {
+    return startedAgents.current.pop() || 'none'
+  }
 
   function nextFile() {
     return FILE_PATHS[fileIdx.current++ % FILE_PATHS.length]
@@ -48,39 +62,118 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
     return BASH_CMDS[cmdIdx.current++ % BASH_CMDS.length]
   }
 
-  function pre(tool_name: string, tool_input: object) {
-    return postHook({ session_id: sessionId, hook_event_name: 'PreToolUse', tool_name, tool_input })
+  function nextEventId() {
+    eventIdx.current += 1
+    return `${Date.now().toString(36)}${eventIdx.current.toString(36)}`
   }
 
-  function responseSnake(tool_name: string, tool_input: object, tool_response: object) {
-    // Send PreToolUse first to create node, then PostToolUse with slight delay
-    postHook({ session_id: sessionId, hook_event_name: 'PreToolUse', tool_name, tool_input })
-    setTimeout(() => {
-      postHook({ session_id: sessionId, hook_event_name: 'PostToolUse', tool_name, tool_input, tool_response })
-    }, 100)
+  function withId(value: string, id: string) {
+    return `${value}@${id}`
+  }
+
+  useEffect(() => {
+    if (!isOpen) return
+    pullHistorySessions()
+  }, [isOpen])
+
+  async function pullHistorySessions() {
+    setHistoryLoading(true)
+    setHistoryError(null)
+    try {
+      const res = await fetch('/api/history')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const events = await res.json()
+      const latest = new Map<string, number>()
+      if (Array.isArray(events)) {
+        for (const ev of events) {
+          const sid = ev?.session_id
+          if (!sid) continue
+          const ts = typeof ev.timestamp === 'number' ? ev.timestamp : Date.now()
+          const prev = latest.get(sid)
+          if (!prev || ts > prev) latest.set(sid, ts)
+        }
+      }
+      const sessions = [...latest.entries()]
+        .map(([id, ts]) => ({ id, ts }))
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 10)
+      setHistorySessions(sessions)
+    } catch (err: any) {
+      setHistoryError(err?.message || 'Failed to fetch history')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  async function loadHistorySession(id: string) {
+    setHistoryLoadId(id)
+    setHistoryError(null)
+    try {
+      const res = await fetch(`/api/history?session=${encodeURIComponent(id)}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const events = await res.json()
+      if (Array.isArray(events)) {
+        onLoadHistory?.(id, events)
+        setSessionId(id)
+      }
+    } catch (err: any) {
+      setHistoryError(err?.message || 'Failed to load session history')
+    } finally {
+      setHistoryLoadId(null)
+    }
+  }
+
+  function postToolUse(tool_name: string, tool_input: object, tool_response: object = {}) {
+    return postHook({ session_id: sessionId, hook_event_name: 'PostToolUse', tool_name, tool_input, tool_response })
   }
 
   const TOOL_BTNS: { label: string; color: string; fn: () => void }[] = [
-    { label: 'Read',        color: '#4ade80', fn: () => responseSnake('Read',     { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'Response data from file read operation with individual letters streaming outward' } }) },
-    { label: 'Edit',        color: '#60a5fa', fn: () => pre('Edit',     { file_path: nextFile() }) },
-    { label: 'Write',       color: '#60a5fa', fn: () => responseSnake('Write',    { file_path: nextFile(), content: 'Writing content to file with response snake animation showing letters outward' }, {}) },
-    { label: 'Grep',        color: '#a78bfa', fn: () => pre('Grep',     { pattern: 'useState', path: '.' }) },
-    { label: 'Glob',        color: '#a78bfa', fn: () => pre('Glob',     { pattern: '**/*.tsx', path: nextFile() }) },
-    { label: 'Bash',        color: '#f59e0b', fn: () => responseSnake('Bash',     { command: nextCmd() }, { stdout: 'bash command output with response letters flowing outward in straight animation paths', stderr: '', interrupted: false }) },
-    { label: 'WebFetch',    color: '#f472b6', fn: () => pre('WebFetch', { url: 'https://api.github.com/repos' }) },
-    { label: 'Notification',color: '#34d399', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Notification', tool_input: { message: 'Task complete! All files updated.' } }) },
-    { label: 'Permission',  color: '#fbbf24', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PermissionRequest', tool_input: { message: 'Allow bash command execution?' } }) },
+    { label: 'Read',        color: '#4ade80', fn: () => {
+      const id = nextEventId()
+      const file = withId(nextFile(), id)
+      postToolUse('Read', { file_path: file }, { type: 'text', file: { filePath: file, content: 'Response data from file read operation with individual letters streaming outward' } })
+    } },
+    { label: 'Edit',        color: '#60a5fa', fn: () => {
+      const id = nextEventId()
+      postToolUse('Edit', { file_path: withId(nextFile(), id) })
+    } },
+    { label: 'Write',       color: '#60a5fa', fn: () => {
+      const id = nextEventId()
+      postToolUse('Write', { file_path: withId(nextFile(), id), content: 'Writing content to file with response snake animation showing letters outward' }, {})
+    } },
+    { label: 'Grep',        color: '#a78bfa', fn: () => {
+      const id = nextEventId()
+      postToolUse('Grep', { pattern: 'useState', path: `/tmp/${id}` }, { count: 12 })
+    } },
+    { label: 'Glob',        color: '#a78bfa', fn: () => {
+      const id = nextEventId()
+      postToolUse('Glob', { pattern: '**/*.tsx', path: `/tmp/${id}` }, { files: ['a.tsx', 'b.tsx'] })
+    } },
+    { label: 'Bash',        color: '#f59e0b', fn: () => {
+      const id = nextEventId()
+      postToolUse('Bash', { command: `${nextCmd()} #${id}` }, { stdout: 'bash command output with response letters flowing outward in straight animation paths', stderr: '', interrupted: false, exitCode: 0 })
+    } },
+    { label: 'WebFetch',    color: '#f472b6', fn: () => {
+      const id = nextEventId()
+      postToolUse('WebFetch', { url: `https://debug-${id}.local` }, { status: 200 })
+    } },
+    { label: 'Notification',color: '#34d399', fn: () => {
+      const id = nextEventId()
+      postHook({ session_id: sessionId, hook_event_name: 'Notification', tool_input: { message: `Task complete! All files updated. #${id}` } })
+    } },
+    { label: 'Permission',  color: '#fbbf24', fn: () => {
+      const id = nextEventId()
+      postHook({ session_id: sessionId, hook_event_name: 'PermissionRequest', tool_input: { message: `Allow bash command execution? #${id}` } })
+    } },
     { label: 'Stop',        color: '#888888', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Stop' }) },
-    { label: 'SubStart',    color: '#c084fc', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStart', agent_id: agentId.current, agent_type: 'general-purpose' }) },
-    { label: 'SubStop',     color: '#7c3aed', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStop',  agent_id: agentId.current }) },
+    { label: 'SubStart',    color: '#c084fc', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStart', agent_id: nextAgentId(), agent_type: 'general-purpose' }) },
+    { label: 'SubStop',     color: '#7c3aed', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SubagentStop',  agent_id: lastAgentId() }) },
     { label: 'SessEnd',     color: '#ef4444', fn: () => postHook({ session_id: sessionId, hook_event_name: 'SessionEnd' }) },
     { label: 'Fail',        color: '#f87171', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostToolUseFailure', tool_name: 'Read', tool_input: { file_path: nextFile() }, error: 'File not found' }) },
     { label: 'Compact↓',   color: '#94a3b8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PreCompact', trigger: 'manual' }) },
     { label: 'Compact↑',   color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'PostCompact' }) },
-    { label: 'Prompt',      color: '#38bdf8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the login bug on the dashboard page' }) },
-    { label: 'RespRead',    color: '#4ade80', fn: () => responseSnake('Read', { file_path: nextFile() }, { type: 'text', file: { filePath: nextFile(), content: 'const response data flowing outward through the canvas with individual letters' } }) },
-    { label: 'RespWrite',   color: '#60a5fa', fn: () => responseSnake('Write', { file_path: nextFile(), content: 'Writing response snake letters streaming outward in straight paths with subtle glow effects' }, {}) },
-    { label: 'RespBash',    color: '#f59e0b', fn: () => responseSnake('Bash', { command: nextCmd() }, { stdout: 'command output letters flowing smoothly outward from cluster center with proper spacing', stderr: '', interrupted: false }) },
+    { label: 'Prompt',      color: '#b0c8f0', fn: () => postHook({ session_id: sessionId, hook_event_name: 'UserPromptSubmit', prompt: `Fix the login bug on the dashboard page #${nextEventId()}` }) },
+    { label: 'Response',    color: '#7eb8f0', fn: () => postHook({ session_id: sessionId, hook_event_name: 'Stop', last_assistant_message: 'Here is the fix for the login bug. Updated auth middleware to handle token refresh correctly.' }) },
   ]
 
   if (!isOpen) return null
@@ -108,6 +201,28 @@ export function DebugPanel({ sessionIds, isOpen, onClose }: Props) {
           </select>
           <button className="debug-new-btn" onClick={() => setSessionId(genId())}>+ new</button>
         </div>
+        <div className="debug-history-row" style={{ marginTop: 10 }}>
+          <button className="debug-new-btn" onClick={pullHistorySessions} disabled={historyLoading}>
+            {historyLoading ? 'loading…' : 'pull history'}
+          </button>
+          {historyError && (
+            <span className="debug-hint" style={{ marginLeft: 8 }}>{historyError}</span>
+          )}
+        </div>
+        {historySessions.length > 0 && (
+          <div className="debug-history-list" style={{ marginTop: 8 }}>
+            {historySessions.map(s => (
+              <button
+                key={s.id}
+                className="debug-history-btn"
+                onClick={() => loadHistorySession(s.id)}
+                title={s.id}
+              >
+                {historyLoadId === s.id ? 'loading…' : s.id.slice(0, 18)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="debug-section">

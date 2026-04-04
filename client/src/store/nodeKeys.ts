@@ -10,29 +10,30 @@ function shortToolName(name: string): string {
 }
 
 export function nodeKeyFor(event: RawEvent): string | null {
+  const id = String(event.id || `${event.session_id}-${event.timestamp}`)
   const t = event.tool_name
   if (!t) {
-    if (event.hook_event_name === 'Stop') return 'session:stop'
+    if (event.hook_event_name === 'Stop') return `session:stop:${id}`
     if (event.hook_event_name === 'Notification') {
       const msg = (event.tool_input as Record<string, string> | null)?.message || ''
-      return `notification:${msg.slice(0, 20)}`
+      return `notification:${msg.slice(0, 20)}:${id}`
     }
-    if (event.hook_event_name === 'PermissionRequest') return null // handled at cluster level
-    return null
+    if (event.hook_event_name === 'PermissionRequest') return `permission:${id}`
+    return `hook:${event.hook_event_name}:${id}`
   }
   const input = event.tool_input as Record<string, string> | null
   if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(t)) {
     const fp = input?.file_path || input?.path || null
-    return fp ? `file:${fp}` : null
+    return fp ? `file:${fp}:${id}` : `file:unknown:${id}`
   }
   if (t === 'Bash') {
     const cmd = input?.command || ''
-    return `bash:${cmd}`
+    return `bash:${cmd}:${id}`
   }
   if (t === 'WebFetch') {
-    try { return `web:${new URL(input?.url || '').hostname}` } catch { return 'web:unknown' }
+    try { return `web:${new URL(input?.url || '').hostname}:${id}` } catch { return `web:unknown:${id}` }
   }
-  return `tool:${t}`
+  return `tool:${t}:${id}`
 }
 
 export function labelFor(event: RawEvent): string {

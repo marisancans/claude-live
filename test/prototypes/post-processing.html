@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Post-Processing Prototype — claude-live</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #000; }
+  #info {
+    position: fixed; top: 10px; left: 10px; z-index: 10;
+    font: 12px monospace; color: #80d4e7;
+    background: rgba(5,5,16,0.8); padding: 8px 12px; border-radius: 4px;
+    border: 1px solid rgba(26,58,74,0.3);
+  }
+  kbd { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="info">
+  Press <kbd>SPACE</kbd> toggle glow | <span id="fps">--</span> fps
+</div>
+<script>
+// Load PixiJS v8 via dynamic import from our own node_modules served by Vite
+// Since we have Vite running on 7979, we'll serve this through Vite instead.
+// For now, use inline rendering with our existing Vite dev server.
+</script>
+</body>
+</html>

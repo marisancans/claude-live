@@ -5,9 +5,10 @@ Real-time Claude Code activity visualizer. Zero-dependency Node.js server servin
 ## Architecture
 
 - **Backend:** Node.js (zero dependencies), serves SSE API + static frontend from disk
+- **Event Sources:** JSONL file tailing (primary, zero-config) + POST /hook (legacy, for plugin users)
 - **Storage:** None — pure event passthrough, no persistence
 - **Frontend:** React 18 + PixiJS v8 (TypeScript, Vite)
-- **Transport:** SSE at `/events`, hook ingestion via `POST /hook`
+- **Transport:** SSE at `/events`
 - **CLI:** `bin/cli.js` — starts the server
 
 ## Branch Strategy
@@ -55,10 +56,12 @@ cd client && npx tsc --noEmit
 ## Key Files
 
 ### Backend (`server/`)
-- `index.js` — HTTP server: POST /hook, GET /events (SSE), static files
+- `index.js` — HTTP server: POST /hook, GET /events (SSE), static files, starts JSONL scanner
+- `transcript-parser.js` — Parses JSONL transcript lines into RawEvent format
+- `session-scanner.js` — Watches ~/.claude/projects/ for active sessions, tails JSONL files
 
 ### Hook (`bin/`)
-- `hook.js` — Reads stdin JSON, POSTs to localhost:43451/hook (called directly by plugin hooks via `node`)
+- `hook.js` — Reads stdin JSON, POSTs to localhost:43451/hook (legacy, for plugin hooks)
 - `cli.js` — CLI entry point (starts server)
 
 ### Frontend (`client/src/`)
@@ -78,5 +81,41 @@ cd client && npx tsc --noEmit
 
 ## Testing
 
-- Frontend: `cd client && npx tsc --noEmit` (typecheck only)
-- Manual: `echo '{"session_id":"test","tool_name":"Read"}' | node bin/hook.js`
+```bash
+# Server unit tests (parser + scanner, 30 tests)
+npm run test:server
+
+# Frontend typecheck
+cd client && npx tsc --noEmit
+
+# Replay a real session through the parser
+node test/replay-session.js --stats
+node test/replay-session.js --compare   # show tool_response shapes
+
+# Manual hook test (legacy)
+echo '{"session_id":"test","tool_name":"Read"}' | node bin/hook.js
+```
+
+## Browser Testing (Playwright MCP)
+
+Playwright MCP is configured for headless browser testing. Use it to verify the frontend:
+
+```
+# In Claude Code, the Playwright MCP tools are available:
+# browser_navigate, browser_snapshot, browser_take_screenshot,
+# browser_click, browser_type, browser_console_messages, etc.
+
+# Typical test flow:
+# 1. Start server: node server/index.js
+# 2. Start Vite: cd client && npm run dev
+# 3. Navigate: browser_navigate to http://localhost:7979
+# 4. Take screenshot: browser_take_screenshot
+# 5. Check console: browser_console_messages
+# 6. Interact: browser_click, browser_type
+```
+
+Setup (already done, persisted in .claude.json):
+```bash
+npx playwright install chromium
+claude mcp add playwright -- npx @playwright/mcp@latest --headless
+```

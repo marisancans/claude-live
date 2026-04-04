@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Snake Replacement Concepts</title>
+<style>
+  body { margin: 0; background: #080810; color: #ccc; font-family: monospace; display: flex; flex-wrap: wrap; gap: 20px; padding: 20px; }
+  .demo { position: relative; }
+  canvas { border: 1px solid #222; border-radius: 8px; }
+  h3 { margin: 4px 0; font-size: 13px; color: #60a5fa; }
+  p { margin: 2px 0 8px; font-size: 11px; color: #888; max-width: 400px; }
+</style>
+</head>
+<body>
+
+<div class="demo">
+  <h3>1. Comet Trail — particle stream with head glow</h3>
+  <p>A bright leading orb followed by a stream of fading particles. Longer prompts = more particles. Color = prompt (cyan) vs response (orange).</p>
+  <canvas id="c1" width="400" height="250"></canvas>
+</div>
+
+<div class="demo">
+  <h3>2. Lightning Arc — branching energy discharge</h3>
+  <p>A jagged bolt that fires from source to target, with afterglow segments that fade independently. Fast, dramatic, cheap (just lines).</p>
+  <canvas id="c2" width="400" height="250"></canvas>
+</div>
+
+<div class="demo">
+  <h3>3. DNA Helix — dual intertwined particle streams</h3>
+  <p>Two sinusoidal streams spiraling around the path, with cross-links. Prompt sends one color pair, response sends another.</p>
+  <canvas id="c3" width="400" height="250"></canvas>
+</div>
+
+<div class="demo">
+  <h3>4. Pulse Wave — expanding rings along the path</h3>
+  <p>Concentric rings spawn at the source and travel along the curve, expanding and fading. Like sonar pings flowing through space.</p>
+  <canvas id="c4" width="400" height="250"></canvas>
+</div>
+
+<div class="demo">
+  <h3>5. Firefly Swarm — scattered particles drifting along path</h3>
+  <p>A loose cloud of tiny glowing dots that drift along the curve with slight random wobble. Organic, ambient feel. Each dot has its own speed/offset.</p>
+  <canvas id="c5" width="400" height="250"></canvas>
+</div>
+
+<script>
+// Shared: quadratic bezier curve
+function bezier(t, p0, p1, p2) {
+  const u = 1 - t;
+  return {
+    x: u*u*p0.x + 2*u*t*p1.x + t*t*p2.x,
+    y: u*u*p0.y + 2*u*t*p1.y + t*t*p2.y,
+  };
+}
+function bezierTangent(t, p0, p1, p2) {
+  const u = 1 - t;
+  return {
+    x: 2*u*(p1.x-p0.x) + 2*t*(p2.x-p1.x),
+    y: 2*u*(p1.y-p0.y) + 2*t*(p2.y-p1.y),
+  };
+}
+
+const start = { x: 40, y: 200 };
+const ctrl  = { x: 200, y: 20 };
+const end   = { x: 360, y: 180 };
+
+// Draw faint path on all canvases
+function drawPath(ctx) {
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 100; i++) {
+    const p = bezier(i/100, start, ctrl, end);
+    i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+  // endpoints
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.arc(start.x, start.y, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(end.x, end.y, 4, 0, Math.PI*2); ctx.fill();
+}
+
+// ========== 1. COMET TRAIL ==========
+(function() {
+  const canvas = document.getElementById('c1');
+  const ctx = canvas.getContext('2d');
+  let time = 0;
+  const particles = [];
+  const TRAIL_LEN = 30;
+
+  function tick() {
+    ctx.fillStyle = 'rgba(8,8,16,0.15)';
+    ctx.fillRect(0, 0, 400, 250);
+    drawPath(ctx);
+
+    time += 0.004;
+    const headT = (time % 1.4) - 0.1;
+
+    // Spawn particles at head
+    if (headT > 0 && headT < 1) {
+      const p = bezier(headT, start, ctrl, end);
+      particles.push({ x: p.x, y: p.y, life: 1.0, size: 2 + Math.random() * 1.5 });
+    }
+
+    // Update + draw particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= 0.02;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+      ctx.globalAlpha = p.life * 0.8;
+      const r = p.size * p.life;
+
+      // Glow
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 4);
+      grad.addColorStop(0, `rgba(96,165,250,${p.life * 0.4})`);
+      grad.addColorStop(1, 'rgba(96,165,250,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - r*4, p.y - r*4, r*8, r*8);
+
+      // Core
+      ctx.fillStyle = `rgba(200,220,255,${p.life})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw bright head
+    if (headT > 0 && headT < 1) {
+      const h = bezier(headT, start, ctrl, end);
+      ctx.globalAlpha = 1;
+      const hg = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 12);
+      hg.addColorStop(0, 'rgba(180,210,255,0.9)');
+      hg.addColorStop(0.3, 'rgba(96,165,250,0.5)');
+      hg.addColorStop(1, 'rgba(96,165,250,0)');
+      ctx.fillStyle = hg;
+      ctx.fillRect(h.x-12, h.y-12, 24, 24);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, 2, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+
+// ========== 2. LIGHTNING ARC ==========
+(function() {
+  const canvas = document.getElementById('c2');
+  const ctx = canvas.getContext('2d');
+  let time = 0;
+  let bolts = [];
+
+  function genBolt() {
+    const segments = [];
+    const N = 20;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const p = bezier(t, start, ctrl, end);
+      // Add jitter perpendicular to the path
+      const tan = bezierTangent(t, start, ctrl, end);
+      const len = Math.sqrt(tan.x*tan.x + tan.y*tan.y) || 1;
+      const nx = -tan.y / len;
+      const ny = tan.x / len;
+      const jitter = (Math.random() - 0.5) * 30 * (1 - Math.abs(t - 0.5) * 2);
+      segments.push({ x: p.x + nx * jitter, y: p.y + ny * jitter, alpha: 1 });
+    }
+    return { segments, life: 1.0, width: 1.5 + Math.random() * 1.5 };
+  }
+
+  function tick() {
+    ctx.fillStyle = 'rgba(8,8,16,0.2)';
+    ctx.fillRect(0, 0, 400, 250);
+    drawPath(ctx);
+
+    time += 1;
+    if (time % 80 === 0) {
+      bolts.push(genBolt());
+      // Sometimes add a second thinner bolt
+      if (Math.random() > 0.5) bolts.push(genBolt());
+    }
+
+    for (let b = bolts.length - 1; b >= 0; b--) {
+      const bolt = bolts[b];
+      bolt.life -= 0.025;
+      if (bolt.life <= 0) { bolts.splice(b, 1); continue; }
+
+      // Draw main bolt
+      ctx.strokeStyle = `rgba(167,139,250,${bolt.life * 0.9})`;
+      ctx.lineWidth = bolt.width * bolt.life;
+      ctx.shadowColor = '#a78bfa';
+      ctx.shadowBlur = 8 * bolt.life;
+      ctx.beginPath();
+      bolt.segments.forEach((s, i) => i === 0 ? ctx.moveTo(s.x, s.y) : ctx.lineTo(s.x, s.y));
+      ctx.stroke();
+
+      // White core
+      ctx.strokeStyle = `rgba(220,210,255,${bolt.life * 0.6})`;
+      ctx.lineWidth = bolt.width * bolt.life * 0.3;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      bolt.segments.forEach((s, i) => i === 0 ? ctx.moveTo(s.x, s.y) : ctx.lineTo(s.x, s.y));
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+
+// ========== 3. DNA HELIX ==========
+(function() {
+  const canvas = document.getElementById('c3');
+  const ctx = canvas.getContext('2d');
+  let time = 0;
+
+  function tick() {
+    ctx.fillStyle = 'rgba(8,8,16,0.12)';
+    ctx.fillRect(0, 0, 400, 250);
+    drawPath(ctx);
+
+    time += 0.015;
+    const headT = (time % 1.5) - 0.2;
+
+    const N = 40;
+    for (let i = 0; i < N; i++) {
+      const t = headT - (i * 0.02);
+      if (t < 0 || t > 1) continue;
+
+      const p = bezier(t, start, ctrl, end);
+      const tan = bezierTangent(t, start, ctrl, end);
+      const len = Math.sqrt(tan.x*tan.x + tan.y*tan.y) || 1;
+      const nx = -tan.y / len;
+      const ny = tan.x / len;
+
+      const wave = Math.sin(t * 20 + time * 5) * 10;
+      const fade = Math.min(1, (N - i) / 10) * Math.min(1, i / 5);
+
+      // Strand A
+      const ax = p.x + nx * wave;
+      const ay = p.y + ny * wave;
+      ctx.globalAlpha = fade * 0.8;
+      ctx.fillStyle = '#60a5fa';
+      ctx.beginPath();
+      ctx.arc(ax, ay, 2, 0, Math.PI*2);
+      ctx.fill();
+
+      // Strand B (opposite)
+      const bx = p.x - nx * wave;
+      const by = p.y - ny * wave;
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.arc(bx, by, 2, 0, Math.PI*2);
+      ctx.fill();
+
+      // Cross-links every 5th
+      if (i % 5 === 0 && fade > 0.3) {
+        ctx.strokeStyle = `rgba(255,255,255,${fade * 0.15})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+
+// ========== 4. PULSE WAVE ==========
+(function() {
+  const canvas = document.getElementById('c4');
+  const ctx = canvas.getContext('2d');
+  let time = 0;
+  const rings = [];
+
+  function tick() {
+    ctx.fillStyle = 'rgba(8,8,16,0.15)';
+    ctx.fillRect(0, 0, 400, 250);
+    drawPath(ctx);
+
+    time += 0.008;
+
+    // Spawn rings periodically
+    if (Math.floor(time * 20) !== Math.floor((time - 0.008) * 20)) {
+      rings.push({ t: 0, radius: 0, life: 1.0 });
+    }
+
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const ring = rings[i];
+      ring.t += 0.012;
+      ring.radius += 0.15;
+      ring.life -= 0.015;
+
+      if (ring.life <= 0 || ring.t > 1) { rings.splice(i, 1); continue; }
+
+      const p = bezier(ring.t, start, ctrl, end);
+      const r = 3 + ring.radius;
+
+      ctx.globalAlpha = ring.life * 0.6;
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 1.5 * ring.life;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner dot
+      if (ring.life > 0.7) {
+        ctx.fillStyle = `rgba(52,211,153,${(ring.life - 0.7) * 3})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+
+// ========== 5. FIREFLY SWARM ==========
+(function() {
+  const canvas = document.getElementById('c5');
+  const ctx = canvas.getContext('2d');
+  let time = 0;
+
+  // Pre-generate fireflies with offsets
+  const flies = [];
+  for (let i = 0; i < 50; i++) {
+    flies.push({
+      tOffset: Math.random() * 0.4,
+      speed: 0.3 + Math.random() * 0.4,
+      wobbleX: (Math.random() - 0.5) * 20,
+      wobbleY: (Math.random() - 0.5) * 20,
+      wobbleSpeed: 1 + Math.random() * 3,
+      size: 0.8 + Math.random() * 1.5,
+      brightness: 0.4 + Math.random() * 0.6,
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+
+  function tick() {
+    ctx.fillStyle = 'rgba(8,8,16,0.1)';
+    ctx.fillRect(0, 0, 400, 250);
+    drawPath(ctx);
+
+    time += 0.005;
+    const headT = (time % 1.6) - 0.3;
+
+    for (const fly of flies) {
+      const t = headT - fly.tOffset;
+      if (t < 0 || t > 1) continue;
+
+      const p = bezier(t * fly.speed + (1 - fly.speed) * t, start, ctrl, end);
+      const wx = fly.wobbleX * Math.sin(time * fly.wobbleSpeed + fly.phase);
+      const wy = fly.wobbleY * Math.cos(time * fly.wobbleSpeed * 0.7 + fly.phase);
+      const x = p.x + wx;
+      const y = p.y + wy;
+
+      // Pulsing brightness
+      const pulse = 0.5 + 0.5 * Math.sin(time * 4 + fly.phase);
+      const alpha = fly.brightness * pulse * Math.min(1, t * 5) * Math.min(1, (1-t) * 5);
+
+      // Glow
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, fly.size * 5);
+      grad.addColorStop(0, `rgba(251,191,36,${alpha * 0.3})`);
+      grad.addColorStop(1, 'rgba(251,191,36,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - fly.size*5, y - fly.size*5, fly.size*10, fly.size*10);
+
+      // Core
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath();
+      ctx.arc(x, y, fly.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

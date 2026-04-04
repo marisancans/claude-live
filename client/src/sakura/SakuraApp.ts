@@ -1,0 +1,629 @@
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { createColorGradingPass } from './postprocessing/ColorGradingPass'
+import { createFilmGrainPass, updateFilmGrain } from './postprocessing/FilmGrainPass'
+import { createGodRaysPass } from './postprocessing/GodRaysPass'
+import { createChromaticAberrationPass } from './postprocessing/ChromaticAberrationPass'
+import type { RawEvent } from '../types'
+import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
+import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
+import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
+import { SpaceColonizationTree } from './SpaceColonizationTree'
+import type { TreeNode } from './SpaceColonizationTree'
+import { PetalSystem } from './PetalSystem'
+import { FlowerSystem } from './FlowerSystem'
+import { SignalSystem } from './SignalSystem'
+import { SapPulseSystem } from './SapPulse'
+import { WindField } from './WindField'
+import barkVertSource from './shaders/bark.vert.glsl?raw'
+import barkFragSource from './shaders/bark.frag.glsl?raw'
+
+function hashUnit(value: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) / 4294967296
+}
+
+function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)) }
+
+const SAP_COLORS: Record<string, string> = {
+  Read: '#d4a574', Edit: '#7ec8e3', Write: '#7dd3fc', Bash: '#f59e0b',
+  Grep: '#c084fc', Glob: '#a78bfa', WebFetch: '#fb7185',
+}
+function sapColor(event: RawEvent): string {
+  return SAP_COLORS[event.tool_name || ''] || '#e8a060'
+}
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a.slice(0, n)
+}
+
+// --- Bark normal map (shared singleton, same as BranchRenderer) ---
+function createBarkNormalMap(): THREE.CanvasTexture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size; canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = 'rgb(128,128,255)'
+  ctx.fillRect(0, 0, size, size)
+  const imageData = ctx.getImageData(0, 0, size, size)
+  const data = imageData.data
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4
+      const grain = Math.sin((x / size) * Math.PI * 24) * 0.5
+        + Math.sin((x / size) * Math.PI * 7 + 0.8) * 0.25
+      data[idx] = Math.round(128 + grain * 30)
+      data[idx + 1] = 128
+      data[idx + 2] = 255
+      data[idx + 3] = 255
+    }
+  }
+  const rng = (seed: number) => { let s = seed; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff } }
+  const rand = rng(42)
+  for (let i = 0; i < 12; i++) {
+    const cx = Math.floor(rand() * size)
+    const cy = Math.floor(rand() * size)
+    const hw = Math.floor(20 + rand() * 30)
+    const hh = Math.floor(3 + rand() * 5)
+    for (let dy = -hh; dy <= hh; dy++) {
+      for (let dx = -hw; dx <= hw; dx++) {
+        const px = (cx + dx + size) % size
+        const py = (cy + dy + size) % size
+        const t = 1 - Math.sqrt((dx / hw) ** 2 + (dy / hh) ** 2)
+        if (t <= 0) continue
+        const idx2 = (py * size + px) * 4
+        const bump = Math.sin(t * Math.PI) * 40
+        data[idx2 + 1] = Math.min(255, Math.round(data[idx2 + 1] + bump))
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(2, 4); tex.needsUpdate = true
+  return tex
+}
+let _barkNormalMap: THREE.CanvasTexture | null = null
+function getBarkNormalMap(): THREE.CanvasTexture {
+  if (!_barkNormalMap) _barkNormalMap = createBarkNormalMap()
+  return _barkNormalMap
+}
+
+function projectHeat(activity: ProjectActivity, now = Date.now()) {
+  const age = Math.max(0, now - activity.lastEventTime)
+  const freshness = clamp(1 - age / 90000, 0, 1)
+  const density = clamp(Math.log1p(activity.eventCount) / Math.log(24), 0, 1)
+  return clamp(0.12 + freshness * 0.56 + density * 0.3, 0.08, 1)
+}
+
+function buildSignature(tree: { projectId: string; stats: { totalNodes: number; maxDepthReached: number; truncated: boolean } }) {
+  return `${tree.projectId}:${tree.stats.totalNodes}:${tree.stats.maxDepthReached}:${tree.stats.truncated ? 't' : 'f'}`
+}
+
+export class SakuraApp {
+  private renderer: THREE.WebGLRenderer
+  private scene: THREE.Scene
+  private camera: THREE.PerspectiveCamera
+  private controls: OrbitControls
+  private composer: EffectComposer
+  private filmGrainPass: ShaderPass
+
+  private colonies = new Map<string, ColonyVisual>()
+  private windField = new WindField()
+  private petalSystem = new PetalSystem()
+  private flowerSystem = new FlowerSystem()
+  private signalSystem: SignalSystem
+  private sapPulseSystem: SapPulseSystem
+
+  // Sakura tree — space colonization driven growth
+  private tree: SpaceColonizationTree
+  private treeMesh: THREE.Mesh
+  private barkMaterial: THREE.ShaderMaterial
+
+  private atmosphere: THREE.Points
+  private sky: THREE.Mesh
+  private skyMaterial: THREE.ShaderMaterial
+  private ground: THREE.Mesh
+  private elapsed = 0
+  private resizeHandler: () => void
+
+  constructor(private container: HTMLDivElement) {
+    const w = container.clientWidth
+    const h = container.clientHeight
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setSize(w, h)
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    this.renderer.setClearColor('#0e0a08')
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    container.appendChild(this.renderer.domElement)
+
+    this.scene = new THREE.Scene()
+    this.scene.fog = new THREE.FogExp2('#0e0a08', 0.003)
+
+    this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 1600)
+    this.camera.position.set(40, 80, 200)
+
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls.enableDamping = true
+    this.controls.dampingFactor = 0.06
+    this.controls.autoRotate = true
+    this.controls.autoRotateSpeed = 0.15
+    this.controls.minDistance = 60
+    this.controls.maxDistance = 500
+    this.controls.target.set(0, 40, 0)
+
+    // Post-processing — bloom for soft glow on petals
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.addPass(new RenderPass(this.scene, this.camera))
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.4, 0.3, 0.75))
+    const bokeh = new BokehPass(this.scene, this.camera, {
+      focus: 160,
+      aperture: 0.001,
+      maxblur: 0.002,
+    })
+    this.composer.addPass(bokeh)
+    this.composer.addPass(createGodRaysPass())
+    this.composer.addPass(createChromaticAberrationPass())
+    this.composer.addPass(createColorGradingPass())
+    this.filmGrainPass = createFilmGrainPass()
+    this.composer.addPass(this.filmGrainPass)
+
+    // Lighting — warm, soft, multi-source
+    this.scene.add(new THREE.AmbientLight('#fff5f0', 1.0))
+    const hemi = new THREE.HemisphereLight('#ffeef5', '#0a0606', 1.8)
+    hemi.position.set(0, 200, 0)
+    this.scene.add(hemi)
+    // Key light — warm from upper-left
+    const key = new THREE.DirectionalLight('#fff0e0', 0.8)
+    key.position.set(-80, 160, 100)
+    key.castShadow = true
+    key.shadow.mapSize.width = 1024
+    key.shadow.mapSize.height = 1024
+    key.shadow.camera.near = 10
+    key.shadow.camera.far = 400
+    key.shadow.camera.left = -120
+    key.shadow.camera.right = 120
+    key.shadow.camera.top = 120
+    key.shadow.camera.bottom = -40
+    key.shadow.bias = -0.002
+    key.shadow.radius = 4
+    this.scene.add(key)
+    // Rim light — behind and above
+    const rim = new THREE.PointLight('#ffd0e0', 0.9, 500, 1.5)
+    rim.position.set(0, 180, -80)
+    this.scene.add(rim)
+    // Fill from below — subtle uplight
+    const fill = new THREE.PointLight('#ffb78e', 0.35, 300, 2)
+    fill.position.set(-100, 20, 60)
+    this.scene.add(fill)
+    // Pink accent from the side
+    const accent = new THREE.PointLight('#ff8ab0', 0.3, 250, 2)
+    accent.position.set(90, 60, -40)
+    this.scene.add(accent)
+
+    // Sky sphere
+    this.skyMaterial = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uHeat: { value: 0 } },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vWorldPos = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vWorldPos;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+        float noise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p);
+          float a = hash(i), b = hash(i+vec2(1,0)), c = hash(i+vec2(0,1)), d = hash(i+vec2(1,1));
+          vec2 u = f*f*(3.0-2.0*f);
+          return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;
+        }
+        float fbm(vec2 p) {
+          float v=0.0, a=0.5; mat2 m=mat2(1.6,1.2,-1.2,1.6);
+          for(int i=0;i<4;i++){v+=a*noise(p);p=m*p;a*=0.5;} return v;
+        }
+        void main() {
+          vec3 dir = normalize(vWorldPos);
+          float y = dir.y * 0.5 + 0.5;
+          vec2 skyUv = vec2(atan(dir.z, dir.x)/6.2831+0.5, y);
+          float clouds = fbm(skyUv * vec2(4.0, 2.5) + vec2(uTime*0.015, -uTime*0.02));
+          float streaks = fbm(vec2(skyUv.x*10.0 - uTime*0.05, skyUv.y*2.0));
+          vec3 top = vec3(0.04, 0.02, 0.07);
+          vec3 mid = vec3(0.10, 0.06, 0.13);
+          vec3 low = vec3(0.35, 0.18, 0.25);
+          vec3 glow = vec3(0.45, 0.22, 0.30);
+          vec3 color = mix(low, mid, smoothstep(0.0, 0.45, y));
+          color = mix(color, top, smoothstep(0.45, 0.9, y));
+          color += glow * clouds * 0.15 * smoothstep(0.5, 0.0, y);
+          color += vec3(0.3, 0.15, 0.2) * streaks * 0.08;
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+    })
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 24), this.skyMaterial)
+    this.sky.scale.set(1, 0.72, 1)
+    this.scene.add(this.sky)
+
+    // Ground — MeshStandardMaterial so it receives shadows
+    this.ground = new THREE.Mesh(
+      new THREE.CircleGeometry(800, 72),
+      new THREE.MeshStandardMaterial({
+        color: '#0f0a08',
+        emissive: '#0a0705',
+        emissiveIntensity: 0.3,
+        roughness: 0.95,
+        metalness: 0.0,
+      }),
+    )
+    this.ground.rotation.x = -Math.PI / 2
+    this.ground.position.y = -4
+    this.ground.receiveShadow = true
+    this.scene.add(this.ground)
+
+
+
+    // Fallen petal scatter on ground — static decoration
+    this.createGroundPetals()
+
+    // Atmosphere particles
+    this.atmosphere = this.createAtmosphere()
+    this.scene.add(this.atmosphere)
+
+    // Horizontal fog layers at different heights for painterly depth
+    for (let i = 0; i < 3; i++) {
+      const y = -2 + i * 30
+      const fogMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color('#1a1015'),
+        transparent: true,
+        opacity: 0.04 - i * 0.01,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      const fogPlane = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), fogMat)
+      fogPlane.rotation.x = -Math.PI / 2
+      fogPlane.position.y = y
+      this.scene.add(fogPlane)
+    }
+
+    // Petal system in scene (world space), flowers in tree group (scale with tree)
+    this.scene.add(this.petalSystem.mesh)
+    this.scene.add(this.petalSystem.glowGroup)
+
+    this.signalSystem = new SignalSystem(this.petalSystem, this.windField)
+    this.sapPulseSystem = new SapPulseSystem(this.scene)
+
+    // Sakura tree — dynamic incremental growth (no pre-computed topology)
+    this.tree = new SpaceColonizationTree(23399)
+
+    // Custom ShaderMaterial using bark shaders (no growth uniforms needed)
+    this.barkMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uHeat: { value: 0.12 },
+        uPulse: { value: 0 },
+        uContam: { value: 0 },
+        uPulseColor: { value: new THREE.Color('#e8a88a') },
+        uFlowOffset: { value: 0 },
+        uWindStrength: { value: 0 },
+        uWindPhase: { value: 0 },
+        uSignalPos: { value: -1 },
+        uSignalIntensity: { value: 0 },
+        uSignalColor: { value: new THREE.Color('#ffffff') },
+        uDepth: { value: 0 },
+        uNormalMap: { value: getBarkNormalMap() },
+        uNormalScale: { value: 0.3 },
+      },
+      vertexShader: barkVertSource,
+      fragmentShader: barkFragSource,
+      transparent: false,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+    })
+
+    this.treeMesh = new THREE.Mesh(this.tree.geometry, this.barkMaterial)
+    this.treeMesh.castShadow = true
+    this.scene.add(this.treeMesh)
+    this.scene.add(this.flowerSystem.mesh)
+
+    this.resizeHandler = () => this.onResize()
+    window.addEventListener('resize', this.resizeHandler)
+  }
+
+  private createAtmosphere() {
+    // Large dust motes that catch the key light
+    const count = 200
+    const positions = new Float32Array(count * 3)
+    const sizes = new Float32Array(count)
+    for (let i = 0; i < count; i++) {
+      const radius = 20 + Math.random() * 200
+      const theta = Math.random() * Math.PI * 2
+      const y = -5 + Math.random() * 140
+      positions[i * 3] = Math.cos(theta) * radius
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = Math.sin(theta) * radius
+      sizes[i] = 2.0 + Math.random() * 5.0
+    }
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
+
+    // Soft circle texture
+    const c = document.createElement('canvas')
+    c.width = 64; c.height = 64
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 30)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.3, 'rgba(255,255,255,0.5)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 64, 64)
+    const dustTex = new THREE.CanvasTexture(c)
+
+    return new THREE.Points(geometry, new THREE.PointsMaterial({
+      map: dustTex,
+      color: '#ffe8d0',
+      transparent: true,
+      opacity: 0.25,
+      size: 4,
+      sizeAttenuation: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }))
+  }
+
+  private createGroundPetals() {
+    // Soft circle texture for ground petals
+    const c = document.createElement('canvas')
+    c.width = 32; c.height = 32
+    const ctx = c.getContext('2d')!
+    const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 14)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.5, 'rgba(255,255,255,0.6)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 32, 32)
+    const petalTex = new THREE.CanvasTexture(c)
+
+    const count = 80
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const radius = 4 + Math.random() * 50
+      const x = Math.cos(angle) * radius
+      const z = Math.sin(angle) * radius
+      const pinkness = 0.3 + Math.random() * 0.5
+      const mat = new THREE.SpriteMaterial({
+        map: petalTex,
+        color: new THREE.Color(1.0, 0.75 + (1 - pinkness) * 0.25, 0.82 + (1 - pinkness) * 0.18),
+        transparent: true,
+        opacity: 0.2 + Math.random() * 0.2,
+        depthWrite: false,
+      })
+      const sprite = new THREE.Sprite(mat)
+      sprite.position.set(x, -3.5 + Math.random() * 0.3, z)
+      sprite.scale.setScalar(0.5 + Math.random() * 0.8)
+      this.scene.add(sprite)
+    }
+  }
+
+  syncProjects(projects: ProjectVisualState[]) {
+    const withTrees = projects.filter(p => p.tree?.tree)
+    const seen = new Set<string>()
+
+    // Colonies just hold layout data for SignalSystem — the visible tree is the event tree
+    for (const projectState of withTrees) {
+      const tree = projectState.tree!
+      const signature = buildSignature(tree)
+      let colony = this.colonies.get(projectState.project.id)
+
+      if (!colony || colony.signature !== signature) {
+        if (colony) this.disposeColony(colony)
+        colony = this.createColony(projectState, signature)
+        this.colonies.set(projectState.project.id, colony)
+      }
+
+      colony.activity = projectState.activity
+      colony.rootPath = tree.rootPath
+      seen.add(projectState.project.id)
+    }
+
+    for (const [id, colony] of this.colonies) {
+      if (seen.has(id)) continue
+      this.disposeColony(colony)
+      this.colonies.delete(id)
+    }
+  }
+
+  private createColony(projectState: ProjectVisualState, signature: string): ColonyVisual {
+    const tree = projectState.tree!
+    const layout = buildTreeLayout(tree.tree!, projectState.project.id)
+    const group = new THREE.Group() // empty — visible tree is the global eventTree mesh
+
+    // Old layout + branches for SignalSystem event routing
+    const { branches, junctions } = buildBranches(layout, new THREE.Group())
+
+    return {
+      id: projectState.project.id,
+      rootPath: tree.rootPath,
+      signature,
+      group,
+      activity: projectState.activity,
+      layout,
+      branches,
+      junctions,
+      petalInstanceIds: [],
+      heat: 0.12,
+      contamination: 0,
+      boost: 0,
+      idleOffset: hashUnit(projectState.project.id) * Math.PI * 2,
+    }
+  }
+
+  applyEvent(event: RawEvent) {
+    // Grow tree: extend all branches + split one + get flower positions + new node IDs
+    const { flowers, newNodeIds } = this.tree.onEvent()
+
+    // Place flowers at every new branch point
+    for (const f of flowers) {
+      this.flowerSystem.addCluster(f.pos, f.dir, 5 + Math.floor(Math.random() * 6))
+    }
+
+    // Create sap pulses from root to newly created nodes
+    const color = new THREE.Color(sapColor(event))
+    const ids = newNodeIds.length > 5 ? pickRandom(newNodeIds, 5) : newNodeIds
+    if (ids.length > 0) {
+      for (const nodeId of ids) {
+        const pathIds = this.tree.traceToRoot(nodeId)
+        if (pathIds.length < 2) continue
+        const positions = pathIds
+          .map(id => this.tree.getNode(id))
+          .filter((n): n is TreeNode => n !== undefined)
+          .map(n => n.position.clone())
+        if (positions.length >= 2) {
+          this.sapPulseSystem.createPulse(positions, color)
+        }
+      }
+    } else {
+      // Vertex cap hit — fire a fallback pulse on a random existing branch so events still feel alive
+      const fallback = this.tree.getRandomLeafPath()
+      if (fallback && fallback.length >= 2) {
+        this.sapPulseSystem.createPulse(fallback, color)
+      }
+    }
+
+    // Route to colony for SignalSystem effects
+    if (event.cwd) {
+      const colony = this.colonies.get(event.cwd)
+      if (colony) {
+        colony.boost = Math.min(1.4, colony.boost + 0.25)
+        this.signalSystem.route(event, colony)
+      }
+    }
+  }
+
+  getTreeStats() {
+    return {
+      nodeCount: this.tree.nodeCount,
+      segmentCount: Math.max(0, this.tree.nodeCount - 1),
+      activeAttractors: this.tree.activeAttractorCount,
+      totalEvents: this.tree.totalEvents,
+      isCapped: this.tree.isCapped,
+    }
+  }
+
+  resetGrowth() {
+    this.tree.reset()
+    this.flowerSystem.reset()
+    this.sapPulseSystem.dispose()
+  }
+
+  tick(dt: number) {
+    this.elapsed += dt
+    this.controls.update()
+
+    // Wind
+    this.windField.update(dt)
+
+    // Update bark material uniforms
+    this.barkMaterial.uniforms.uTime.value = this.elapsed
+    this.barkMaterial.uniforms.uWindStrength.value = this.windField.effectiveStrength
+    this.barkMaterial.uniforms.uWindPhase.value = this.windField.phase
+
+    // Atmosphere drift
+    this.atmosphere.rotation.y += dt * 0.001
+    this.skyMaterial.uniforms.uTime.value = this.elapsed
+    const now = Date.now()
+    for (const colony of this.colonies.values()) {
+      const heat = projectHeat(colony.activity, now)
+      colony.heat = heat
+      colony.boost = Math.max(0, colony.boost - dt * 0.35)
+      colony.contamination = Math.max(0, colony.contamination - dt * 0.03)
+
+      updateBranchUniforms(
+        colony.branches,
+        colony.junctions,
+        this.elapsed + colony.idleOffset,
+        heat,
+        colony.contamination,
+        this.windField.effectiveStrength,
+        this.windField.phase,
+        dt,
+      )
+    }
+
+    // Petals
+    this.petalSystem.update(dt, this.elapsed, this.windField)
+    this.petalSystem.ambientDrift(dt)
+
+    // Effects
+    this.sapPulseSystem.tick(dt)
+    this.signalSystem.update(dt, this.elapsed)
+
+    // Render
+    updateFilmGrain(this.filmGrainPass, this.elapsed)
+    this.composer.render()
+  }
+
+  private onResize() {
+    const { clientWidth, clientHeight } = this.container
+    this.camera.aspect = clientWidth / clientHeight
+    this.camera.updateProjectionMatrix()
+    this.renderer.setSize(clientWidth, clientHeight)
+    this.composer.setSize(clientWidth, clientHeight)
+  }
+
+  private disposeColony(colony: ColonyVisual) {
+    disposeBranches(colony.branches, colony.junctions)
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this.resizeHandler)
+    for (const colony of this.colonies.values()) this.disposeColony(colony)
+    this.colonies.clear()
+    this.sapPulseSystem.dispose()
+    this.signalSystem.dispose()
+    this.petalSystem.dispose()
+    this.scene.remove(this.petalSystem.mesh)
+    this.scene.remove(this.petalSystem.glowGroup)
+    this.scene.remove(this.treeMesh)
+    this.scene.remove(this.flowerSystem.mesh)
+    this.flowerSystem.dispose()
+    this.tree.geometry.dispose()
+    this.barkMaterial.dispose()
+    ;(this.atmosphere.geometry as THREE.BufferGeometry).dispose()
+    ;(this.atmosphere.material as THREE.PointsMaterial).dispose()
+    this.sky.geometry.dispose()
+    this.skyMaterial.dispose()
+    this.ground.geometry.dispose()
+    ;(this.ground.material as THREE.MeshStandardMaterial).dispose()
+    this.controls.dispose()
+    this.composer.dispose()
+    this.renderer.dispose()
+    this.container.removeChild(this.renderer.domElement)
+  }
+}
+
+// Re-export layoutRootPath for consumers of this module who need it
+export { layoutRootPath }

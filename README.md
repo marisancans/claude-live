@@ -2,56 +2,39 @@
 
 Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) activity as an orbital solar system.
 
-![claude-live demo](claude-live-demo.gif)
+<video src="claude-live-demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 **[Try the demo](https://marisancans.github.io/claude-live/)** (no install needed)
 
 ## Install
 
-### Via Claude plugin marketplace (recommended)
-
-```bash
-claude plugin marketplace add marisancans/claude-live
-```
-
-Hooks are configured automatically. Events stream in the background as you work.
-
-### Via npm (manual setup)
-
 ```bash
 npm install -g claude-live
 ```
 
-Then add hooks to your `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node $(npm root -g)/claude-live/bin/hook.js", "async": true }] }]
-  }
-}
-```
-
-Run `npm root -g` to find your global node_modules path if the above doesn't work on your shell.
+No additional configuration needed. The server automatically detects active Claude Code sessions by watching `~/.claude/projects/`.
 
 ## Use
 
-Once installed, use the `/claude-live:server` slash command in Claude Code:
+```bash
+claude-live          # Start server (foreground)
+claude-live start    # Start server in background
+```
+
+Open http://localhost:43451 in your browser. Sessions appear automatically as you use Claude Code.
+
+If you have the plugin installed, you can also use the slash command inside Claude Code:
 
 ```
 /claude-live:server          # Check status, auto-start if needed
 /claude-live:server stop     # Stop the server
 /claude-live:server restart  # Restart the server
 /claude-live:server logs     # Show last 30 log lines
-/claude-live:server config   # Show current endpoint URL
-/claude-live:server config http://192.168.1.50:43451  # Set remote endpoint
-/claude-live:server config reset  # Reset to localhost default
 ```
 
-Then open http://localhost:43451 in your browser.
-
 ## How It Works
+
+The server watches Claude Code's session transcript files (`~/.claude/projects/`) and tails them in real time. No hooks or additional configuration required.
 
 Sessions appear as star systems. Files orbit as planets -- the more a file is touched, the larger it grows. Tool calls animate between nodes:
 
@@ -62,24 +45,21 @@ Sessions appear as star systems. Files orbit as planets -- the more a file is to
 
 Multiple Claude sessions show as separate star systems. Prompts fly inward, responses fly outward. Context compaction triggers an implosion/rebirth effect.
 
-Under the hood: the plugin sends every event to a lightweight Node.js server (pure passthrough, no persistence). The server broadcasts events to a PixiJS frontend via Server-Sent Events (SSE).
-
 ## Server Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/hook` | POST | Receive hook events, broadcast to SSE clients |
+| `/hook` | POST | Receive hook events (legacy/plugin), broadcast to SSE clients |
 | `/events` | GET | SSE stream for the frontend |
-| `/health` | GET | Health check — returns `{"ok":true,"clients":<N>,"port":43451}` |
+| `/health` | GET | Health check — returns `{"ok":true,"version":"X.Y.Z","clients":<N>,"port":43451}` |
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| No activity in browser | Hooks not firing | Run `/reload-plugins` or check `settings.json` hooks |
-| Server not reachable | Server not running | `/claude-live:server` auto-starts it |
-| `clients: 0` in `/health` | Server up, no browser tab open | Open `http://localhost:43451` |
-| Hook logs location | Debug delivery failures | `~/.config/claude-live/logs/YYYY-MM-DD.jsonl` |
+| Symptom | Fix |
+|---|---|
+| No activity in browser | Make sure Claude Code is running, check `~/.claude/projects/` has `.jsonl` files |
+| Server not reachable | Run `claude-live` to start it |
+| `clients: 0` in `/health` | Open http://localhost:43451 in your browser |
 
 ## Development
 
@@ -91,6 +71,7 @@ npm install
 node server/index.js            # Node.js server on :43451
 cd client && npm run dev        # Vite hot-reload on :7979
 cd client && npx tsc --noEmit   # Type check frontend
+npm run test:server             # Run server tests
 ```
 
 ## License

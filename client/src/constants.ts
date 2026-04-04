@@ -1,6 +1,6 @@
 // Orbital geometry constants — SINGLE SOURCE OF TRUTH
-export const ORBIT_RADII = [70, 120, 175, 225]       // px distance from cluster center per ring
-export const RING_CAPACITIES = [4, 8, 18, 20]        // max nodes per ring (sum = 50)
+export const ORBIT_RADII = [70, 120, 175, 225]       // px distance from cluster center per ring (base)
+export const RING_CAPACITIES = [4, 8, 18, 20]        // max nodes per ring (base, unlimited rings)
 export const ORBIT_SPEEDS = [0.0015, 0.001, 0.0006, 0.0004]
 export const NODE_VISUAL_RADIUS = 15                  // approximate px radius of a rendered node
 
@@ -24,10 +24,15 @@ export const TOOL_COLOR_HEX: Record<string, string> = {
   Grep:         '#a78bfa',
   Glob:         '#a78bfa',
   WebFetch:     '#f472b6',
-  Stop:         '#888888',
+  Stop:         '#aaaaaa',
   Notification: '#34d399',
+  prompt:       '#b0c8f0',
+  response:     '#7eb8f0',
+  compact:      '#FFD060',
+  error:        '#f87171',
+  SubagentStop: '#c084fc',
 }
-export const DEFAULT_HEX = '#555555'
+export const DEFAULT_HEX = '#4ade80'  // default to green rather than gray
 
 // Utility: Desaturate toward white — same formula as mockup
 export function desaturate(hex: string): string {
@@ -40,9 +45,29 @@ export function desaturate(hex: string): string {
   return `#${mr.toString(16).padStart(2, '0')}${mg.toString(16).padStart(2, '0')}${mb.toString(16).padStart(2, '0')}`
 }
 
-// Utility: Convert hex color to PixiJS integer format
+// Utility: Convert hex color string to integer format
 export function hexToInt(hex: string): number {
   return parseInt(hex.replace('#', ''), 16)
+}
+
+export function orbitRadiusFor(ring: number): number {
+  if (ring < ORBIT_RADII.length) return ORBIT_RADII[ring]
+  const last = ORBIT_RADII[ORBIT_RADII.length - 1] ?? 200
+  const prev = ORBIT_RADII[ORBIT_RADII.length - 2] ?? last - 55
+  const gap = Math.max(40, last - prev)
+  return last + gap * (ring - (ORBIT_RADII.length - 1))
+}
+
+export function orbitSpeedFor(ring: number): number {
+  if (ring < ORBIT_SPEEDS.length) return ORBIT_SPEEDS[ring]
+  const last = ORBIT_SPEEDS[ORBIT_SPEEDS.length - 1] ?? 0.0004
+  const extra = ring - (ORBIT_SPEEDS.length - 1)
+  return Math.max(last * Math.pow(0.85, extra), last * 0.2)
+}
+
+export function ringCapacityFor(ring: number): number {
+  if (ring < RING_CAPACITIES.length) return RING_CAPACITIES[ring]
+  return RING_CAPACITIES[RING_CAPACITIES.length - 1] ?? 20
 }
 
 // Model-based core colors: [baseR, baseG, baseB], [brightR, brightG, brightB]
@@ -68,4 +93,3 @@ export function radialJitter(key: string): number {
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193)
   return ((h >>> 0) % 15) - 7  // -7 to +7 px
 }
-

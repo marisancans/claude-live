@@ -1,13 +1,13 @@
 import type { Cluster, GraphNode } from '../types'
 
 /**
- * Typed domain events for the PixiJS renderer animation system.
+ * Typed domain events for the renderer animation system.
  * These events decouple state mutations (store.ts) from visual animations (AnimationManager).
  */
 export interface BusEvents {
   'node:created': { sessionId: string; node: GraphNode }
   'node:removed': { sessionId: string; nodeKey: string }
-  'tool:used': { sessionId: string; nodeKey: string; tool: string; colorHex: string; inbound: boolean; agentId?: string | null }
+  'tool:used': { sessionId: string; nodeKey: string; tool: string; colorHex: string; inbound: boolean; agentId?: string | null; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }
   'prompt:submitted': { sessionId: string; words: string[]; color: string }
   'response:received': { sessionId: string; words: string[]; color: string }
   'cluster:created': { cluster: Cluster }
