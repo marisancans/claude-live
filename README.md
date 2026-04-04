@@ -1,10 +1,10 @@
 # claude-live
 
-Real-time visualization of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) activity as an orbital solar system.
+**[Try the live demo](https://marisancans.github.io/claude-live/)** — no install needed
 
-<video src="claude-live-demo.mp4" autoplay loop muted playsinline width="100%"></video>
+![claude-live demo](claude-live-demo.gif)
 
-**[Try the demo](https://marisancans.github.io/claude-live/)** (no install needed)
+Real-time visualization of Claude Code activity as a 3D orbital system.
 
 ## Install
 
@@ -36,14 +36,14 @@ If you have the plugin installed, you can also use the slash command inside Clau
 
 The server watches Claude Code's session transcript files (`~/.claude/projects/`) and tails them in real time. No hooks or additional configuration required.
 
-Sessions appear as star systems. Files orbit as planets -- the more a file is touched, the larger it grows. Tool calls animate between nodes:
+Each Claude Code session appears as an orbiting star system. Every tool call creates a node — the more events a session generates, the larger it grows. Tool calls trigger visual effects:
 
-- **Read / Grep / Glob** -- scanner at the file, data streams back to core
-- **Edit / Write** -- ink beam fires from core to file
-- **Bash** -- terminal window appears at the node
-- **Subagents** -- satellite systems tethered to their parent
+- **Read / Grep / Glob** — scan effect radiates from the node
+- **Edit / Write** — energy beam fires from core to node
+- **Bash** — spark burst at the node
+- **Subagents** — child systems orbit their parent session
 
-Multiple Claude sessions show as separate star systems. Prompts fly inward, responses fly outward. Context compaction triggers an implosion/rebirth effect.
+Multiple Claude sessions show as separate star systems. Prompts pulse outward, context compaction triggers an implosion/rebirth effect.
 
 ## Server Endpoints
 
