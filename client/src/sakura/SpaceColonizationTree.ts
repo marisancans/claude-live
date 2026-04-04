@@ -351,11 +351,11 @@ export class SpaceColonizationTree {
   }
 
   private derivePersonality(): TreePersonality {
-    const leanAngle     = this.rng.random(0.44, 0.05)       // 3–25° in radians
+    const leanAngle     = this.rng.random(0.18, 0.03)       // 2–10° in radians
     const leanDirection = this.rng.random(Math.PI * 2, 0)
-    const gnarliness    = this.rng.random(2.5, 0.8)
-    const windDriftX    = (this.rng.random() - 0.5) * 0.12
-    const windDriftZ    = (this.rng.random() - 0.5) * 0.12
+    const gnarliness    = this.rng.random(0.9, 0.3)
+    const windDriftX    = (this.rng.random() - 0.5) * 0.04
+    const windDriftZ    = (this.rng.random() - 0.5) * 0.04
 
     // 2–4 hotspot cluster centers in base-dome world space (envelopeScale=1)
     const hotspotCount = 2 + Math.floor(this.rng.random() * 3)
