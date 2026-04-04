@@ -14,7 +14,9 @@ import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
 import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
 import { generateTree, SAKURA_PARAMS } from './EzTreeGenerator'
+import type { TreeParams } from './EzTreeGenerator'
 import { PetalSystem } from './PetalSystem'
+import { FlowerSystem } from './FlowerSystem'
 import { SignalSystem } from './SignalSystem'
 import { WindField } from './WindField'
 
@@ -51,7 +53,16 @@ export class SakuraApp {
   private colonies = new Map<string, ColonyVisual>()
   private windField = new WindField()
   private petalSystem = new PetalSystem()
+  private flowerSystem = new FlowerSystem()
   private signalSystem: SignalSystem
+
+  // Sakura tree — generated via EZ-Tree algorithm, flowers placed by events
+  private treeMesh: THREE.Mesh
+  private barkMaterial: THREE.MeshStandardMaterial
+  private leafPositions: THREE.Vector3[] = []
+  private leafDirections: THREE.Vector3[] = []
+  private eventCount = 0
+  private currentGrowthStage = -1
 
   private atmosphere: THREE.Points
   private sky: THREE.Mesh
@@ -227,11 +238,25 @@ export class SakuraApp {
       this.scene.add(fogPlane)
     }
 
-    // Add petal system to scene
+    // Add petal system + flower system to scene
     this.scene.add(this.petalSystem.mesh)
     this.scene.add(this.petalSystem.glowGroup)
+    this.scene.add(this.flowerSystem.mesh)
 
     this.signalSystem = new SignalSystem(this.petalSystem, this.windField)
+
+    // Sakura tree — EZ-Tree algorithm with Ash-based preset
+    this.barkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x6b4226,
+      roughness: 0.85,
+      metalness: 0.0,
+      flatShading: false,
+    })
+    this.treeMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.barkMaterial)
+    this.treeMesh.castShadow = true
+    this.scene.add(this.treeMesh)
+    // Generate initial full tree
+    this.regenerateTree()
 
     this.resizeHandler = () => this.onResize()
     window.addEventListener('resize', this.resizeHandler)
@@ -317,25 +342,22 @@ export class SakuraApp {
     const withTrees = projects.filter(p => p.tree?.tree)
     const seen = new Set<string>()
 
-    withTrees.forEach((projectState, index) => {
+    // Colonies just hold layout data for SignalSystem — the visible tree is the event tree
+    for (const projectState of withTrees) {
       const tree = projectState.tree!
       const signature = buildSignature(tree)
       let colony = this.colonies.get(projectState.project.id)
 
       if (!colony || colony.signature !== signature) {
         if (colony) this.disposeColony(colony)
-        const skipTrunk = index > 0 // only first colony gets the trunk
-        colony = this.createColony(projectState, signature, skipTrunk)
+        colony = this.createColony(projectState, signature)
         this.colonies.set(projectState.project.id, colony)
-        this.scene.add(colony.group)
       }
-
-      colony.group.position.set(0, 0, 0)
 
       colony.activity = projectState.activity
       colony.rootPath = tree.rootPath
       seen.add(projectState.project.id)
-    })
+    }
 
     for (const [id, colony] of this.colonies) {
       if (seen.has(id)) continue
@@ -344,47 +366,13 @@ export class SakuraApp {
     }
   }
 
-  private createColony(projectState: ProjectVisualState, signature: string, skipTrunk = false): ColonyVisual {
+  private createColony(projectState: ProjectVisualState, signature: string): ColonyVisual {
     const tree = projectState.tree!
     const layout = buildTreeLayout(tree.tree!, projectState.project.id)
-    const group = new THREE.Group()
+    const group = new THREE.Group() // empty — visible tree is the global eventTree mesh
 
-    // Generate tree using walk-forward algorithm (EZ-Tree style)
-    const treeParams = { ...SAKURA_PARAMS, seed: hashUnit(projectState.project.id) * 100000 | 0 }
-    if (skipTrunk) {
-      // Second colony: different seed, shorter trunk, fewer children
-      treeParams.lengthPerLevel = [12, 14, 8, 4]
-      treeParams.childrenPerLevel = [4, 3, 2, 0]
-    }
-    const { branchGeometry, leafPositions, leafDirections } = generateTree(treeParams)
-
-    // Bark material for the generated tree
-    const barkMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6b4226,
-      roughness: 0.85,
-      metalness: 0.0,
-      flatShading: false,
-    })
-    const branchMesh = new THREE.Mesh(branchGeometry, barkMaterial)
-    branchMesh.castShadow = true
-    group.add(branchMesh)
-
-    // Place petals at leaf positions from the generator
-    const petalInstanceIds: number[] = []
-    for (let i = 0; i < leafPositions.length; i++) {
-      const anchor = {
-        path: `leaf:${i}`,
-        position: leafPositions[i],
-        direction: leafDirections[i],
-        depth: 3,
-        scale: 0.6 + Math.random() * 0.4,
-      }
-      const ids = this.petalSystem.allocateCluster(anchor)
-      petalInstanceIds.push(...ids)
-    }
-
-    // Keep old layout for event routing (SignalSystem still uses it)
-    const { branches, junctions } = buildBranches(layout, new THREE.Group()) // hidden, just for data
+    // Old layout + branches for SignalSystem event routing
+    const { branches, junctions } = buildBranches(layout, new THREE.Group())
 
     return {
       id: projectState.project.id,
@@ -395,7 +383,7 @@ export class SakuraApp {
       layout,
       branches,
       junctions,
-      petalInstanceIds,
+      petalInstanceIds: [],
       heat: 0.12,
       contamination: 0,
       boost: 0,
@@ -403,11 +391,66 @@ export class SakuraApp {
     }
   }
 
+  /** Growth stages: more events = more branches on the tree */
+  private static GROWTH_STAGES = [
+    { threshold: 0,   children: [3, 2, 0, 0] },   // sapling
+    { threshold: 15,  children: [5, 3, 2, 0] },   // young tree
+    { threshold: 40,  children: [7, 4, 3, 0] },   // growing
+    { threshold: 100, children: [8, 5, 4, 0] },   // full tree
+  ]
+
+  private regenerateTree() {
+    // Determine growth stage from event count
+    let stage = 0
+    for (let i = SakuraApp.GROWTH_STAGES.length - 1; i >= 0; i--) {
+      if (this.eventCount >= SakuraApp.GROWTH_STAGES[i].threshold) { stage = i; break }
+    }
+    if (stage === this.currentGrowthStage) return
+    this.currentGrowthStage = stage
+
+    const children = SakuraApp.GROWTH_STAGES[stage].children
+    const params: TreeParams = {
+      ...SAKURA_PARAMS,
+      childrenPerLevel: children,
+      seed: 23399,
+    }
+
+    const { branchGeometry, leafPositions, leafDirections } = generateTree(params)
+    const oldGeo = this.treeMesh.geometry
+    this.treeMesh.geometry = branchGeometry
+    oldGeo.dispose()
+
+    this.leafPositions = leafPositions
+    this.leafDirections = leafDirections
+  }
+
   applyEvent(event: RawEvent) {
-    if (!event.cwd) return
-    const colony = this.colonies.get(event.cwd)
-    if (!colony) return
-    this.signalSystem.route(event, colony)
+    this.eventCount++
+
+    // Check if tree needs to grow to next stage
+    this.regenerateTree()
+
+    // Place flowers at random leaf positions — each event IS a flower cluster
+    if (this.leafPositions.length > 0) {
+      const count = 2 + Math.floor(Math.random() * 3) // 2-4 clusters per event
+      for (let c = 0; c < count; c++) {
+        const idx = Math.floor(Math.random() * this.leafPositions.length)
+        this.flowerSystem.addCluster(
+          this.leafPositions[idx],
+          this.leafDirections[idx],
+          15 + Math.floor(Math.random() * 10), // 15-24 flowers per cluster
+        )
+      }
+    }
+
+    // Route to colony for SignalSystem effects
+    if (event.cwd) {
+      const colony = this.colonies.get(event.cwd)
+      if (colony) {
+        colony.boost = Math.min(1.4, colony.boost + 0.25)
+        this.signalSystem.route(event, colony)
+      }
+    }
   }
 
   tick(dt: number) {
@@ -460,7 +503,6 @@ export class SakuraApp {
   }
 
   private disposeColony(colony: ColonyVisual) {
-    this.scene.remove(colony.group)
     disposeBranches(colony.branches, colony.junctions)
   }
 
@@ -472,6 +514,11 @@ export class SakuraApp {
     this.petalSystem.dispose()
     this.scene.remove(this.petalSystem.mesh)
     this.scene.remove(this.petalSystem.glowGroup)
+    this.scene.remove(this.flowerSystem.mesh)
+    this.flowerSystem.dispose()
+    this.scene.remove(this.treeMesh)
+    this.treeMesh.geometry.dispose()
+    this.barkMaterial.dispose()
     ;(this.atmosphere.geometry as THREE.BufferGeometry).dispose()
     ;(this.atmosphere.material as THREE.PointsMaterial).dispose()
     this.sky.geometry.dispose()

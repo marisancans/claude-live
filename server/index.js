@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { homedir } from 'os'
 import { SessionScanner } from './session-scanner.js'
+import { buildProjectTree, listActiveProjects } from './project-tree.js'
+import { readProjectHistoryFromDisk } from './history-reader.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version
@@ -31,6 +33,14 @@ const clients = new Set()
 const eventHistory = [] // all events seen since server start
 const MAX_HISTORY = 5000
 
+function filterHistory(events, { sessionId, projectId }) {
+  return events.filter(event => {
+    if (sessionId && event.session_id !== sessionId) return false
+    if (projectId && resolve(event.cwd || '') !== projectId) return false
+    return true
+  })
+}
+
 function broadcast(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`
   for (const res of clients) {
@@ -44,8 +54,11 @@ function broadcast(data) {
 }
 
 const server = createServer((req, res) => {
+  const requestUrl = new URL(req.url || '/', 'http://localhost')
+  const pathname = requestUrl.pathname
+
   // POST /hook — used by debug panel to inject test events
-  if (req.method === 'POST' && req.url === '/hook') {
+  if (req.method === 'POST' && pathname === '/hook') {
     let body = ''
     req.on('data', c => body += c)
     req.on('end', () => {
@@ -64,19 +77,57 @@ const server = createServer((req, res) => {
   }
 
   // GET /health — health check
-  if (req.method === 'GET' && req.url === '/health') {
+  if (req.method === 'GET' && pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: true, version: VERSION, clients: clients.size, port: PORT }))
     return
   }
 
+  if (req.method === 'GET' && pathname === '/api/projects') {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ projects: listActiveProjects(eventHistory) }))
+    return
+  }
+
+  if (req.method === 'GET' && pathname === '/api/project-tree') {
+    const projects = listActiveProjects(eventHistory)
+    const projectId = requestUrl.searchParams.get('project')
+    if (!projectId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'missing project query parameter' }))
+      return
+    }
+
+    const normalizedId = resolve(projectId)
+    const project = projects.find(item => resolve(item.root) === normalizedId)
+    if (!project) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'project not active or unavailable' }))
+      return
+    }
+
+    try {
+      const tree = buildProjectTree(project.root)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(tree))
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'failed to build tree' }))
+    }
+    return
+  }
+
   // GET /api/history?session=ID — events for a specific session since last compact
-  if (req.method === 'GET' && req.url.startsWith('/api/history')) {
-    const url = new URL(req.url, 'http://localhost')
-    const sessionFilter = url.searchParams.get('session')
-    let events = sessionFilter
-      ? eventHistory.filter(e => e.session_id === sessionFilter)
+  if (req.method === 'GET' && pathname === '/api/history') {
+    const sessionFilter = requestUrl.searchParams.get('session')
+    const projectFilter = requestUrl.searchParams.get('project')
+    const persisted = requestUrl.searchParams.get('persisted') === '1'
+    const normalizedProject = projectFilter ? resolve(projectFilter) : null
+    let events = persisted && normalizedProject
+      ? readProjectHistoryFromDisk(PROJECTS_DIR, normalizedProject)
       : eventHistory
+
+    events = filterHistory(events, { sessionId: sessionFilter, projectId: normalizedProject })
     // Only return events since the last PostCompact — history before that is irrelevant
     let lastCompact = -1
     for (let i = events.length - 1; i >= 0; i--) {
@@ -89,7 +140,7 @@ const server = createServer((req, res) => {
   }
 
   // GET /events — SSE stream
-  if (req.method === 'GET' && req.url === '/events') {
+  if (req.method === 'GET' && pathname === '/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -105,7 +156,7 @@ const server = createServer((req, res) => {
   }
 
   // Static files
-  const urlPath = new URL(req.url, 'http://localhost').pathname
+  const urlPath = pathname
   let filePath = join(DIST, urlPath === '/' ? 'index.html' : urlPath)
   if (!resolve(filePath).startsWith(resolve(DIST) + sep) && resolve(filePath) !== resolve(DIST)) {
     filePath = join(DIST, 'index.html')

@@ -22,13 +22,17 @@ export class TranscriptParser {
 
     const { sessionId, message } = parsed;
     const { role, model, content } = message;
+    const cwd = typeof parsed.cwd === 'string' && parsed.cwd ? parsed.cwd : null;
+    const timestamp = this._parseTimestamp(parsed.timestamp);
 
     if (role === 'assistant') {
       if (!this.sessionsSeen.has(sessionId) && model) {
         this.sessionsSeen.add(sessionId);
         this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
           hook_event_name: 'SessionStart',
           model,
+          cwd,
         }));
       }
     }
@@ -38,8 +42,10 @@ export class TranscriptParser {
     if (role === 'user' && typeof content === 'string') {
       if (!this._isSystemContent(content)) {
         this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
           hook_event_name: 'UserPromptSubmit',
           prompt: content,
+          cwd,
         }));
       }
       return;
@@ -49,14 +55,14 @@ export class TranscriptParser {
 
     for (const block of content) {
       if (block.type === 'tool_use') {
-        this._handleToolUse(sessionId, block);
+        this._handleToolUse(sessionId, block, cwd, timestamp);
       } else if (block.type === 'tool_result') {
-        this._handleToolResult(sessionId, block);
+        this._handleToolResult(sessionId, block, cwd, timestamp);
       }
     }
   }
 
-  _handleToolUse(sessionId, block) {
+  _handleToolUse(sessionId, block, cwd, timestamp) {
     const { name, id, input } = block;
     if (this.seenToolUseIds.has(id)) return;
     this.seenToolUseIds.add(id);
@@ -64,24 +70,28 @@ export class TranscriptParser {
     this.pendingToolCalls.set(id, { name, input });
 
     this.onEvent(this._makeEvent(sessionId, {
+      timestamp,
       hook_event_name: 'PreToolUse',
       tool_name: name,
       tool_use_id: id,
       tool_input: input || null,
+      cwd,
     }));
 
     if (name === 'Agent' || name === 'Task') {
       this.onEvent(this._makeEvent(sessionId, {
+        timestamp,
         hook_event_name: 'SubagentStart',
         tool_name: name,
         tool_use_id: id,
         tool_input: input || null,
         agent_type: (input && (input.subagent_type || input.description)) || null,
+        cwd,
       }));
     }
   }
 
-  _handleToolResult(sessionId, block) {
+  _handleToolResult(sessionId, block, cwd, timestamp) {
     const { tool_use_id, content } = block;
     const pending = this.pendingToolCalls.get(tool_use_id);
     if (!pending) return;
@@ -104,10 +114,12 @@ export class TranscriptParser {
     }
 
     this.onEvent(this._makeEvent(sessionId, {
+      timestamp,
       hook_event_name: 'PostToolUse',
       tool_name: pending.name,
       tool_use_id,
       tool_response: toolResponse,
+      cwd,
     }));
   }
 
@@ -120,6 +132,15 @@ export class TranscriptParser {
       t.startsWith('<ide_') ||
       t.startsWith('This session is being continued') ||
       t.startsWith('<local-command-stdout');
+  }
+
+  _parseTimestamp(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return Date.now();
   }
 
   _makeEvent(sessionId, overrides) {

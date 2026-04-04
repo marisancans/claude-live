@@ -139,7 +139,8 @@ export interface ColonyVisual {
   contamination: number
   boost: number
   idleOffset: number
-  treeBuilder?: any  // IncrementalTreeBuilder instance
+  treeBuilder?: any  // IncrementalTreeBuilder instance (legacy)
+  pathGenerator?: import('./PathTreeGenerator').PathTreeGenerator
 }
 
 // --- Debug panel ---

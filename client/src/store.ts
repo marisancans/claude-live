@@ -15,27 +15,27 @@ function radialJitter(key: string): number {
 const MAX_CLUSTERS = 6
 
 const TOOL_COLOR_HEX: Record<string, string> = {
-  Read:         '#4ade80',
-  Edit:         '#60a5fa',
-  Write:        '#60a5fa',
-  Bash:         '#f59e0b',
-  Grep:         '#a78bfa',
-  Glob:         '#a78bfa',
-  WebFetch:     '#f472b6',
-  Stop:         '#888888',
+  Read: '#4ade80',
+  Edit: '#60a5fa',
+  Write: '#60a5fa',
+  Bash: '#f59e0b',
+  Grep: '#a78bfa',
+  Glob: '#a78bfa',
+  WebFetch: '#f472b6',
+  Stop: '#888888',
   Notification: '#34d399',
 }
 const DEFAULT_HEX = '#555555'
 
 // Desaturate toward white — same formula as mockup
 function desaturate(hex: string): string {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-  const mr = Math.round(r*0.3 + 190*0.7), mg = Math.round(g*0.3 + 190*0.7), mb = Math.round(b*0.3 + 190*0.7)
-  return `#${mr.toString(16).padStart(2,'0')}${mg.toString(16).padStart(2,'0')}${mb.toString(16).padStart(2,'0')}`
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16)
+  const mr = Math.round(r * 0.3 + 190 * 0.7), mg = Math.round(g * 0.3 + 190 * 0.7), mb = Math.round(b * 0.3 + 190 * 0.7)
+  return `#${mr.toString(16).padStart(2, '0')}${mg.toString(16).padStart(2, '0')}${mb.toString(16).padStart(2, '0')}`
 }
 
 function hexToInt(hex: string): number {
-  return parseInt(hex.replace('#',''), 16)
+  return parseInt(hex.replace('#', ''), 16)
 }
 
 
@@ -268,7 +268,7 @@ export function createStore() {
   const buffer: RawEvent[] = []
   const sessions = new Map<string, Cluster>()
   const pendingTimings = new Map<string, number>()  // tool_use_id → timestamp
-  const pendingInputs  = new Map<string, Record<string, unknown> | null>()  // tool_use_id → tool_input
+  const pendingInputs = new Map<string, Record<string, unknown> | null>()  // tool_use_id → tool_input
   function recomputeAges() {
     const lastIndex = new Map<string, Map<string, number>>()
     for (let i = 0; i < buffer.length; i++) {
@@ -358,13 +358,13 @@ export function createStore() {
       }
       // Per-ring speed jitter (±20%) — unique to this cluster, shared by all nodes on the ring
       const rj = radialJitter(event.session_id)
-      ;(c as any).ringSpeedJitter = rj
-      ;(c as any).ringSpeeds = [] as number[]
+        ; (c as any).ringSpeedJitter = rj
+        ; (c as any).ringSpeeds = [] as number[]
       sessions.set(event.session_id, c)
     }
 
     const cluster = sessions.get(event.session_id)!
-    ;(cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
+      ; (cluster as any).eventCount = ((cluster as any).eventCount || 0) + 1
 
     // Capture/update model from any event that carries it
     if (event.model && event.model !== (cluster as any).model) {
@@ -485,7 +485,7 @@ export function createStore() {
 
     // UserPromptSubmit: pulse core, let EventProcessor trigger the snake animation
     if (event.hook_event_name === 'UserPromptSubmit') {
-      ;(cluster as any).coreAct = 1.0
+      ; (cluster as any).coreAct = 1.0
       recomputeAges()
       if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
@@ -494,7 +494,7 @@ export function createStore() {
     // ConfigChange: update model, pulse core
     if (event.hook_event_name === 'ConfigChange') {
       if (event.model) (cluster as any).model = event.model
-      ;(cluster as any).coreAct = 1.0
+        ; (cluster as any).coreAct = 1.0
       recomputeAges()
       if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
@@ -504,7 +504,7 @@ export function createStore() {
     if (event.hook_event_name === 'SessionStart') {
       if (event.model) (cluster as any).model = event.model
       if (event.source) (cluster as any).source = event.source
-      ;(cluster as any).coreAct = 1.0
+        ; (cluster as any).coreAct = 1.0
       recomputeAges()
       if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
@@ -512,8 +512,8 @@ export function createStore() {
 
     // PreCompact: implosion animation
     if (event.hook_event_name === 'PreCompact') {
-      ;(cluster as any).coreAct = 1.0
-      ;(cluster as any).compacting = 1.0
+      ; (cluster as any).coreAct = 1.0
+        ; (cluster as any).compacting = 1.0
       recomputeAges()
       if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
@@ -521,9 +521,9 @@ export function createStore() {
 
     // PostCompact: rebirth burst + reset context counter
     if (event.hook_event_name === 'PostCompact') {
-      ;(cluster as any).coreAct = 1.0
-      ;(cluster as any).compacted = 1.0
-      ;(cluster as any).eventCount = Math.floor(((cluster as any).eventCount || 0) * 0.25)
+      ; (cluster as any).coreAct = 1.0
+        ; (cluster as any).compacted = 1.0
+        ; (cluster as any).eventCount = Math.floor(((cluster as any).eventCount || 0) * 0.25)
       recomputeAges()
       if (!skipAnimations) EventProcessor.process(event, cluster, null)
       return
@@ -548,7 +548,7 @@ export function createStore() {
       const startTs = pendingTimings.get(event.tool_use_id)
       if (startTs) {
         const ms = event.timestamp - startTs
-        latencyStr = ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed(1)}s`
+        latencyStr = ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
         pendingTimings.delete(event.tool_use_id)
       }
       if (!event.tool_input && pendingInputs.has(event.tool_use_id)) {
@@ -660,8 +660,8 @@ export function createStore() {
       } else if (event.hook_event_name === 'PostToolUse') {
         // Refresh impact visual; enrich label with response data
         const tool = event.tool_name || ''
-        if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
-        else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
+        if (['Read', 'Grep', 'Glob'].includes(tool)) node.impactType = 'scan'
+        else if (['Edit', 'Write'].includes(tool)) node.impactType = 'morph'
         else if (tool === 'Bash') node.impactType = 'spark'
         else node.impactType = 'scan'
         node.impactTime = 1.0
@@ -673,8 +673,8 @@ export function createStore() {
         }
       } else {
         const tool = event.tool_name || event.hook_event_name || ''
-        if (['Read','Grep','Glob'].includes(tool)) node.impactType = 'scan'
-        else if (['Edit','Write'].includes(tool)) node.impactType = 'morph'
+        if (['Read', 'Grep', 'Glob'].includes(tool)) node.impactType = 'scan'
+        else if (['Edit', 'Write'].includes(tool)) node.impactType = 'morph'
         else if (tool === 'Bash') node.impactType = 'spark'
         else if (tool === 'Notification') node.impactType = 'ping'
         else if (tool === 'Stop') node.impactType = 'fade'

@@ -80,23 +80,25 @@ export const OAK_LARGE_PARAMS: TreeParams = {
   forceStrength: 0.025,
 }
 
-// --- Cherry blossom — based on Oak Large but with sakura tweaks ---
+// --- Sakura — based on EZ-Tree Ash Medium preset for wide spreading canopy ---
+// Key: NEGATIVE forceStrength makes branches droop/spread outward (not grow straight up)
+// Wide angles at level 2 (65°) create the dome silhouette
 export const SAKURA_PARAMS: TreeParams = {
   seed: 23399,
   levels: 3,
-  trunkLength: 47.7,
-  lengthPerLevel: [47.7, 29.39, 17.62, 7.16],
-  radiusPerLevel: [3, 0.69, 0.69, 1.19],
-  taperPerLevel: [0.73, 0.42, 0.69, 0.75],
-  gnarlPerLevel: [0.04, 0.16, 0.06, 0.09],
-  twistPerLevel: [0.23, 0.42, 0, 0],
-  childrenPerLevel: [9, 5, 3, 0],
-  anglePerLevel: [0, 54, 43, 32],
-  sectionsPerLevel: [16, 9, 8, 3],
-  segmentsPerLevel: [12, 5, 3, 3],
-  startPerLevel: [0, 0.35, 0.1, 0],
+  trunkLength: 35,
+  lengthPerLevel: [35, 25, 12, 5],
+  radiusPerLevel: [2, 0.63, 0.76, 0.7],
+  taperPerLevel: [0.7, 0.7, 0.7, 0.7],
+  gnarlPerLevel: [0.03, 0.2, 0.15, 0.09],
+  twistPerLevel: [0.09, -0.07, 0, 0],
+  childrenPerLevel: [8, 5, 4, 0],
+  anglePerLevel: [0, 50, 65, 55],
+  sectionsPerLevel: [12, 8, 6, 4],
+  segmentsPerLevel: [12, 6, 4, 3],
+  startPerLevel: [0, 0.25, 0.3, 0],
   forceDirection: new THREE.Vector3(0, 1, 0),
-  forceStrength: 0.025,
+  forceStrength: -0.03,
 }
 
 // --- Generator ---

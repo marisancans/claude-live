@@ -104,7 +104,7 @@ export class ThreeApp {
     const onToolUsed = (e: { sessionId: string; tool: string; colorHex: string; nodeKey?: string; agentId?: string | null; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
-      
+
       // Pulse the subagent if this tool was called by an agent, else pulse core
       if (e.agentId && sv.subagents.has(e.agentId)) {
         sv.subagents.get(e.agentId)!.triggerActivity()
@@ -277,7 +277,7 @@ export class ThreeApp {
         }
         console.log(`[Three] Session ${sessionId.slice(0, 8)}: ${toSpawn} history stars from ${events.length} events`)
       })
-      .catch(() => {})
+      .catch(() => { })
   }
 
   setAutofit(enabled: boolean) {

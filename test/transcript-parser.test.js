@@ -14,6 +14,7 @@ describe('TranscriptParser', () => {
 
   it('emits PreToolUse for tool_use blocks', () => {
     parser.processLine(JSON.stringify({
+      cwd: '/tmp/project',
       sessionId: 's1', type: 'assistant', uuid: 'a1',
       message: { role: 'assistant', model: 'm', content: [
         { type: 'tool_use', name: 'Read', id: 'tu1', input: { file_path: '/tmp/x' } }
@@ -26,6 +27,7 @@ describe('TranscriptParser', () => {
     expect(pre.tool_input).toEqual({ file_path: '/tmp/x' });
     expect(pre.source).toBe('jsonl');
     expect(pre.session_id).toBe('s1');
+    expect(pre.cwd).toBe('/tmp/project');
   });
 
   it('emits multiple PreToolUse for parallel tool calls', () => {
@@ -177,6 +179,7 @@ describe('TranscriptParser', () => {
 
   it('emits SessionStart with model on first assistant message', () => {
     parser.processLine(JSON.stringify({
+      cwd: '/tmp/demo',
       sessionId: 's1', type: 'assistant', uuid: 'a1',
       message: { role: 'assistant', model: 'claude-sonnet-4-20250514', content: [
         { type: 'text', text: 'hi' }
@@ -185,6 +188,7 @@ describe('TranscriptParser', () => {
     const ss = events.find(e => e.hook_event_name === 'SessionStart');
     expect(ss).toBeDefined();
     expect(ss.model).toBe('claude-sonnet-4-20250514');
+    expect(ss.cwd).toBe('/tmp/demo');
   });
 
   it('does not emit duplicate SessionStart', () => {
