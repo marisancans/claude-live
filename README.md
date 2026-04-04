@@ -8,11 +8,21 @@ Real-time visualization of Claude Code activity as a 3D orbital system.
 
 ## Install
 
+### Claude Code Marketplace (recommended)
+
+Search for **claude-live** in the Claude Code marketplace, or run inside Claude Code:
+
+```
+/plugins install marisancans/claude-live
+```
+
+This gives you the `/claude-live:server` slash command to manage the server from within Claude Code.
+
+### npm (standalone)
+
 ```bash
 npm install -g claude-live
 ```
-
-No additional configuration needed. The server automatically detects active Claude Code sessions by watching `~/.claude/projects/`.
 
 ## Use
 
@@ -23,7 +33,7 @@ claude-live start    # Start server in background
 
 Open http://localhost:43451 in your browser. Sessions appear automatically as you use Claude Code.
 
-If you have the plugin installed, you can also use the slash command inside Claude Code:
+With the plugin installed, manage the server from inside Claude Code:
 
 ```
 /claude-live:server          # Check status, auto-start if needed
