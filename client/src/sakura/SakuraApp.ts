@@ -14,9 +14,11 @@ import type { ColonyVisual, ProjectActivity, ProjectVisualState } from './types'
 import { buildTreeLayout, layoutRootPath } from './TreeBuilder'
 import { buildBranches, disposeBranches, updateBranchUniforms } from './BranchRenderer'
 import { SpaceColonizationTree } from './SpaceColonizationTree'
+import type { TreeNode } from './SpaceColonizationTree'
 import { PetalSystem } from './PetalSystem'
 import { FlowerSystem } from './FlowerSystem'
 import { SignalSystem } from './SignalSystem'
+import { SapPulseSystem } from './SapPulse'
 import { WindField } from './WindField'
 import barkVertSource from './shaders/bark.vert.glsl?raw'
 import barkFragSource from './shaders/bark.frag.glsl?raw'
@@ -31,6 +33,22 @@ function hashUnit(value: string): number {
 }
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)) }
+
+const SAP_COLORS: Record<string, string> = {
+  Read: '#d4a574', Edit: '#7ec8e3', Write: '#7dd3fc', Bash: '#f59e0b',
+  Grep: '#c084fc', Glob: '#a78bfa', WebFetch: '#fb7185',
+}
+function sapColor(event: RawEvent): string {
+  return SAP_COLORS[event.tool_name || ''] || '#e8a060'
+}
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a.slice(0, n)
+}
 
 // --- Bark normal map (shared singleton, same as BranchRenderer) ---
 function createBarkNormalMap(): THREE.CanvasTexture {
@@ -108,6 +126,7 @@ export class SakuraApp {
   private petalSystem = new PetalSystem()
   private flowerSystem = new FlowerSystem()
   private signalSystem: SignalSystem
+  private sapPulseSystem: SapPulseSystem
 
   // Sakura tree — space colonization driven growth
   private tree: SpaceColonizationTree
@@ -293,6 +312,7 @@ export class SakuraApp {
     this.scene.add(this.petalSystem.glowGroup)
 
     this.signalSystem = new SignalSystem(this.petalSystem, this.windField)
+    this.sapPulseSystem = new SapPulseSystem(this.scene)
 
     // Sakura tree — dynamic incremental growth (no pre-computed topology)
     this.tree = new SpaceColonizationTree(23399)
@@ -327,20 +347,6 @@ export class SakuraApp {
     this.treeMesh.castShadow = true
     this.scene.add(this.treeMesh)
     this.scene.add(this.flowerSystem.mesh)
-
-    // Scatter initial flowers densely across the pre-grown canopy
-    // Shuffle so flowers spread evenly if we hit the instance cap
-    const flowerPositions = this.tree.getTipFlowerPositions()
-    for (let i = flowerPositions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[flowerPositions[i], flowerPositions[j]] = [flowerPositions[j], flowerPositions[i]]
-    }
-    for (const f of flowerPositions) {
-      const count = f.isTip
-        ? 8 + Math.floor(Math.random() * 10)   // tips: big clusters
-        : 3 + Math.floor(Math.random() * 5)    // interior: smaller fill
-      this.flowerSystem.addCluster(f.pos, f.dir, count)
-    }
 
     this.resizeHandler = () => this.onResize()
     window.addEventListener('resize', this.resizeHandler)
@@ -476,12 +482,35 @@ export class SakuraApp {
   }
 
   applyEvent(event: RawEvent) {
-    // Grow tree: extend all branches + split one + get flower positions
-    const flowers = this.tree.onEvent()
+    // Grow tree: extend all branches + split one + get flower positions + new node IDs
+    const { flowers, newNodeIds } = this.tree.onEvent()
 
-    // Place flowers at every new split point
+    // Place flowers at every new branch point
     for (const f of flowers) {
-      this.flowerSystem.addCluster(f.pos, f.dir, 6 + Math.floor(Math.random() * 8))
+      this.flowerSystem.addCluster(f.pos, f.dir, 5 + Math.floor(Math.random() * 6))
+    }
+
+    // Create sap pulses from root to newly created nodes
+    const color = new THREE.Color(sapColor(event))
+    const ids = newNodeIds.length > 5 ? pickRandom(newNodeIds, 5) : newNodeIds
+    if (ids.length > 0) {
+      for (const nodeId of ids) {
+        const pathIds = this.tree.traceToRoot(nodeId)
+        if (pathIds.length < 2) continue
+        const positions = pathIds
+          .map(id => this.tree.getNode(id))
+          .filter((n): n is TreeNode => n !== undefined)
+          .map(n => n.position.clone())
+        if (positions.length >= 2) {
+          this.sapPulseSystem.createPulse(positions, color)
+        }
+      }
+    } else {
+      // Vertex cap hit — fire a fallback pulse on a random existing branch so events still feel alive
+      const fallback = this.tree.getRandomLeafPath()
+      if (fallback && fallback.length >= 2) {
+        this.sapPulseSystem.createPulse(fallback, color)
+      }
     }
 
     // Route to colony for SignalSystem effects
@@ -494,9 +523,20 @@ export class SakuraApp {
     }
   }
 
+  getTreeStats() {
+    return {
+      nodeCount: this.tree.nodeCount,
+      segmentCount: Math.max(0, this.tree.nodeCount - 1),
+      activeAttractors: this.tree.activeAttractorCount,
+      totalEvents: this.tree.totalEvents,
+      isCapped: this.tree.isCapped,
+    }
+  }
+
   resetGrowth() {
     this.tree.reset()
     this.flowerSystem.reset()
+    this.sapPulseSystem.dispose()
   }
 
   tick(dt: number) {
@@ -538,6 +578,7 @@ export class SakuraApp {
     this.petalSystem.ambientDrift(dt)
 
     // Effects
+    this.sapPulseSystem.tick(dt)
     this.signalSystem.update(dt, this.elapsed)
 
     // Render
@@ -561,6 +602,7 @@ export class SakuraApp {
     window.removeEventListener('resize', this.resizeHandler)
     for (const colony of this.colonies.values()) this.disposeColony(colony)
     this.colonies.clear()
+    this.sapPulseSystem.dispose()
     this.signalSystem.dispose()
     this.petalSystem.dispose()
     this.scene.remove(this.petalSystem.mesh)
