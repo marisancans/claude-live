@@ -9,6 +9,7 @@ import { SpeakerIcon } from './SpeakerIcon'
 import { AutofitIcon } from './AutofitIcon'
 import { EventLog } from './EventLog'
 import { isDemoMode, createDemoSimulator } from './demo'
+import { backendEventSource } from './backend'
 
 const store = createStore()
 
@@ -252,7 +253,6 @@ export function App() {
       return () => stopDemo()
     }
 
-    const eventsUrl = '/events'
     let es: EventSource | null = null
     let cancelled = false
     // Dedup: track recently seen events by tool_use_id or prompt hash to handle
@@ -262,7 +262,7 @@ export function App() {
 
     function connect() {
       if (cancelled) return
-      es = new EventSource(eventsUrl)
+      es = backendEventSource('/events')
 
       es.onopen = () => {
         console.log('[claude-live] SSE connected')

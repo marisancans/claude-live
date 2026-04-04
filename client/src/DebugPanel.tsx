@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { backendFetch, fetchJson } from './backend'
 
 const FILE_PATHS = [
   '/src/App.tsx', '/src/store.ts', '/src/types.ts',
@@ -22,7 +23,7 @@ function genId() {
 }
 
 async function postHook(event: object) {
-  await fetch('/hook', {
+  await backendFetch('/hook', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(event),
@@ -80,9 +81,7 @@ export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props
     setHistoryLoading(true)
     setHistoryError(null)
     try {
-      const res = await fetch('/api/history')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const events = await res.json()
+      const events = await fetchJson<any[]>('/api/history')
       const latest = new Map<string, number>()
       if (Array.isArray(events)) {
         for (const ev of events) {
@@ -109,9 +108,7 @@ export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props
     setHistoryLoadId(id)
     setHistoryError(null)
     try {
-      const res = await fetch(`/api/history?session=${encodeURIComponent(id)}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const events = await res.json()
+      const events = await fetchJson<any[]>(`/api/history?session=${encodeURIComponent(id)}`)
       if (Array.isArray(events)) {
         onLoadHistory?.(id, events)
         setSessionId(id)

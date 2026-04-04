@@ -24,6 +24,11 @@ export function SakuraScene({ projects, latestSignal, resetSignal }: Props) {
     appRef.current = app
     app.syncProjects(projectsRef.current)
 
+    const onVisibilityChange = () => {
+      if (!document.hidden) lastTime = performance.now()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     const tick = () => {
       const now = performance.now()
       const dt = (now - lastTime) / 1000
@@ -35,6 +40,7 @@ export function SakuraScene({ projects, latestSignal, resetSignal }: Props) {
     frameRef.current = requestAnimationFrame(tick)
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
       app.destroy()
       appRef.current = null

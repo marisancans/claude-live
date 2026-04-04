@@ -92,6 +92,7 @@ export function EventLog({ entries }: Props) {
           <div className="elog-hist-header">
             <span className="elog-hist-title">event history</span>
             <span className="elog-hist-count">{entries.length}</span>
+            <button className="elog-hist-close" onClick={() => setHistoryOpen(false)}>×</button>
           </div>
           <div className="elog-hist-scroll">
             {reversedEntries.map(e => renderEntry(e, false))}
