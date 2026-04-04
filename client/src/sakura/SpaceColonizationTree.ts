@@ -368,28 +368,59 @@ export class SpaceColonizationTree {
   }
 
   private scatterAttractors(count: number) {
-    const s = this.envelopeScale
+    const s   = this.envelopeScale
     const rxz = DOME_RADIUS_XZ * s
-    const ry  = DOME_RADIUS_Y * s
-    const cy  = DOME_CENTER_Y * s
-    let added = 0
+    const ry  = DOME_RADIUS_Y  * s
+    const cy  = DOME_CENTER_Y  * s
 
-    while (added < count) {
+    // Lean shear factors (applied to every attractor position)
+    const leanX = Math.sin(this.personality.leanAngle) * Math.cos(this.personality.leanDirection)
+    const leanZ = Math.sin(this.personality.leanAngle) * Math.sin(this.personality.leanDirection)
+
+    const hotspotCount = Math.floor(count * 0.6)
+    const uniformCount = count - hotspotCount
+
+    // --- 60% hotspot-clustered ---
+    let added = 0, attempts = 0
+    const sigma = rxz * 0.3
+    while (added < hotspotCount && attempts < hotspotCount * 30) {
+      attempts++
+      const hs = this.personality.hotspots[Math.floor(this.rng.random() * this.personality.hotspots.length)]
+      const hx = hs.x * s, hy = hs.y * s, hz = hs.z * s
+
+      const x = hx + this.gaussRng() * sigma
+      const y = hy + this.gaussRng() * sigma * 0.5
+      const z = hz + this.gaussRng() * sigma
+
+      const nx = x / rxz, ny = (y - cy) / ry, nz = z / rxz
+      if (nx * nx + ny * ny + nz * nz > 1) continue
+      if (y < 12) continue
+
+      // Apply lean shear
+      const fx = x + (y - cy) * leanX
+      const fz = z + (y - cy) * leanZ
+      this.attractors.push({ position: new THREE.Vector3(fx, y, fz), active: true })
+      added++
+    }
+
+    // --- 40% uniform fill ---
+    let uAdded = 0
+    while (uAdded < uniformCount) {
       const x = (this.rng.random() * 2 - 1) * rxz
       const y = (this.rng.random() * 2 - 1) * ry + cy
       const z = (this.rng.random() * 2 - 1) * rxz
-
-      // Reject if outside ellipsoid
       const nx = x / rxz, ny = (y - cy) / ry, nz = z / rxz
       if (nx * nx + ny * ny + nz * nz > 1) continue
-
-      // Keep canopy above ground
       if (y < 12) continue
 
-      this.attractors.push({ position: new THREE.Vector3(x, y, z), active: true })
-      added++
+      const fx = x + (y - cy) * leanX
+      const fz = z + (y - cy) * leanZ
+      this.attractors.push({ position: new THREE.Vector3(fx, y, fz), active: true })
+      uAdded++
     }
-    this.activeAttractors += count
+
+    // Track active count (added = hotspot successes + uniformCount)
+    this.activeAttractors += added + uAdded
   }
 
   // -----------------------------------------------------------------------
