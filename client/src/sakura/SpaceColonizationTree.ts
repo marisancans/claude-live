@@ -398,6 +398,10 @@ export class SpaceColonizationTree {
 
   private growOneStep(emitFlowers: boolean): { flowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[]; newNodeIds: number[] } {
     this.eventCounter++
+    // Periodic dome expansion so the tree always has new frontier
+    if (this.eventCounter % DOME_EXPAND_INTERVAL === 0) {
+      this.envelopeScale += DOME_EXPAND_RATE
+    }
     const pendingFlowers: { pos: THREE.Vector3; dir: THREE.Vector3 }[] = []
     const newNodeIds: number[] = []
     const result = { flowers: pendingFlowers, newNodeIds }
@@ -448,6 +452,11 @@ export class SpaceColonizationTree {
       newNodeIds.push(trunkNode.id)
       if (emitFlowers && trunkNode.depth >= FLOWER_MIN_DEPTH) {
         pendingFlowers.push({ pos: trunkNode.position.clone(), dir: trunkNode.direction.clone() })
+      }
+      // Refill attractors in trunk phase too (was only in SCA phase before)
+      if (this.activeAttractors < REFILL_THRESHOLD) {
+        this.envelopeScale += 0.12
+        this.scatterAttractors(REFILL_BATCH)
       }
       this.commitGeometry()
       return result
