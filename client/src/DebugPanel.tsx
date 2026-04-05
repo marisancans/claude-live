@@ -159,6 +159,13 @@ export function DebugPanel({ sessionIds, isOpen, onClose, onLoadHistory }: Props
     { label: 'WtCr',    color: '#f0ad4e', fn: () => postHook({ session_id: sessionId, hook_event_name: 'WorktreeCreate', tool_input: { path: '/tmp/wt-test' } }) },
     { label: 'WtRm',    color: '#f0ad4e', fn: () => postHook({ session_id: sessionId, hook_event_name: 'WorktreeRemove', tool_input: { path: '/tmp/wt-test' } }) },
     { label: 'Cfg',     color: '#b8a8d8', fn: () => postHook({ session_id: sessionId, hook_event_name: 'ConfigChange' }) },
+    { label: 'Task',    color: '#d4a574', fn: () => postToolUse('Task', { description: 'test task' }, {}) },
+    { label: 'Skill',   color: '#7dd3fc', fn: () => postToolUse('Skill', { name: 'test-skill' }, {}) },
+    { label: 'TODOw',   color: '#f0ad4e', fn: () => postToolUse('TodoWrite', { file_path: 'TODO.md', content: 'test' }, {}) },
+    { label: 'TODOr',   color: '#f0ad4e', fn: () => postToolUse('TodoRead', { file_path: 'TODO.md' }, { content: 'test' }) },
+    { label: 'TSrch',   color: '#fb7185', fn: () => postToolUse('ToolSearch', { query: 'test' }, { results: [] }) },
+    { label: 'Ask',     color: '#fbbf24', fn: () => postToolUse('AskUserQuestion', { question: 'test?' }, {}) },
+    { label: 'WSrch',   color: '#a78bfa', fn: () => postToolUse('WebSearch', { query: 'test' }, { results: [] }) },
   ]
 
   if (!isOpen) return null
