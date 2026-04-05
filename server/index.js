@@ -77,8 +77,34 @@ const server = createServer((req, res) => {
     req.on('data', c => body += c)
     req.on('end', () => {
       try {
-        const event = JSON.parse(body)
-        if (!event.id) event.id = `hook-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const payload = JSON.parse(body)
+        const event = {
+          id: payload.id || `hook-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          session_id: payload.session_id || 'debug',
+          timestamp: payload.timestamp || Date.now(),
+          hook_event_name: payload.hook_event_name || null,
+          tool_name: payload.tool_name || null,
+          tool_input: payload.tool_input || null,
+          tool_response: payload.tool_response || null,
+          agent_id: payload.agent_id || null,
+          agent_type: payload.agent_type || null,
+          cwd: payload.cwd || null,
+          error: payload.error || null,
+          tool_use_id: payload.tool_use_id || null,
+          prompt: payload.prompt || null,
+          model: payload.model || null,
+          source: 'hook',
+          reason: payload.reason || null,
+          permission_mode: payload.permission_mode || null,
+          is_interrupt: payload.is_interrupt || null,
+          trigger: payload.trigger || null,
+          compact_summary: payload.compact_summary || null,
+          last_assistant_message: payload.last_assistant_message || null,
+          notification_type: payload.notification_type || null,
+          title: payload.title || null,
+          agent_transcript_path: payload.agent_transcript_path || null,
+          memory_type: payload.memory_type || null,
+        }
         broadcast({ type: 'event', data: event })
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end('{"ok":true}')
