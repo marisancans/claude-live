@@ -746,8 +746,9 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 10px;
+  padding: 8px 0 8px 0;
   border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 8px;
 }
 .debug-panel-title {
   font-family: 'Space Mono', monospace;
@@ -814,8 +815,8 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
 
 .debug-tool-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
 }
 .debug-tool-btn {
   background: rgba(255,255,255,0.04);
@@ -823,17 +824,80 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   border-radius: 4px;
   color: var(--tool-color, #888);
   font-family: 'Space Mono', monospace;
-  font-size: 9px;
-  padding: 6px 4px;
+  font-size: 8px;
+  padding: 4px 2px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
   text-align: center;
+  line-height: 1;
 }
 .debug-tool-btn:hover {
   background: color-mix(in srgb, var(--tool-color, #888) 15%, transparent);
   border-color: color-mix(in srgb, var(--tool-color, #888) 40%, transparent);
 }
 .debug-tool-btn:active { opacity: 0.6; }
+
+.debug-history-section {
+  padding: 10px 0 0 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.debug-reload-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #888;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+.debug-reload-btn:hover { color: #ccc; background: rgba(255,255,255,0.1); }
+.debug-reload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.debug-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.debug-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.debug-history-id {
+  font-size: 9px;
+  color: #6a7a9a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-family: 'Space Mono', monospace;
+}
+
+.debug-load-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #888;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+.debug-load-btn:hover { color: #ccc; background: rgba(255,255,255,0.1); }
+.debug-load-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Permission notifications panel */
 .perm-notifications {
@@ -904,12 +968,12 @@ html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #05
   position: fixed;
   top: 24px;
   right: 24px;
-  max-width: 400px;
+  width: 280px;
   max-height: calc(100vh - 48px);
   background: rgba(2, 2, 9, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
   overflow-y: auto;
   z-index: 100;
   font-size: 12px;
