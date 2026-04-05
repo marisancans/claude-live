@@ -454,7 +454,18 @@ export function App() {
         )}
       </div>
 
-      <DebugPanel sessionIds={[...clusters.keys()]} isOpen={debugOpen} onClose={() => setDebugOpen(false)} />
+      <DebugPanel
+        sessionIds={[...clusters.keys()]}
+        isOpen={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        onLoadHistory={(sessionId, events) => {
+          if (Array.isArray(events)) {
+            for (const evt of events) {
+              store.addEvent(evt, false)
+            }
+          }
+        }}
+      />
       <OperationsPanel isOpen={operationsOpen} onClose={() => setOperationsOpen(false)} />
       {/* Sidebar */}
       <div className={`sidebar ${selectedNode ? 'sidebar--open' : ''}`}>
