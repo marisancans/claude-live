@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { fetchJson } from '../backend'
 import type { MutableRefObject } from 'react'
@@ -19,6 +20,33 @@ import { SubagentVisual } from './objects/SubagentVisual'
 import { eventBus } from '../events/EventBus'
 import { TOOL_COLOR_HEX, DEFAULT_HEX } from '../constants'
 import { profileGlob } from './travel/profiles/glob'
+import { HistoryWarpIn } from './effects/HistoryWarpIn'
+import { randomStarPosition } from './helpers'
+
+const ChromaticAberrationShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uOffset: { value: 0.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uOffset;
+    varying vec2 vUv;
+    void main() {
+      vec2 dir = vUv - 0.5;
+      float d = length(dir);
+      float strength = d * d * uOffset;
+      float r = texture2D(tDiffuse, vUv + dir * strength).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv - dir * strength).b;
+      gl_FragColor = vec4(r, g, b, 1.0);
+    }
+  `,
+}
 
 interface SessionVisual {
   group: THREE.Group
@@ -42,6 +70,10 @@ export class ThreeApp {
   private _autofit = true
   private _autoRotate = true
   private _docVisible = !document.hidden
+  private _userZoomDistance: number | null = null
+  private _zoomDamping = 0.08
+  private chromaPass: ShaderPass
+  private activeWarps: HistoryWarpIn[] = []
 
   constructor(container: HTMLElement, clustersRef: MutableRefObject<Map<string, Cluster>>) {
     this.container = container
@@ -92,8 +124,16 @@ export class ThreeApp {
     )
     this.composer.addPass(bloomPass)
 
+    // ── Chromatic aberration — driven by history warp-in, idle at 0 ──
+    this.chromaPass = new ShaderPass(ChromaticAberrationShader)
+    this.chromaPass.uniforms.uOffset.value = 0.0
+    this.composer.addPass(this.chromaPass)
+
     // Force initial matrix computation so first render doesn't fail
     this.scene.updateMatrixWorld(true)
+
+    // ── Zoom tracking — detect mouse wheel to allow zoom override in autofit mode ──
+    this.renderer.domElement.addEventListener('wheel', this.onMouseWheel, { passive: false })
 
     // ── Resize ──
     window.addEventListener('resize', this.onResize)
@@ -239,10 +279,11 @@ export class ThreeApp {
         )
 
         this.scene.add(group)
-        this.sessions.set(id, { group, core, particles, subagents: new Map() })
+        const sessionVisual = { group, core, particles, subagents: new Map<string, SubagentVisual>() }
+        this.sessions.set(id, sessionVisual)
 
-        // Load history for this session
-        this.loadSessionHistory(id, particles)
+        // Load history for this session — animated warp-in
+        this.loadSessionHistory(id, sessionVisual)
       } else {
         const sv = this.sessions.get(id)!
         if ((cluster as any).model) sv.core.setModel((cluster as any).model)
@@ -262,30 +303,34 @@ export class ThreeApp {
   }
 
   /**
-   * Fetch history for a specific session and spawn particles.
-   * Called when a new session appears in syncSessions.
+   * Fetch history for a specific session and spawn warp-in animation.
+   * Stars fly in from deep space with trails, then settle as permanent dots.
    */
-  private loadSessionHistory(sessionId: string, particles: ParticleCloud) {
+  private loadSessionHistory(sessionId: string, sv: SessionVisual) {
     fetchJson<any[]>(`/api/history?session=${encodeURIComponent(sessionId)}`)
       .then((events: any[]) => {
         if (events.length === 0) return
         // Cap at 250, sample evenly if too many
         const toSpawn = Math.min(events.length, 250)
         const step = events.length / toSpawn
+
+        const warpEvents: Array<{ finalPos: THREE.Vector3; color: THREE.Color }> = []
         for (let i = 0; i < toSpawn; i++) {
           const evt = events[Math.floor(i * step)]
           const tool = evt.tool_name || evt.hook_event_name || 'Read'
           const colorHex = TOOL_COLOR_HEX[tool] || DEFAULT_HEX
           const color = new THREE.Color(colorHex)
-          // Place a settled star directly — no travel animation for history
-          // Independent axes with power-law bias so density clumps less near center.
-          const rx = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.4 + Math.random() * 2.1)
-          const ry = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.1 + Math.random() * 0.4)
-          const rz = (Math.random() - 0.5) * 2 * (20 + Math.pow(Math.random(), 0.6) * 120) * (0.4 + Math.random() * 2.1)
-          const pos = new THREE.Vector3(rx, ry, rz)
-          particles.addHistoryStar(pos, color)
+          warpEvents.push({ finalPos: randomStarPosition(), color })
         }
-        console.log(`[Three] Session ${sessionId.slice(0, 8)}: ${toSpawn} history stars from ${events.length} events`)
+
+        const warp = new HistoryWarpIn(warpEvents, (pos, color) => {
+          sv.particles.addHistoryStar(pos, color)
+        })
+        // Add warp group as child of session group so it inherits position
+        sv.group.add(warp.group)
+        this.activeWarps.push(warp)
+
+        console.log(`[Three] Session ${sessionId.slice(0, 8)}: warp-in ${toSpawn} stars from ${events.length} events`)
       })
       .catch(() => { })
   }
@@ -320,7 +365,10 @@ export class ThreeApp {
     const cz = (minZ + maxZ) / 2
     const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ)
     const fov = this.camera.fov * (Math.PI / 180)
-    const dist = Math.max((size / 2) / Math.tan(fov / 2) * 1.3, 80)
+    const baseDist = Math.max((size / 2) / Math.tan(fov / 2) * 1.3, 80)
+
+    // Use user zoom if set, otherwise use calculated distance
+    const dist = this._userZoomDistance !== null ? this._userZoomDistance : baseDist
 
     // Smoothly lerp target and camera distance
     this.controls.target.lerp(new THREE.Vector3(cx, cy, cz), 0.02)
@@ -348,6 +396,22 @@ export class ThreeApp {
       }
     }
 
+    // Tick active warp-in animations and collect max intensity
+    let maxWarpIntensity = 0
+    for (let i = this.activeWarps.length - 1; i >= 0; i--) {
+      const warp = this.activeWarps[i]
+      warp.tick(clampedDt)
+      maxWarpIntensity = Math.max(maxWarpIntensity, warp.warpIntensity)
+      if (warp.done) {
+        warp.group.parent?.remove(warp.group)
+        warp.dispose()
+        this.activeWarps.splice(i, 1)
+      }
+    }
+
+    // Drive chromatic aberration from warp intensity (0 when idle)
+    this.chromaPass.uniforms.uOffset.value = maxWarpIntensity * 0.015
+
     try {
       this.composer.render()
     } catch {
@@ -368,9 +432,28 @@ export class ThreeApp {
     this._docVisible = !document.hidden
   }
 
+  private onMouseWheel = (e: WheelEvent) => {
+    // Only track zoom if autofit is active
+    if (!this._autofit) return
+
+    e.preventDefault()
+
+    // Store current distance from camera to target
+    const currentDist = this.camera.position.distanceTo(this.controls.target)
+    const deltaScale = 1 + (e.deltaY > 0 ? 0.1 : -0.1) // 10% per scroll
+    const newDist = Math.max(
+      this.controls.minDistance,
+      Math.min(this.controls.maxDistance, currentDist * deltaScale)
+    )
+
+    // Set user zoom distance (will be damped toward base distance when content changes)
+    this._userZoomDistance = newDist
+  }
+
   destroy() {
     window.removeEventListener('resize', this.onResize)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
+    this.renderer.domElement.removeEventListener('wheel', this.onMouseWheel)
     for (const unsub of this.eventUnsubs) unsub()
     this.eventUnsubs = []
     for (const sv of this.sessions.values()) {

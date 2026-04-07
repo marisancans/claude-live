@@ -11,6 +11,7 @@ import { TOOL_COLOR_HEX, DEFAULT_HEX } from '../../constants'
 import { buildSpawnParams } from '../travel/profiles/index'
 import { TravelingNode } from '../travel/TravelingNode'
 import type { SpawnParams } from '../travel/types'
+import { randomStarPosition } from '../helpers'
 
 const MAX_STARS = 600
 
@@ -169,10 +170,7 @@ export class ParticleCloud {
     // so settled dots form a wispy cloud rather than a pile at origin
     let starPos = pos.clone()
     if (starPos.length() < 20) {
-      const rx = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 0.6) * 100) * (0.4 + Math.random() * 2.1)
-      const ry = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 0.6) * 100) * (0.1 + Math.random() * 0.4)
-      const rz = (Math.random() - 0.5) * 2 * (15 + Math.pow(Math.random(), 0.6) * 100) * (0.4 + Math.random() * 2.1)
-      starPos = new THREE.Vector3(rx, ry, rz)
+      starPos = randomStarPosition(100)
     }
     this.stars.push({ pos: starPos, col: color.clone() })
     const n = this.stars.length

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Warp-In — Long Trails + Shader</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .replay { position: fixed; bottom: 20px; right: 20px; background: rgba(40,60,120,0.6); border: 1px solid #48a; color: #adf; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 13px; font-family: 'Segoe UI', sans-serif; z-index: 1; }
+  .replay:hover { background: rgba(60,90,180,0.7); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+</head>
+<body>
+<button class="replay" onclick="replay()">Replay</button>
+<script>
+var STAR_COUNT = 300
+var DURATION = 7.0
+var WAVE_COUNT = 5
+var TRAIL_SEGS = 60
+var TOOL_COLORS = [0x4fc3f7,0x81c784,0xffb74d,0xe57373,0xba68c8,0x4dd0e1,0xfff176,0xf48fb1,0xa1887f,0x90a4ae]
+
+function randomColor() { return new THREE.Color(TOOL_COLORS[Math.floor(Math.random() * TOOL_COLORS.length)]) }
+function randomFinalPos() {
+  var rx = (Math.random()-0.5)*2*(20+Math.pow(Math.random(),0.6)*100)*(0.4+Math.random()*2.1)
+  var ry = (Math.random()-0.5)*2*(20+Math.pow(Math.random(),0.6)*100)*(0.1+Math.random()*0.4)
+  var rz = (Math.random()-0.5)*2*(20+Math.pow(Math.random(),0.6)*100)*(0.4+Math.random()*2.1)
+  return new THREE.Vector3(rx, ry, rz)
+}
+function easeOutExpo(t) { return t===1?1:1-Math.pow(2,-10*t) }
+function easeInOutQuad(t) { return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2 }
+
+var W = window.innerWidth, H = window.innerHeight
+var renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setSize(W, H)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.setClearColor(0x010108)
+renderer.autoClear = false
+document.body.appendChild(renderer.domElement)
+
+var scene = new THREE.Scene()
+var camera = new THREE.PerspectiveCamera(60, W/H, 1, 4000)
+camera.position.set(0, 60, 220)
+camera.lookAt(0, 0, 0)
+
+var pivot = new THREE.Group()
+scene.add(pivot)
+
+// ── Core ──
+var icoMat = new THREE.LineBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.5 })
+var ico = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(6, 1)), icoMat)
+pivot.add(ico)
+var icoInMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 })
+var icoIn = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(3.5, 1)), icoInMat)
+pivot.add(icoIn)
+
+var gc = document.createElement('canvas'); gc.width=gc.height=128
+var gx = gc.getContext('2d'), gg = gx.createRadialGradient(64,64,0,64,64,64)
+gg.addColorStop(0,'rgba(80,140,255,0.6)'); gg.addColorStop(0.4,'rgba(40,80,200,0.2)'); gg.addColorStop(1,'rgba(0,0,40,0)')
+gx.fillStyle=gg; gx.fillRect(0,0,128,128)
+var coreMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })
+var coreGlow = new THREE.Sprite(coreMat)
+coreGlow.scale.set(30,30,1)
+pivot.add(coreGlow)
+pivot.add(new THREE.PointLight(0x4488ff, 3, 150, 2))
+
+// ── Render targets ──
+var pxW = Math.floor(W * Math.min(window.devicePixelRatio, 2))
+var pxH = Math.floor(H * Math.min(window.devicePixelRatio, 2))
+var rtScene = new THREE.WebGLRenderTarget(pxW, pxH, { format: THREE.RGBAFormat, type: THREE.HalfFloatType })
+var rtA = new THREE.WebGLRenderTarget(Math.floor(pxW/2), Math.floor(pxH/2), { format: THREE.RGBAFormat, type: THREE.HalfFloatType })
+var rtB = new THREE.WebGLRenderTarget(Math.floor(pxW/2), Math.floor(pxH/2), { format: THREE.RGBAFormat, type: THREE.HalfFloatType })
+// Motion blur accumulation buffer
+var rtAccum = new THREE.WebGLRenderTarget(pxW, pxH, { format: THREE.RGBAFormat, type: THREE.HalfFloatType })
+var rtAccumPrev = new THREE.WebGLRenderTarget(pxW, pxH, { format: THREE.RGBAFormat, type: THREE.HalfFloatType })
+
+var fsGeo = new THREE.PlaneGeometry(2, 2)
+var ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+
+// ── Bloom extract ──
+var bloomExtractMat = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, threshold: { value: 0.15 } },
+  vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+  fragmentShader: [
+    'uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv;',
+    'void main(){vec4 c=texture2D(tDiffuse,vUv);float b=max(c.r,max(c.g,c.b));',
+    'gl_FragColor=c*smoothstep(threshold,threshold+0.25,b);}'
+  ].join('\n')
+})
+var bloomExtractScene = new THREE.Scene()
+bloomExtractScene.add(new THREE.Mesh(fsGeo, bloomExtractMat))
+
+// ── Blur (half-res for perf) ──
+function makeBlurMat(horiz) {
+  return new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(pxW/2, pxH/2) } },
+    vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader: [
+      'uniform sampler2D tDiffuse; uniform vec2 resolution; varying vec2 vUv;',
+      'void main(){',
+      '  vec2 t=1.0/resolution;',
+      '  float w[5]; w[0]=.227027; w[1]=.1945946; w[2]=.1216216; w[3]=.054054; w[4]=.016216;',
+      '  vec4 r=texture2D(tDiffuse,vUv)*w[0];',
+      '  vec2 d=' + (horiz ? 'vec2(t.x,0.)' : 'vec2(0.,t.y)') + ';',
+      '  for(int i=1;i<5;i++){float ww=w[i];',
+      '    r+=texture2D(tDiffuse,vUv+d*float(i)*2.)*ww;',
+      '    r+=texture2D(tDiffuse,vUv-d*float(i)*2.)*ww;}',
+      '  gl_FragColor=r;}'
+    ].join('\n')
+  })
+}
+var blurHMat = makeBlurMat(true), blurVMat = makeBlurMat(false)
+var blurHS = new THREE.Scene(); blurHS.add(new THREE.Mesh(fsGeo, blurHMat))
+var blurVS = new THREE.Scene(); blurVS.add(new THREE.Mesh(fsGeo, blurVMat))
+
+// ── Motion blur / temporal accumulation ──
+var accumMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tCurrent: { value: null },
+    tPrev: { value: null },
+    motionBlur: { value: 0.0 }
+  },
+  vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+  fragmentShader: [
+    'uniform sampler2D tCurrent; uniform sampler2D tPrev; uniform float motionBlur; varying vec2 vUv;',
+    'void main(){',
+    '  vec4 cur = texture2D(tCurrent, vUv);',
+    '  vec4 prev = texture2D(tPrev, vUv);',
+    '  gl_FragColor = mix(cur, max(cur, prev * 0.95), motionBlur);',
+    '}'
+  ].join('\n')
+})
+var accumScene = new THREE.Scene()
+accumScene.add(new THREE.Mesh(fsGeo, accumMat))
+
+// ── Composite: bloom + chromatic aberration + radial warp + anamorphic streaks + vignette ──
+var compositeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tScene: { value: null },
+    tBloom: { value: null },
+    bloomStrength: { value: 1.5 },
+    chromaticAberration: { value: 0.0 },
+    radialWarp: { value: 0.0 },
+    anamorphic: { value: 0.0 },
+    scanlines: { value: 0.0 },
+    time: { value: 0.0 },
+    resolution: { value: new THREE.Vector2(W, H) }
+  },
+  vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+  fragmentShader: [
+    'uniform sampler2D tScene, tBloom;',
+    'uniform float bloomStrength, chromaticAberration, radialWarp, anamorphic, scanlines, time;',
+    'uniform vec2 resolution;',
+    'varying vec2 vUv;',
+    '',
+    'void main(){',
+    '  vec2 uv = vUv;',
+    '  vec2 center = vec2(0.5);',
+    '  vec2 delta = uv - center;',
+    '  float dist = length(delta);',
+    '',
+    '  // Radial warp',
+    '  uv += delta * radialWarp * dist * 1.2;',
+    '',
+    '  // Chromatic aberration — 3-tap radial split',
+    '  float ca = chromaticAberration * dist;',
+    '  vec2 caDir = normalize(delta + 0.0001);',
+    '  float r = texture2D(tScene, uv + caDir * ca * 1.2).r;',
+    '  float g = texture2D(tScene, uv).g;',
+    '  float b = texture2D(tScene, uv - caDir * ca * 1.2).b;',
+    '  vec3 color = vec3(r, g, b);',
+    '',
+    '  // Bloom',
+    '  vec3 bloom = texture2D(tBloom, uv).rgb;',
+    '  color += bloom * bloomStrength;',
+    '',
+    '  // Anamorphic horizontal streaks from bloom',
+    '  if (anamorphic > 0.0) {',
+    '    vec3 streak = vec3(0.0);',
+    '    float total = 0.0;',
+    '    for (float i = -12.0; i <= 12.0; i += 1.0) {',
+    '      float w = exp(-abs(i) * 0.15);',
+    '      streak += texture2D(tBloom, uv + vec2(i / resolution.x * 8.0, 0.0)).rgb * w;',
+    '      total += w;',
+    '    }',
+    '    streak /= total;',
+    '    color += streak * anamorphic;',
+    '  }',
+    '',
+    '  // Scanlines (subtle CRT feel)',
+    '  if (scanlines > 0.0) {',
+    '    float sl = sin(uv.y * resolution.y * 1.5) * 0.5 + 0.5;',
+    '    color *= 1.0 - scanlines * (1.0 - sl) * 0.15;',
+    '  }',
+    '',
+    '  // Vignette',
+    '  color *= 1.0 - dist * dist * 0.7;',
+    '',
+    '  // Film grain',
+    '  float grain = (fract(sin(dot(uv * time * 80.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.025;',
+    '  color += grain;',
+    '',
+    '  // Tone mapping (slight S-curve for richness)',
+    '  color = color / (color + 0.5) * 1.3;',
+    '',
+    '  gl_FragColor = vec4(color, 1.0);',
+    '}'
+  ].join('\n')
+})
+var compositeScene = new THREE.Scene()
+compositeScene.add(new THREE.Mesh(fsGeo, compositeMat))
+
+// ── Stars with long multi-segment trails ──
+var stars = []
+var elapsed = 0
+
+function makeStar(color) {
+  var geo = new THREE.SphereGeometry(0.7, 8, 6)
+  var mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0 })
+  var mesh = new THREE.Mesh(geo, mat)
+  pivot.add(mesh)
+
+  // Multi-segment trail with vertex colors for fade
+  var positions = new Float32Array(TRAIL_SEGS * 3)
+  var colors = new Float32Array(TRAIL_SEGS * 3)
+  var trailGeo = new THREE.BufferGeometry()
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  trailGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  trailGeo.setDrawRange(0, 0)
+  var trailMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 1, blending: THREE.AdditiveBlending })
+  var trail = new THREE.Line(trailGeo, trailMat)
+  pivot.add(trail)
+
+  return { mesh:mesh, mat:mat, trail:trail, trailMat:trailMat, trailGeo:trailGeo, history:[] }
+}
+
+function generate() {
+  for (var i = 0; i < stars.length; i++) { pivot.remove(stars[i].mesh); pivot.remove(stars[i].trail) }
+  stars = []; elapsed = 0
+
+  for (var i = 0; i < STAR_COUNT; i++) {
+    var finalPos = randomFinalPos()
+    var color = randomColor()
+    var wave = Math.floor(Math.random() * WAVE_COUNT)
+    var delay = wave * 0.8 + Math.random() * 0.5
+
+    var dir = finalPos.clone().normalize()
+    var startPos = dir.clone().multiplyScalar(1200 + Math.random() * 800)
+
+    var s = makeStar(color)
+    s.mesh.position.copy(startPos)
+    s.startPos = startPos.clone()
+    s.finalPos = finalPos
+    s.delay = delay
+    s.color3 = color.clone()
+    s.settled = false
+    s.landFlash = 0
+    s.speed = 0.7 + Math.random() * 0.6
+    s.history = []
+    stars.push(s)
+  }
+
+  // Clear accum buffers
+  renderer.setRenderTarget(rtAccum)
+  renderer.clear()
+  renderer.setRenderTarget(rtAccumPrev)
+  renderer.clear()
+}
+
+function tick(dt) {
+  elapsed += dt
+  pivot.rotation.y += dt * 0.08
+
+  ico.rotation.y += dt * 0.12; ico.rotation.x += dt * 0.05
+  icoIn.rotation.y -= dt * 0.18; icoIn.rotation.z += dt * 0.08
+
+  // ── Warp intensity ──
+  var totalWarpTime = DURATION * 1.1
+  var warpRaw = Math.max(0, 1 - elapsed / totalWarpTime)
+  var warpI = warpRaw * warpRaw
+
+  // Shader uniforms driven by warp
+  compositeMat.uniforms.chromaticAberration.value = warpI * 0.02 + 0.001
+  compositeMat.uniforms.radialWarp.value = warpI * -0.5
+  compositeMat.uniforms.bloomStrength.value = 1.0 + warpI * 2.0
+  compositeMat.uniforms.anamorphic.value = warpI * 1.8
+  compositeMat.uniforms.scanlines.value = warpI * 0.6
+  compositeMat.uniforms.time.value = elapsed
+  accumMat.uniforms.motionBlur.value = warpI * 0.7
+
+  // ── Stars ──
+  var landingCount = 0
+  for (var i = 0; i < stars.length; i++) {
+    var s = stars[i]
+    var t = Math.max(0, elapsed - s.delay) / (DURATION * s.speed)
+    if (t <= 0) { s.mat.opacity = 0; s.trailGeo.setDrawRange(0, 0); continue }
+    var p = Math.min(t, 1)
+    var e = easeOutExpo(p)
+
+    s.mesh.position.lerpVectors(s.startPos, s.finalPos, e)
+    s.mat.opacity = Math.min(0.9, t * 3)
+
+    // Record position history for trail
+    s.history.push(s.mesh.position.clone())
+    if (s.history.length > TRAIL_SEGS) s.history.shift()
+
+    // Update trail geometry from history
+    var n = s.history.length
+    var tPos = s.trailGeo.attributes.position
+    var tCol = s.trailGeo.attributes.color
+    for (var j = 0; j < n; j++) {
+      var hp = s.history[j]
+      tPos.array[j*3] = hp.x; tPos.array[j*3+1] = hp.y; tPos.array[j*3+2] = hp.z
+      // Fade: tail=dim, head=bright. Also fade entire trail as star settles.
+      var headFade = j / n
+      var trailAlpha = headFade * (1 - p * 0.7)
+      tCol.array[j*3] = s.color3.r * trailAlpha
+      tCol.array[j*3+1] = s.color3.g * trailAlpha
+      tCol.array[j*3+2] = s.color3.b * trailAlpha
+    }
+    tPos.needsUpdate = true
+    tCol.needsUpdate = true
+    s.trailGeo.setDrawRange(0, n)
+
+    // Landing
+    if (p >= 1 && !s.settled) {
+      s.settled = true
+      s.landFlash = 1.0
+    }
+    if (s.landFlash > 0) {
+      s.landFlash = Math.max(0, s.landFlash - dt * 1.5)
+      s.mesh.scale.setScalar(1 + s.landFlash * 2.5)
+      s.mat.opacity = 0.8 + s.landFlash * 0.2
+      landingCount++
+    }
+  }
+
+  var coreBoost = Math.min(landingCount * 0.04, 1)
+  coreMat.opacity = 0.3 + coreBoost * 0.4 + Math.sin(elapsed * 1.5) * 0.05
+  coreGlow.scale.setScalar(30 + coreBoost * 15)
+
+  camera.position.y = 60 + Math.sin(elapsed * 0.2) * 8
+  camera.lookAt(0, 0, 0)
+
+  // ══ RENDER PIPELINE ══
+
+  // 1. Render scene
+  renderer.setRenderTarget(rtScene)
+  renderer.clear()
+  renderer.render(scene, camera)
+
+  // 2. Motion blur accumulation (blend current with previous frame)
+  accumMat.uniforms.tCurrent.value = rtScene.texture
+  accumMat.uniforms.tPrev.value = rtAccumPrev.texture
+  renderer.setRenderTarget(rtAccum)
+  renderer.clear()
+  renderer.render(accumScene, ortho)
+
+  // Copy accum to prev for next frame
+  var tmp = rtAccumPrev
+  rtAccumPrev = rtAccum
+  rtAccum = tmp
+
+  // 3. Bloom extract from accumulated image
+  bloomExtractMat.uniforms.tDiffuse.value = rtAccumPrev.texture
+  renderer.setRenderTarget(rtA)
+  renderer.clear()
+  renderer.render(bloomExtractScene, ortho)
+
+  // 4. Blur passes (ping pong at half res)
+  for (var pass = 0; pass < 4; pass++) {
+    blurHMat.uniforms.tDiffuse.value = rtA.texture
+    renderer.setRenderTarget(rtB)
+    renderer.clear()
+    renderer.render(blurHS, ortho)
+
+    blurVMat.uniforms.tDiffuse.value = rtB.texture
+    renderer.setRenderTarget(rtA)
+    renderer.clear()
+    renderer.render(blurVS, ortho)
+  }
+
+  // 5. Composite to screen
+  compositeMat.uniforms.tScene.value = rtAccumPrev.texture
+  compositeMat.uniforms.tBloom.value = rtA.texture
+  renderer.setRenderTarget(null)
+  renderer.clear()
+  renderer.render(compositeScene, ortho)
+}
+
+generate()
+window.replay = generate
+
+window.addEventListener('resize', function() {
+  W = window.innerWidth; H = window.innerHeight
+  pxW = Math.floor(W * Math.min(window.devicePixelRatio, 2))
+  pxH = Math.floor(H * Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(W, H)
+  camera.aspect = W / H; camera.updateProjectionMatrix()
+  rtScene.setSize(pxW, pxH)
+  rtA.setSize(Math.floor(pxW/2), Math.floor(pxH/2))
+  rtB.setSize(Math.floor(pxW/2), Math.floor(pxH/2))
+  rtAccum.setSize(pxW, pxH)
+  rtAccumPrev.setSize(pxW, pxH)
+  compositeMat.uniforms.resolution.value.set(W, H)
+  blurHMat.uniforms.resolution.value.set(pxW/2, pxH/2)
+  blurVMat.uniforms.resolution.value.set(pxW/2, pxH/2)
+})
+
+var lastTime = performance.now()
+function animate() {
+  var now = performance.now()
+  var dt = Math.min((now - lastTime) / 1000, 0.05)
+  lastTime = now
+  tick(dt)
+  requestAnimationFrame(animate)
+}
+animate()
+</script>
+</body>
+</html>
