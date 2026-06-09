@@ -133,3 +133,84 @@ describe('SessionScanner', () => {
     expect(events[1].prompt).toBe('short');
   });
 });
+
+// Helper: write a journal line
+function journalLine(type, agentId, key = 'k1') {
+  return JSON.stringify({ type, key, agentId }) + '\n';
+}
+
+// Helper: write an inner-agent JSONL tool_use line
+function innerAgentLine(sessionId, agentId, toolName, toolId) {
+  return JSON.stringify({
+    sessionId,
+    agentId,
+    type: 'assistant', uuid: `u-${toolId}`,
+    message: { role: 'assistant', model: 'm', content: [
+      { type: 'tool_use', name: toolName, id: toolId, input: {} }
+    ]}
+  }) + '\n';
+}
+
+describe('SessionScanner — workflow watching', () => {
+  let tmpDir, scanner, events;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    events = [];
+  });
+
+  afterEach(() => {
+    if (scanner) scanner.stop();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('emits SubagentStart when journal.jsonl gets a started line', () => {
+    const wfDir = join(tmpDir, 'proj1', 'subagents', 'workflows', 'wf_test1');
+    mkdirSync(wfDir, { recursive: true });
+
+    writeFileSync(join(wfDir, 'journal.jsonl'), journalLine('started', 'abcdef1234567890'));
+    writeFileSync(join(wfDir, 'agent-abcdef1234567890.jsonl'), innerAgentLine('sess1', 'abcdef1234567890', 'Read', 'tu1'));
+
+    scanner = new SessionScanner(tmpDir, e => events.push(e));
+    scanner.watchWorkflow('sess1', wfDir);
+
+    const starts = events.filter(e => e.hook_event_name === 'SubagentStart' && e.agent_id === 'abcdef1234567890');
+    expect(starts.length).toBeGreaterThan(0);
+    expect(starts[0].agent_type).toBe('workflow-subagent');
+  });
+
+  it('emits SubagentStop when journal.jsonl gets a result line for a known agent', () => {
+    const wfDir = join(tmpDir, 'proj1', 'subagents', 'workflows', 'wf_test2');
+    mkdirSync(wfDir, { recursive: true });
+
+    writeFileSync(join(wfDir, 'journal.jsonl'),
+      journalLine('started', 'xyzabc9876543210') +
+      journalLine('result', 'xyzabc9876543210')
+    );
+    writeFileSync(join(wfDir, 'agent-xyzabc9876543210.jsonl'), '');
+
+    scanner = new SessionScanner(tmpDir, e => events.push(e));
+    scanner.watchWorkflow('sess1', wfDir);
+
+    const stops = events.filter(e => e.hook_event_name === 'SubagentStop' && e.agent_id === 'xyzabc9876543210');
+    expect(stops.length).toBe(1);
+  });
+
+  it('emits PreToolUse from inner agent JSONL with correct agent_id', () => {
+    const wfDir = join(tmpDir, 'proj1', 'subagents', 'workflows', 'wf_test3');
+    mkdirSync(wfDir, { recursive: true });
+
+    const agentId = 'toolagent0123456';
+    writeFileSync(join(wfDir, 'journal.jsonl'), journalLine('started', agentId));
+    writeFileSync(join(wfDir, `agent-${agentId}.jsonl`),
+      innerAgentLine('sess1', agentId, 'Bash', 'tu-bash')
+    );
+
+    scanner = new SessionScanner(tmpDir, e => events.push(e));
+    scanner.watchWorkflow('sess1', wfDir);
+
+    const pre = events.find(e => e.hook_event_name === 'PreToolUse' && e.agent_id === agentId);
+    expect(pre).toBeDefined();
+    expect(pre.tool_name).toBe('Bash');
+  });
+});

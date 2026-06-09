@@ -10,7 +10,23 @@ const ACTIVE_AGE_MS = 10 * 60 * 1000; // Only watch sessions modified in last 10
 export class SessionScanner {
   constructor(projectsDir, onEvent) {
     this.projectsDir = projectsDir;
-    this.onEvent = onEvent;
+    this._externalOnEvent = onEvent;
+    this._workflowCleanups = new Map(); // tool_use_id → cleanup fn
+    this.onEvent = (event) => {
+      if (event.hook_event_name === 'WorkflowLaunched') {
+        const cleanup = this.watchWorkflow(event.session_id, event.workflow_dir);
+        this._workflowCleanups.set(event.tool_use_id, cleanup);
+        return; // don't forward WorkflowLaunched to SSE clients
+      }
+      if (event.hook_event_name === 'PostToolUse' && event.tool_name === 'Workflow') {
+        const cleanup = this._workflowCleanups.get(event.tool_use_id);
+        if (cleanup) {
+          cleanup();
+          this._workflowCleanups.delete(event.tool_use_id);
+        }
+      }
+      this._externalOnEvent(event);
+    };
     this.sessions = new Map();
     this._scanTimer = null;
     this._pollTimer = null;
@@ -38,6 +54,8 @@ export class SessionScanner {
       if (session.watcher) { session.watcher.close(); }
     }
     this.sessions.clear();
+    for (const cleanup of this._workflowCleanups.values()) cleanup();
+    this._workflowCleanups.clear();
   }
 
   scan() {
@@ -146,5 +164,133 @@ export class SessionScanner {
       }
     }
     session.offset = size;
+  }
+
+  watchWorkflow(sessionId, workflowDir) {
+    const innerParsers = new Map(); // agentId → { parser, offset, filePath }
+    const knownAgents = new Set();
+
+    const makeStubEvent = (hookName, agentId) => ({
+      id: `wf-${hookName}-${Date.now()}-${agentId}`,
+      session_id: sessionId,
+      timestamp: Date.now(),
+      hook_event_name: hookName,
+      tool_name: 'Workflow',
+      tool_input: null,
+      tool_response: null,
+      agent_id: agentId,
+      agent_type: 'workflow-subagent',
+      cwd: null,
+      error: null,
+      tool_use_id: null,
+      prompt: null,
+      model: null,
+      source: 'jsonl',
+      reason: null,
+      permission_mode: null,
+      is_interrupt: null,
+      trigger: null,
+      compact_summary: null,
+      last_assistant_message: null,
+      notification_type: null,
+      title: null,
+      agent_transcript_path: null,
+      memory_type: null,
+      workflow_dir: workflowDir,
+    });
+
+    const processJournalLine = (line) => {
+      if (!line || !line.trim()) return;
+      let parsed;
+      try { parsed = JSON.parse(line); } catch { return; }
+
+      const { type, agentId } = parsed;
+      if (!agentId) return;
+
+      if (type === 'started' && !knownAgents.has(agentId)) {
+        knownAgents.add(agentId);
+        this._externalOnEvent(makeStubEvent('SubagentStart', agentId));
+        const agentFile = join(workflowDir, `agent-${agentId}.jsonl`);
+        const agentParser = new TranscriptParser(this._externalOnEvent);
+        innerParsers.set(agentId, { parser: agentParser, offset: 0, filePath: agentFile });
+        this._readInnerAgentFile(innerParsers.get(agentId));
+      }
+
+      if (type === 'result' && knownAgents.has(agentId)) {
+        const entry = innerParsers.get(agentId);
+        if (entry) this._readInnerAgentFile(entry);
+        innerParsers.delete(agentId);
+        this._externalOnEvent(makeStubEvent('SubagentStop', agentId));
+      }
+    };
+
+    const journalPath = join(workflowDir, 'journal.jsonl');
+    const journalEntry = { filePath: journalPath, offset: 0, processLine: processJournalLine };
+    this._readJournalFile(journalEntry);
+
+    const pollInterval = setInterval(() => {
+      this._readJournalFile(journalEntry);
+      for (const entry of innerParsers.values()) {
+        this._readInnerAgentFile(entry);
+      }
+    }, POLL_INTERVAL);
+
+    return () => {
+      clearInterval(pollInterval);
+      for (const agentId of innerParsers.keys()) {
+        this._externalOnEvent(makeStubEvent('SubagentStop', agentId));
+      }
+      innerParsers.clear();
+    };
+  }
+
+  _readJournalFile(entry) {
+    let size;
+    try { size = statSync(entry.filePath).size; } catch { return; }
+    if (size === entry.offset) return;
+    if (size < entry.offset) { entry.offset = 0; }
+
+    const bytesToRead = size - entry.offset;
+    const buf = Buffer.alloc(bytesToRead);
+    let fd;
+    try {
+      fd = openSync(entry.filePath, 'r');
+      readSync(fd, buf, 0, bytesToRead, entry.offset);
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+
+    const text = buf.toString('utf8');
+    for (const line of text.split('\n')) {
+      if (line.trim()) entry.processLine(line);
+    }
+    entry.offset = size;
+  }
+
+  _readInnerAgentFile(entry) {
+    if (!entry) return;
+    let size;
+    try { size = statSync(entry.filePath).size; } catch { return; }
+    if (size === entry.offset) return;
+    if (size < entry.offset) {
+      entry.offset = 0;
+      entry.parser = new TranscriptParser(this._externalOnEvent);
+    }
+
+    const bytesToRead = size - entry.offset;
+    const buf = Buffer.alloc(bytesToRead);
+    let fd;
+    try {
+      fd = openSync(entry.filePath, 'r');
+      readSync(fd, buf, 0, bytesToRead, entry.offset);
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+
+    const text = buf.toString('utf8');
+    for (const line of text.split('\n')) {
+      if (line.trim()) entry.parser.processLine(line);
+    }
+    entry.offset = size;
   }
 }
