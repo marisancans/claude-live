@@ -17,6 +17,7 @@ import { BackgroundLayer } from './layers/BackgroundLayer'
 import { SessionCore } from './objects/SessionCore'
 import { ParticleCloud } from './objects/ParticleCloud'
 import { SubagentVisual } from './objects/SubagentVisual'
+import { SubagentEntity, type SubagentStyle } from './objects/SubagentEntity'
 import { eventBus } from '../events/EventBus'
 import { TOOL_COLOR_HEX, DEFAULT_HEX } from '../constants'
 import { profileGlob } from './travel/profiles/glob'
@@ -52,7 +53,8 @@ interface SessionVisual {
   group: THREE.Group
   core: SessionCore
   particles: ParticleCloud
-  subagents: Map<string, SubagentVisual>
+  subagents: Map<string, SubagentVisual | SubagentEntity>
+  workflowAgentCount: number
 }
 
 export class ThreeApp {
@@ -213,15 +215,24 @@ export class ThreeApp {
       sv.particles.spawn('Stop')
     }
 
+    const WORKFLOW_STYLES: SubagentStyle[] = ['tendril', 'filament', 'umbilical', 'whip', 'proboscis']
+
     const onSubagentStart = (e: { sessionId: string; agentId: string; agentType: string }) => {
       const sv = this.sessions.get(e.sessionId)
       if (!sv) return
       if (!sv.subagents.has(e.agentId)) {
-        const sa = new SubagentVisual()
-        sv.subagents.set(e.agentId, sa)
-        sv.group.add(sa.group)
-        // give it a starting pulse
-        sa.triggerActivity()
+        if (e.agentType === 'workflow-subagent') {
+          const style = WORKFLOW_STYLES[sv.workflowAgentCount % WORKFLOW_STYLES.length]
+          sv.workflowAgentCount++
+          const sa = new SubagentEntity(e.agentId, style)
+          sv.subagents.set(e.agentId, sa)
+          sv.group.add(sa.group)
+        } else {
+          const sa = new SubagentVisual()
+          sv.subagents.set(e.agentId, sa)
+          sv.group.add(sa.group)
+          sa.triggerActivity()
+        }
       }
     }
 
@@ -230,9 +241,13 @@ export class ThreeApp {
       if (!sv) return
       const sa = sv.subagents.get(e.agentId)
       if (sa) {
-        sv.group.remove(sa.group)
-        sa.dispose()
-        sv.subagents.delete(e.agentId)
+        if (sa instanceof SubagentEntity) {
+          sa.fadeState = 'out' // tick loop will clean up when done
+        } else {
+          sv.group.remove(sa.group)
+          sa.dispose()
+          sv.subagents.delete(e.agentId)
+        }
       }
     }
 
@@ -279,7 +294,7 @@ export class ThreeApp {
         )
 
         this.scene.add(group)
-        const sessionVisual = { group, core, particles, subagents: new Map<string, SubagentVisual>() }
+        const sessionVisual = { group, core, particles, subagents: new Map<string, SubagentVisual | SubagentEntity>(), workflowAgentCount: 0 }
         this.sessions.set(id, sessionVisual)
 
         // Load history for this session — animated warp-in
@@ -391,8 +406,17 @@ export class ThreeApp {
     for (const sv of this.sessions.values()) {
       sv.core.tick(clampedDt, this.elapsed)
       sv.particles.tick(clampedDt)
-      for (const sa of sv.subagents.values()) {
-        sa.tick(clampedDt, this.elapsed)
+      for (const [agentId, sa] of sv.subagents) {
+        if (sa instanceof SubagentEntity) {
+          sa.tick(clampedDt)
+          if (sa.fadeState === 'done') {
+            sv.group.remove(sa.group)
+            sa.dispose()
+            sv.subagents.delete(agentId)
+          }
+        } else {
+          sa.tick(clampedDt, this.elapsed)
+        }
       }
     }
 
