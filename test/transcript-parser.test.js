@@ -147,6 +147,22 @@ describe('TranscriptParser', () => {
     expect(pre).toBeDefined();
   });
 
+  it('emits SubagentStart for Workflow tool_use with agent_type workflow', () => {
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'assistant', uuid: 'a1',
+      message: { role: 'assistant', content: [
+        { type: 'tool_use', name: 'Workflow', id: 'wf1', input: { script: 'export const meta = {}' } }
+      ]}
+    }));
+    const sub = events.find(e => e.hook_event_name === 'SubagentStart');
+    expect(sub).toBeDefined();
+    expect(sub.agent_type).toBe('workflow');
+    expect(sub.tool_use_id).toBe('wf1');
+    const pre = events.find(e => e.hook_event_name === 'PreToolUse');
+    expect(pre).toBeDefined();
+    expect(pre.tool_name).toBe('Workflow');
+  });
+
   it('passes through structured JSON tool_response as-is', () => {
     parser.processLine(JSON.stringify({
       sessionId: 's1', type: 'assistant', uuid: 'a1',

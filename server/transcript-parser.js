@@ -89,6 +89,18 @@ export class TranscriptParser {
         cwd,
       }));
     }
+
+    if (name === 'Workflow') {
+      this.onEvent(this._makeEvent(sessionId, {
+        timestamp,
+        hook_event_name: 'SubagentStart',
+        tool_name: name,
+        tool_use_id: id,
+        tool_input: input || null,
+        agent_type: 'workflow',
+        cwd,
+      }));
+    }
   }
 
   _handleToolResult(sessionId, block, cwd, timestamp) {
