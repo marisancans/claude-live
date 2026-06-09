@@ -133,6 +133,19 @@ export class TranscriptParser {
       tool_response: toolResponse,
       cwd,
     }));
+
+    if (pending.name === 'Workflow' && typeof raw === 'string') {
+      const match = raw.match(/Transcript dir:\s*(.+)/);
+      if (match) {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'WorkflowLaunched',
+          tool_use_id,
+          workflow_dir: match[1].trim(),
+          cwd,
+        }));
+      }
+    }
   }
 
   _isSystemContent(text) {
@@ -183,6 +196,7 @@ export class TranscriptParser {
       title: null,
       agent_transcript_path: null,
       memory_type: null,
+      workflow_dir: null,
       ...overrides,
     };
   }

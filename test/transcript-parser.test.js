@@ -147,6 +147,43 @@ describe('TranscriptParser', () => {
     expect(pre).toBeDefined();
   });
 
+  it('emits WorkflowLaunched with workflowDir when Workflow tool_result contains Transcript dir', () => {
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'assistant', uuid: 'a1',
+      message: { role: 'assistant', content: [
+        { type: 'tool_use', name: 'Workflow', id: 'wf1', input: { script: 'export const meta = {}' } }
+      ]}
+    }));
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'user', uuid: 'u1',
+      message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'wf1', content: 'Workflow launched in background.\nTask ID: task-123\nTranscript dir: /tmp/wf_abc/\nRun ID: wf_abc' }
+      ]}
+    }));
+    const launched = events.find(e => e.hook_event_name === 'WorkflowLaunched');
+    expect(launched).toBeDefined();
+    expect(launched.workflow_dir).toBe('/tmp/wf_abc/');
+    expect(launched.tool_use_id).toBe('wf1');
+    expect(launched.session_id).toBe('s1');
+  });
+
+  it('does not emit WorkflowLaunched for non-Workflow tool_result', () => {
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'assistant', uuid: 'a1',
+      message: { role: 'assistant', content: [
+        { type: 'tool_use', name: 'Read', id: 'tu1', input: {} }
+      ]}
+    }));
+    parser.processLine(JSON.stringify({
+      sessionId: 's1', type: 'user', uuid: 'u1',
+      message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'tu1', content: 'file contents' }
+      ]}
+    }));
+    const launched = events.find(e => e.hook_event_name === 'WorkflowLaunched');
+    expect(launched).toBeUndefined();
+  });
+
   it('emits SubagentStart for Workflow tool_use with agent_type workflow', () => {
     parser.processLine(JSON.stringify({
       sessionId: 's1', type: 'assistant', uuid: 'a1',
