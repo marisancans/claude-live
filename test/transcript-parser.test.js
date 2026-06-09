@@ -147,6 +147,20 @@ describe('TranscriptParser', () => {
     expect(pre).toBeDefined();
   });
 
+  it('populates agent_id on events from inner-agent JSONL lines that have top-level agentId', () => {
+    parser.processLine(JSON.stringify({
+      sessionId: 's1',
+      agentId: 'agent-abc123',
+      type: 'assistant', uuid: 'a2',
+      message: { role: 'assistant', model: 'm', content: [
+        { type: 'tool_use', name: 'Read', id: 'tu1', input: {} }
+      ]}
+    }));
+    const pre = events.find(e => e.hook_event_name === 'PreToolUse');
+    expect(pre).toBeDefined();
+    expect(pre.agent_id).toBe('agent-abc123');
+  });
+
   it('emits WorkflowLaunched with workflowDir when Workflow tool_result contains Transcript dir', () => {
     parser.processLine(JSON.stringify({
       sessionId: 's1', type: 'assistant', uuid: 'a1',

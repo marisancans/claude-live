@@ -21,6 +21,7 @@ export class TranscriptParser {
     if (!parsed.message || !parsed.sessionId) return;
 
     const { sessionId, message } = parsed;
+    const agentId = typeof parsed.agentId === 'string' ? parsed.agentId : null;
     const { role, model, content } = message;
     const cwd = typeof parsed.cwd === 'string' && parsed.cwd ? parsed.cwd : null;
     const timestamp = this._parseTimestamp(parsed.timestamp);
@@ -32,6 +33,7 @@ export class TranscriptParser {
           timestamp,
           hook_event_name: 'SessionStart',
           model,
+          agent_id: agentId,
           cwd,
         }));
       }
@@ -45,6 +47,7 @@ export class TranscriptParser {
           timestamp,
           hook_event_name: 'UserPromptSubmit',
           prompt: content,
+          agent_id: agentId,
           cwd,
         }));
       }
@@ -55,14 +58,14 @@ export class TranscriptParser {
 
     for (const block of content) {
       if (block.type === 'tool_use') {
-        this._handleToolUse(sessionId, block, cwd, timestamp);
+        this._handleToolUse(sessionId, block, cwd, timestamp, agentId);
       } else if (block.type === 'tool_result') {
-        this._handleToolResult(sessionId, block, cwd, timestamp);
+        this._handleToolResult(sessionId, block, cwd, timestamp, agentId);
       }
     }
   }
 
-  _handleToolUse(sessionId, block, cwd, timestamp) {
+  _handleToolUse(sessionId, block, cwd, timestamp, agentId) {
     const { name, id, input } = block;
     if (this.seenToolUseIds.has(id)) return;
     this.seenToolUseIds.add(id);
@@ -75,6 +78,7 @@ export class TranscriptParser {
       tool_name: name,
       tool_use_id: id,
       tool_input: input || null,
+      agent_id: agentId,
       cwd,
     }));
 
@@ -86,6 +90,7 @@ export class TranscriptParser {
         tool_use_id: id,
         tool_input: input || null,
         agent_type: (input && (input.subagent_type || input.description)) || null,
+        agent_id: agentId,
         cwd,
       }));
     }
@@ -98,12 +103,13 @@ export class TranscriptParser {
         tool_use_id: id,
         tool_input: input || null,
         agent_type: 'workflow',
+        agent_id: agentId,
         cwd,
       }));
     }
   }
 
-  _handleToolResult(sessionId, block, cwd, timestamp) {
+  _handleToolResult(sessionId, block, cwd, timestamp, agentId) {
     const { tool_use_id, content } = block;
     const pending = this.pendingToolCalls.get(tool_use_id);
     if (!pending) return;
@@ -131,6 +137,7 @@ export class TranscriptParser {
       tool_name: pending.name,
       tool_use_id,
       tool_response: toolResponse,
+      agent_id: agentId,
       cwd,
     }));
 
@@ -142,6 +149,7 @@ export class TranscriptParser {
           hook_event_name: 'WorkflowLaunched',
           tool_use_id,
           workflow_dir: match[1].trim(),
+          agent_id: agentId,
           cwd,
         }));
       }
