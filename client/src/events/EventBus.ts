@@ -8,17 +8,25 @@ export interface BusEvents {
   'node:created': { sessionId: string; node: GraphNode }
   'node:removed': { sessionId: string; nodeKey: string }
   'tool:used': { sessionId: string; nodeKey: string; tool: string; colorHex: string; inbound: boolean; agentId?: string | null; toolInput?: Record<string, unknown> | null; toolResponse?: Record<string, unknown> | null }
+  'tool:error': { sessionId: string; tool: string; agentId?: string | null; error?: string | null }
   'prompt:submitted': { sessionId: string; words: string[]; color: string }
   'response:received': { sessionId: string; words: string[]; color: string }
   'cluster:created': { cluster: Cluster }
   'cluster:removed': { sessionId: string }
   'compact:pre': { sessionId: string }
   'compact:post': { sessionId: string }
+  'compact:boundary': { sessionId: string }
   'permission:request': { sessionId: string }
   'subagent:start': { sessionId: string; agentId: string; agentType: string }
   'subagent:stop': { sessionId: string; agentId: string }
   'session:end': { sessionId: string }
+  'session:stop': { sessionId: string; lastMessage: string | null }
   'notification': { sessionId: string; nodeKey: string; title: string }
+  'ai-title': { sessionId: string; title: string }
+  'pr-link': { sessionId: string; url: string | null }
+  'turn:duration': { sessionId: string; durationMs: number | null }
+  'api:error': { sessionId: string; error: string | null }
+  'session:activity': { sessionId: string; kind: string; color: string; label: string | null }
 }
 
 /**

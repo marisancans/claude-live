@@ -81,7 +81,7 @@ describe.skipIf(!sessionFile)('Real session replay', () => {
         .map(e => e.tool_use_id)
     )
     const postIds = new Set(
-      events.filter(e => e.hook_event_name === 'PostToolUse' && e.tool_use_id)
+      events.filter(e => (e.hook_event_name === 'PostToolUse' || e.hook_event_name === 'PostToolUseFailure') && e.tool_use_id)
         .map(e => e.tool_use_id)
     )
 
@@ -117,8 +117,13 @@ describe.skipIf(!sessionFile)('Real session replay', () => {
     for (const line of lines) parser.processLine(line)
 
     const validTypes = new Set([
-      'PreToolUse', 'PostToolUse', 'UserPromptSubmit',
-      'SessionStart', 'SubagentStart',
+      'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
+      'UserPromptSubmit', 'SessionStart', 'SubagentStart',
+      'Stop', 'WorkflowLaunched',
+      'AiTitle', 'PrLink', 'TurnDuration', 'CompactBoundary',
+      'ApiError', 'Informational',
+      'PermissionMode', 'ModeChange', 'QueueOperation',
+      'LocalCommand', 'AwaySummary', 'ScheduledTask',
     ])
     for (const e of events) {
       expect(validTypes.has(e.hook_event_name)).toBe(true)

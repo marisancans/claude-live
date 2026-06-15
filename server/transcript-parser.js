@@ -18,13 +18,23 @@ export class TranscriptParser {
       return;
     }
 
-    if (!parsed.message || !parsed.sessionId) return;
+    if (!parsed.sessionId) return;
 
-    const { sessionId, message } = parsed;
+    const { sessionId } = parsed;
     const agentId = typeof parsed.agentId === 'string' ? parsed.agentId : null;
-    const { role, model, content } = message;
     const cwd = typeof parsed.cwd === 'string' && parsed.cwd ? parsed.cwd : null;
     const timestamp = this._parseTimestamp(parsed.timestamp);
+
+    // Handle top-level non-message JSONL entries first
+    const topType = parsed.type;
+    if (topType && topType !== 'user' && topType !== 'assistant') {
+      this._handleTopLevelType(sessionId, parsed, topType, agentId, timestamp, cwd);
+    }
+
+    if (!parsed.message) return;
+
+    const { message } = parsed;
+    const { role, model, content } = message;
 
     if (role === 'assistant') {
       if (!this.sessionsSeen.has(sessionId) && model) {
@@ -33,6 +43,29 @@ export class TranscriptParser {
           timestamp,
           hook_event_name: 'SessionStart',
           model,
+          agent_id: agentId,
+          cwd,
+        }));
+      }
+      // Stop event from JSONL: assistant message with stop_reason end_turn
+      const stopReason = message.stop_reason;
+      if (stopReason === 'end_turn') {
+        // Extract last text block as last_assistant_message
+        let lastMsg = null;
+        if (Array.isArray(message.content)) {
+          for (let i = message.content.length - 1; i >= 0; i--) {
+            if (message.content[i].type === 'text' && message.content[i].text) {
+              lastMsg = message.content[i].text;
+              break;
+            }
+          }
+        }
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'Stop',
+          model,
+          reason: 'end_turn',
+          last_assistant_message: lastMsg,
           agent_id: agentId,
           cwd,
         }));
@@ -110,7 +143,7 @@ export class TranscriptParser {
   }
 
   _handleToolResult(sessionId, block, cwd, timestamp, agentId) {
-    const { tool_use_id, content } = block;
+    const { tool_use_id, content, is_error } = block;
     const pending = this.pendingToolCalls.get(tool_use_id);
     if (!pending) return;
 
@@ -131,12 +164,14 @@ export class TranscriptParser {
       toolResponse = raw != null ? raw : {};
     }
 
+    const hookName = is_error ? 'PostToolUseFailure' : 'PostToolUse';
     this.onEvent(this._makeEvent(sessionId, {
       timestamp,
-      hook_event_name: 'PostToolUse',
+      hook_event_name: hookName,
       tool_name: pending.name,
       tool_use_id,
       tool_response: toolResponse,
+      error: is_error ? (typeof raw === 'string' ? raw : null) : null,
       agent_id: agentId,
       cwd,
     }));
@@ -149,6 +184,138 @@ export class TranscriptParser {
           hook_event_name: 'WorkflowLaunched',
           tool_use_id,
           workflow_dir: match[1].trim(),
+          agent_id: agentId,
+          cwd,
+        }));
+      }
+    }
+  }
+
+  _handleTopLevelType(sessionId, parsed, topType, agentId, timestamp, cwd) {
+    if (topType === 'ai-title' || topType === 'custom-title') {
+      const title = parsed.aiTitle || parsed.customTitle || parsed.title || null;
+      if (title) {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'AiTitle',
+          title,
+          agent_id: agentId,
+          cwd,
+        }));
+      }
+    } else if (topType === 'pr-link') {
+      const url = parsed.prUrl || parsed.url || null;
+      this.onEvent(this._makeEvent(sessionId, {
+        timestamp,
+        hook_event_name: 'PrLink',
+        title: url,
+        agent_id: agentId,
+        cwd,
+      }));
+    } else if (topType === 'permission-mode') {
+      const mode = parsed.permissionMode || null;
+      if (mode) {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'PermissionMode',
+          permission_mode: mode,
+          agent_id: agentId,
+          cwd,
+        }));
+      }
+    } else if (topType === 'mode') {
+      const mode = parsed.mode || null;
+      if (mode) {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'ModeChange',
+          trigger: mode,
+          agent_id: agentId,
+          cwd,
+        }));
+      }
+    } else if (topType === 'queue-operation') {
+      this.onEvent(this._makeEvent(sessionId, {
+        timestamp,
+        hook_event_name: 'QueueOperation',
+        trigger: typeof parsed.operation === 'string' ? parsed.operation : null,
+        prompt: typeof parsed.content === 'string' ? parsed.content : null,
+        agent_id: agentId,
+        cwd,
+      }));
+    } else if (topType === 'system') {
+      const subtype = parsed.subtype;
+      if (subtype === 'turn_duration') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'TurnDuration',
+          tool_response: { durationMs: parsed.durationMs || null },
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'compact_boundary') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'CompactBoundary',
+          compact_summary: parsed.content || null,
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'api_error') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'ApiError',
+          error: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error || ''),
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'local_command') {
+        // Slash commands like /usage, /compact — pull the command name out of the
+        // <command-name>…</command-name> envelope when present.
+        let label = null;
+        if (typeof parsed.content === 'string') {
+          const m = parsed.content.match(/<command-name>([^<]+)<\/command-name>/);
+          label = m ? m[1].trim() : parsed.content.slice(0, 120);
+        }
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'LocalCommand',
+          title: label,
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'away_summary') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'AwaySummary',
+          title: typeof parsed.content === 'string' ? parsed.content.slice(0, 200) : null,
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'scheduled_task_fire') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'ScheduledTask',
+          title: typeof parsed.content === 'string' ? parsed.content.slice(0, 200) : null,
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype === 'informational') {
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'Informational',
+          title: typeof parsed.content === 'string' ? parsed.content.slice(0, 120) : null,
+          agent_id: agentId,
+          cwd,
+        }));
+      } else if (subtype && subtype !== 'stop_hook_summary') {
+        // Catch-all so no system subtype is silently dropped (stop_hook_summary
+        // is pure hook bookkeeping — intentionally skipped).
+        this.onEvent(this._makeEvent(sessionId, {
+          timestamp,
+          hook_event_name: 'Informational',
+          trigger: subtype,
+          title: typeof parsed.content === 'string' ? parsed.content.slice(0, 120) : null,
           agent_id: agentId,
           cwd,
         }));

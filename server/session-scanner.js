@@ -2,7 +2,9 @@ import { readdirSync, statSync, openSync, readSync, closeSync, watch } from 'nod
 import { join } from 'node:path';
 import { TranscriptParser } from './transcript-parser.js';
 
-const MAX_SESSIONS = 50;
+const MAX_SESSIONS = 50;        // top-level sessions
+const MAX_SUBAGENTS = 400;      // subagent file tails (cheap; kept separate so a
+                                // fan-out burst can't evict real sessions)
 const SCAN_INTERVAL = 5000;
 const POLL_INTERVAL = 3000;
 const ACTIVE_AGE_MS = 10 * 60 * 1000; // Only watch sessions modified in last 10 minutes
@@ -75,42 +77,67 @@ export class SessionScanner {
         const mtime = statSync(path).mtimeMs;
         if (now - mtime >= ACTIVE_AGE_MS) {
           if (session.watcher) session.watcher.close();
+          this._emitSubagentStop(session);
           this.sessions.delete(path);
         }
       } catch {
         if (session.watcher) session.watcher.close();
+        this._emitSubagentStop(session);
         this.sessions.delete(path);
       }
     }
 
-    // Collect all JSONL files with their mtimes
+    // Collect all JSONL files with their mtimes. Top-level files are full
+    // sessions; <session>/subagents/agent-*.jsonl are Task/Agent subagent
+    // transcripts (carry the parent sessionId + their own agentId on every
+    // line, so the same parser routes them correctly).
     const candidates = [];
     for (const subdir of subdirs) {
       const dirPath = join(this.projectsDir, subdir);
-      let files;
+      let entries;
       try {
-        files = readdirSync(dirPath).filter(f => f.endsWith('.jsonl'));
+        entries = readdirSync(dirPath, { withFileTypes: true });
       } catch {
         continue;
       }
-      for (const file of files) {
-        const filePath = join(dirPath, file);
-        if (this.sessions.has(filePath)) continue;
-        try {
-          const mtime = statSync(filePath).mtimeMs;
-          // Only consider recently active sessions
-          if (now - mtime < ACTIVE_AGE_MS) {
-            candidates.push({ filePath, mtime });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+          this._considerCandidate(join(dirPath, entry.name), now, candidates, null);
+        } else if (entry.isDirectory()) {
+          // <session>/subagents/agent-<id>.jsonl
+          const subagentsDir = join(dirPath, entry.name, 'subagents');
+          let agentFiles;
+          try {
+            agentFiles = readdirSync(subagentsDir).filter(f => f.startsWith('agent-') && f.endsWith('.jsonl'));
+          } catch {
+            continue;
           }
-        } catch { continue; }
+          for (const file of agentFiles) {
+            const agentId = file.slice('agent-'.length, -'.jsonl'.length);
+            this._considerCandidate(join(subagentsDir, file), now, candidates, agentId);
+          }
+        }
       }
     }
 
     // Sort by most recent first so active sessions get priority
     candidates.sort((a, b) => b.mtime - a.mtime);
 
-    for (const { filePath } of candidates) {
-      if (this.sessions.size >= MAX_SESSIONS) break;
+    // Top-level sessions and subagent tails draw from separate budgets so a
+    // fan-out burst (dozens of subagent files) can't starve real sessions.
+    let sessionCount = 0, subagentCount = 0;
+    for (const session of this.sessions.values()) {
+      if (session.agentId) subagentCount++; else sessionCount++;
+    }
+
+    for (const { filePath, agentId } of candidates) {
+      if (agentId) {
+        if (subagentCount >= MAX_SUBAGENTS) continue;
+        subagentCount++;
+      } else {
+        if (sessionCount >= MAX_SESSIONS) continue;
+        sessionCount++;
+      }
 
       const parser = new TranscriptParser(this.onEvent);
       let watcher = null;
@@ -118,10 +145,23 @@ export class SessionScanner {
         watcher = watch(filePath, () => this._readNewLines(this.sessions.get(filePath)));
       } catch { /* ignore */ }
 
-      const session = { filePath, offset: 0, parser, watcher };
+      const session = { filePath, offset: 0, parser, watcher, agentId };
       this.sessions.set(filePath, session);
+      // A subagent transcript needs a SubagentStart so the entity exists before
+      // its tool events arrive (sessionId is filled in once we read a line).
+      if (agentId) session.pendingSubagentStart = true;
       this._readNewLines(session);
     }
+  }
+
+  _considerCandidate(filePath, now, candidates, agentId) {
+    if (this.sessions.has(filePath)) return;
+    try {
+      const mtime = statSync(filePath).mtimeMs;
+      if (now - mtime < ACTIVE_AGE_MS) {
+        candidates.push({ filePath, mtime, agentId });
+      }
+    } catch { /* ignore */ }
   }
 
   pollAll() {
@@ -159,11 +199,60 @@ export class SessionScanner {
     const text = buf.toString('utf8');
     const lines = text.split('\n');
     for (const line of lines) {
-      if (line.trim()) {
-        session.parser.processLine(line);
+      if (!line.trim()) continue;
+      // Subagent transcript: announce the agent (keyed by its agentId) the first
+      // time we can read its sessionId, so the SubagentEntity exists before its
+      // tool events flow through.
+      if (session.pendingSubagentStart && !session.subagentSessionId) {
+        try {
+          const sid = JSON.parse(line).sessionId;
+          if (sid) {
+            session.subagentSessionId = sid;
+            session.pendingSubagentStart = false;
+            this.onEvent(this._makeSubagentStub('SubagentStart', sid, session.agentId));
+          }
+        } catch { /* fall through to normal parsing */ }
       }
+      session.parser.processLine(line);
     }
     session.offset = size;
+  }
+
+  _emitSubagentStop(session) {
+    if (session && session.agentId && session.subagentSessionId) {
+      this.onEvent(this._makeSubagentStub('SubagentStop', session.subagentSessionId, session.agentId));
+    }
+  }
+
+  _makeSubagentStub(hookName, sessionId, agentId) {
+    return {
+      id: `subagent-${hookName}-${Date.now()}-${agentId}`,
+      session_id: sessionId,
+      timestamp: Date.now(),
+      hook_event_name: hookName,
+      tool_name: null,
+      tool_input: null,
+      tool_response: null,
+      agent_id: agentId,
+      agent_type: 'agent',
+      cwd: null,
+      error: null,
+      tool_use_id: null,
+      prompt: null,
+      model: null,
+      source: 'jsonl',
+      reason: null,
+      permission_mode: null,
+      is_interrupt: null,
+      trigger: null,
+      compact_summary: null,
+      last_assistant_message: null,
+      notification_type: null,
+      title: null,
+      agent_transcript_path: null,
+      memory_type: null,
+      workflow_dir: null,
+    };
   }
 
   watchWorkflow(sessionId, workflowDir) {

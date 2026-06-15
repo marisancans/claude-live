@@ -251,24 +251,138 @@ export class ThreeApp {
       }
     }
 
+    // Notification — cyan ring pulse outward from core
+    const onNotification = (e: { sessionId: string; nodeKey: string; title: string }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawnBurst('Notification', 6, '#34d399')
+    }
+
+    // Permission request — amber held-breath ring (permissionHold effect)
+    const onPermissionRequest = (e: { sessionId: string }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn('PermissionRequest', '#fbbf24')
+    }
+
+    // Tool error — shrapnel shatter (failShatter effect)
+    const onToolError = (e: { sessionId: string; tool: string; agentId?: string | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      if (e.agentId && sv.subagents.has(e.agentId)) {
+        sv.subagents.get(e.agentId)!.triggerActivity()
+      } else {
+        sv.core.triggerActivity()
+      }
+      sv.particles.spawn('PostToolUseFailure', '#ef4444')
+    }
+
+    // Session stop (end_turn from JSONL) — calm inward drain (stopDrain effect)
+    const onSessionStop = (e: { sessionId: string; lastMessage: string | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn('Stop', '#aaaaaa')
+    }
+
+    // Compact boundary — a fold in space (compactFold effect)
+    const onCompactBoundary = (e: { sessionId: string }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn('CompactBoundary', '#fcd34d')
+    }
+
+    // AI-generated title — rise and bloom (titleRise effect)
+    const onAiTitle = (e: { sessionId: string; title: string }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.particles.spawn('AiTitle', '#67e8f9')
+    }
+
+    // PR link created — vertical launch (prLaunch effect)
+    const onPrLink = (e: { sessionId: string; url: string | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn('PrLink', '#a78bfa')
+    }
+
+    // Turn duration — a quiet breath (turnPulse effect)
+    const onTurnDuration = (e: { sessionId: string; durationMs: number | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.particles.spawn('TurnDuration', '#6ee7b7')
+    }
+
+    // API error — signal-loss static & glitch (apiStatic effect)
+    const onApiError = (e: { sessionId: string; error: string | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn('ApiError', '#f87171')
+    }
+
+    // Generic lower-frequency session activity (slash commands, mode changes,
+    // scheduled fires, away summaries) — a colored core pulse. No bespoke
+    // effect: spawn falls through to a plain pulse for unregistered kinds.
+    const onSessionActivity = (e: { sessionId: string; kind: string; color: string; label: string | null }) => {
+      if (!this._docVisible) return
+      const sv = this.sessions.get(e.sessionId)
+      if (!sv) return
+      sv.core.triggerActivity()
+      sv.particles.spawn(e.kind, e.color)
+    }
+
     eventBus.on('tool:used', onToolUsed)
+    eventBus.on('tool:error', onToolError)
     eventBus.on('prompt:submitted', onPrompt)
     eventBus.on('response:received', onResponse)
     eventBus.on('compact:pre', onCompactPre)
     eventBus.on('compact:post', onCompactPost)
+    eventBus.on('compact:boundary', onCompactBoundary)
     eventBus.on('session:end', onSessionEnd)
+    eventBus.on('session:stop', onSessionStop)
     eventBus.on('subagent:start', onSubagentStart)
     eventBus.on('subagent:stop', onSubagentStop)
+    eventBus.on('notification', onNotification)
+    eventBus.on('permission:request', onPermissionRequest)
+    eventBus.on('ai-title', onAiTitle)
+    eventBus.on('pr-link', onPrLink)
+    eventBus.on('turn:duration', onTurnDuration)
+    eventBus.on('api:error', onApiError)
+    eventBus.on('session:activity', onSessionActivity)
 
     this.eventUnsubs.push(
       () => eventBus.off('tool:used', onToolUsed),
+      () => eventBus.off('tool:error', onToolError),
       () => eventBus.off('prompt:submitted', onPrompt),
       () => eventBus.off('response:received', onResponse),
       () => eventBus.off('compact:pre', onCompactPre),
       () => eventBus.off('compact:post', onCompactPost),
+      () => eventBus.off('compact:boundary', onCompactBoundary),
       () => eventBus.off('session:end', onSessionEnd),
+      () => eventBus.off('session:stop', onSessionStop),
       () => eventBus.off('subagent:start', onSubagentStart),
       () => eventBus.off('subagent:stop', onSubagentStop),
+      () => eventBus.off('notification', onNotification),
+      () => eventBus.off('permission:request', onPermissionRequest),
+      () => eventBus.off('ai-title', onAiTitle),
+      () => eventBus.off('pr-link', onPrLink),
+      () => eventBus.off('turn:duration', onTurnDuration),
+      () => eventBus.off('api:error', onApiError),
+      () => eventBus.off('session:activity', onSessionActivity),
     )
   }
 
@@ -369,7 +483,7 @@ export class ThreeApp {
 
     for (const sv of this.sessions.values()) {
       const p = sv.group.position
-      const r = 140 // approximate scatter radius
+      const r = 90 // approximate scatter radius
       minX = Math.min(minX, p.x - r); maxX = Math.max(maxX, p.x + r)
       minY = Math.min(minY, p.y - r); maxY = Math.max(maxY, p.y + r)
       minZ = Math.min(minZ, p.z - r); maxZ = Math.max(maxZ, p.z + r)
@@ -380,7 +494,7 @@ export class ThreeApp {
     const cz = (minZ + maxZ) / 2
     const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ)
     const fov = this.camera.fov * (Math.PI / 180)
-    const baseDist = Math.max((size / 2) / Math.tan(fov / 2) * 1.3, 80)
+    const baseDist = Math.max((size / 2) / Math.tan(fov / 2) * 0.9, 80)
 
     // Use user zoom if set, otherwise use calculated distance
     const dist = this._userZoomDistance !== null ? this._userZoomDistance : baseDist
